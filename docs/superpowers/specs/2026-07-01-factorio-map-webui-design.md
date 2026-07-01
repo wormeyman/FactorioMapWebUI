@@ -65,17 +65,50 @@ Reverse-engineered from 9 real preset strings exported from Factorio 2.1.9
 
 - Envelope: `>>>` + base64( zlib( payload ) ) + `<<<`. Game wraps base64 at 57
   chars on export but ignores whitespace on import.
+- **Compression is zlib level 9** (Z_BEST_COMPRESSION). All 9 fixtures carry the
+  `78 da` header, and a level-9 deflate of the inflated payload reproduces the
+  compressed bytes **byte-identically** (level 6 does not). This is load-bearing
+  for the byte-identical export goal - see Sections 6 and 10.
 - Payload starts with an **8-byte version header**: four `uint16` LE =
   `2.1.9.3`.
+- **One flag byte at offset 8** (`0x00` in every fixture) sits between the header
+  and the autoplace dictionary. Purpose unconfirmed; the autoplace control
+  **count is at offset 9**.
 - `autoplace_controls` is a **single flat dictionary** keyed by control name,
-  NOT nested per planet. Each entry = `uint8` name length + name bytes + three
-  `float32` LE (frequency, size, richness). The Default preset has **28
-  controls**. Planet association is encoded in the names (see catalog below).
-- After autoplace: `property_expression_names`, cliff settings, then
-  **MapSettings** (pollution / enemy_evolution / enemy_expansion / unit_group /
-  path_finder / steering) encoded as **presence-byte + IEEE `float64` LE**
-  optionals (a `01` present-flag precedes each value).
-- Payload ends with a **CRC32** checksum of all preceding bytes.
+  NOT nested per planet. Count is a plain `uint8` (28 in Default; NOT observed as
+  a space-optimized varint in any fixture). Each entry = `uint8` name length +
+  name bytes + three `float32` LE (frequency, size, richness). Keys are emitted
+  in **ordinal (byte) sort order** (`-` 0x2d before `_` 0x5f), e.g.
+  `aquilo_crude_oil, calcite, coal, copper-ore, crude-oil, enemy-base, ...`. The
+  encoder MUST sort by code point to be byte-perfect. Planet association is
+  encoded in the names (see catalog below).
+- After autoplace comes `property_expression_names` (a **string -> string
+  dictionary**, count byte then key/value length-prefixed strings). It is
+  **empty in most presets** but **populated in Lakes/Island/Ribbon world** (keys
+  like `elevation`, `cliff_elevation_from_elevation`, `moisture_basic`), which is
+  why those three inflate larger. This dict is first-class, not an afterthought.
+- Then terrain / water / starting-area MapGenSettings (~55 bytes in Default,
+  still to be fully mapped - Phase 1), a **cliff block** using `float32` (e.g.
+  `10.0`, `40.0`), and **MapSettings** (pollution / enemy_evolution /
+  enemy_expansion / unit_group / path_finder / steering).
+- MapSettings fields are **presence-byte + a value whose type is fixed by that
+  field's schema** - a mix of `float64` (pollution rates, evolution factors),
+  `uint32` (expansion/group integer fields, observed as `01 05 00 00 00` etc.),
+  and counted sub-arrays. It is **NOT** uniformly `float64`; reading every
+  optional as a `float64` mis-parses the enemy/unit-group region.
+- Payload ends with a **CRC32** (zlib/ANSI polynomial, `uint32` LE) over all
+  preceding bytes. Verified to match on all 9 fixtures.
+
+### Known fixture anomaly: Default cliff string
+
+Default inflates to **1387 B** and contains a standalone length-prefixed string
+`05 "cliff"` in its cliff region; every other Nauvis-only preset is **1382 B**
+with **zero** such standalone token. So Default and Rich Resources encode cliff
+settings differently despite (presumably) identical cliff config. This implies
+either a **conditional/interned string emission rule** (emit the name only when
+it differs from the prototype default) or that Default was captured in a
+non-canonical state. **Unresolved, and Default is the origin of `defaults.ts`**,
+so it must be settled before the encoder is trusted (Section 14).
 
 Validation already performed: decoding "Rich Resources" and diffing against
 "Default" yields exactly richness `1.0 -> 2.0` on the six Nauvis resources -
@@ -118,24 +151,46 @@ Preset {
 }
 ```
 
+**Ordering contract:** `autoplaceControls` is a `Record<string, ...>` for
+ergonomics, but the encoder MUST serialize keys in **ordinal (code-point) sort
+order** (see Section 4). The UI may store/display in any order; encoding sorts.
+
 Reference data (not user-editable):
 - `planets.ts` - planet list + which controls/settings belong to each.
 - `controlCatalog.ts` - `name -> { planet, category, label, hasRichness }`.
-- `defaults.ts` - the Default preset, derived from the Default fixture.
+- `defaults.ts` - the Default preset, derived from the Default fixture (pending
+  resolution of the cliff anomaly in Section 4).
 
 ## 6. Codec (`src/codec/`)
 
 - `mapExchangeString.ts` - `decode` / `encode` orchestration + `>>>`/`<<<`
   envelope + base64.
-- `binaryReader.ts` / `binaryWriter.ts` - little-endian primitives, Factorio
-  space-optimized varints, length-prefixed strings, presence-byte optionals,
-  the property-tree layout.
-- `crc32.ts` - CRC32 (zlib/ANSI polynomial) over the payload.
-- zlib via **`pako`**.
+- `binaryReader.ts` / `binaryWriter.ts` - little-endian primitives, length-
+  prefixed strings, presence-byte optionals with **per-field value types**
+  (float64 / float32 / uint32 / bool), and the property-tree layout. Factorio's
+  space-optimized varint is included but applied **only where a fixture proves it
+  is used** - observed counts (autoplace = 28, property_expression_names) are
+  plain `uint8`, so do NOT varint-encode them.
+- `stringDict.ts` - the `property_expression_names` string->string dictionary
+  and the conditional cliff-string rule (Section 4 anomaly). This is the highest-
+  uncertainty part of the format and gets dedicated tests before the encoder is
+  trusted.
+- `deflate.ts` - zlib via **`pako`**, pinned to **level 9** to match the game's
+  `78 da` stream.
+- `crc32.ts` - CRC32 (zlib/ANSI polynomial, `uint32` LE) over the payload.
 
-**Fixture-driven and version-aware.** The codec writes the `2.1.9.3` header;
-because 2.1.9 is experimental, the reader tolerates and records the version so a
-format shift is detectable rather than silently mis-parsed.
+**Compression fidelity is a hard requirement.** A very early Phase-1 test must
+assert that pako at level 9 reproduces the compressed bytes of all 9 fixtures. If
+pako diverges from zlib@9 on any fixture, byte-identical *string* export is not
+achievable with pako and we fall back to a zlib-exact deflate; regardless, the
+**primary** correctness guarantee is defined at the payload level (Section 10),
+not the string level. The browser's native `CompressionStream` is NOT usable
+here (fixed, non-level-9 compression).
+
+**Fixture-driven and version-aware.** The codec writes the `2.1.9.3` header; the
+reader keys on all four `uint16`s of the tuple (the 4th can bump independently of
+the 2.1.9 game patch). Because 2.1.9 is experimental, the reader records the
+version so a format shift is detectable rather than silently mis-parsed.
 
 ## 7. UI (`src/ui/` kit + `src/components/`)
 
@@ -180,13 +235,27 @@ tabs display, driven by the control catalog.
 
 The codec is the safety-critical layer; tests center on it.
 
-- **Round-trip (core):** for each of the 9 fixtures, `encode(decode(s))` must be
-  **byte-identical** to `s`. This is the primary guarantee that the game accepts
-  our output.
+- **Payload round-trip (PRIMARY):** for each of the 9 fixtures,
+  `inflate(encode(decode(s)))` must byte-equal `inflate(s)` (the decompressed
+  payload). This is what actually guarantees the game accepts our output and is
+  independent of the compressor implementation.
+- **String round-trip (SECONDARY, caveated):** `encode(decode(s)) === s`
+  byte-for-byte. Achievable only with deflate pinned to level 9 (verified for all
+  9 fixtures with native zlib). Kept as a stricter check, explicitly dependent on
+  the compressor matching zlib@9.
+- **Compressor fidelity:** assert pako@level-9 reproduces each fixture's
+  compressed bytes (gates whether the string-level check is even attainable).
 - **Field-location:** decode assertions pinning known preset differences
-  (e.g. Rich Resources richness = 2.0 on the six Nauvis resources; Marathon
-  `technologyPriceMultiplier` = 4).
-- **Model/UI:** unit tests for catalog grouping and store persistence.
+  (Rich Resources richness = 2.0 on the six Nauvis resources; Marathon
+  `technologyPriceMultiplier` = 4 - as a decode assertion, not a hard offset).
+- **Absent-optional branch:** the fixtures are all-present (`01`) flags, so the
+  `0x00` "field absent" path is unexercised by the corpus. Add a targeted encode/
+  decode test (or capture a fixture that omits a field) so a bug there is caught.
+- **float32 precision:** autoplace values are `float32` but the model uses JS
+  `double`; a user value not representable in `float32` (e.g. richness 1.3) will
+  round on encode. Test this explicitly so it is not mistaken for a codec bug.
+- **Model/UI:** unit tests for catalog grouping, key ordinal-sort on encode, and
+  store persistence.
 - **E2E (optional, later):** Playwright, mirroring FBE.
 
 ## 11. Project structure
@@ -215,12 +284,19 @@ FactorioMapWebUI/
 
 ## 12. Phasing
 
-- **Phase 0 (no fixtures required):** scaffold with `vp create vue`; build the
-  Factorio UI kit, settings model + defaults, the full UI wired to the in-memory
-  model, JSON export/import, and localStorage presets. Result: a complete,
-  usable, Factorio-styled editor - minus the exchange string.
-- **Phase 1 (fixture-driven):** the map-exchange codec + ZIP export,
-  reverse-engineered and round-trip-tested against the 9 captured fixtures.
+Note: the model, `defaults.ts`, and the full field set are **derived by decoding
+fixtures**, so decode work cannot be deferred to "after Phase 0." Decoding is the
+low-risk half of the codec (already proven to work), so it leads.
+
+- **Phase 0:** (a) codec **decode** + derive the model / catalog / `defaults.ts`
+  from the fixtures; (b) scaffold with `vp create vue` and build the Factorio UI
+  kit + the full editor wired to the in-memory model + localStorage presets.
+  These two tracks are parallelizable. Result: a complete, usable, Factorio-
+  styled editor over the real settings model - minus export.
+- **Phase 1:** codec **encode** + round-trip tests (payload-level primary), the
+  cliff-anomaly resolution, then **exports**: map-exchange string, and JSON/ZIP.
+  JSON export is Phase 1 because it needs the full decoded field set AND the
+  game's JSON schemas (Appendix A) - it cannot be completed in Phase 0.
 
 ## 13. Fixtures
 
@@ -237,20 +313,58 @@ Phase 1 to pin non-autoplace field offsets.
 
 ## 14. Risks & open questions
 
+- **Default cliff anomaly (open, blocking encoder trust):** Default carries an
+  extra standalone `"cliff"` string the other presets lack (Section 4). Action:
+  re-capture all 9 in one clean session via `pbpaste > file`, diff Default vs
+  Rich Resources cliff bytes at the payload level, and determine the emission
+  rule; pin it with a test.
+- **Compression must match zlib@9:** byte-identical string export depends on the
+  deflate stream matching the game's level-9 output. pako@9 is expected to match
+  but is a separate implementation - gate with the compressor-fidelity test; the
+  payload-level round-trip is the real guarantee if it diverges.
 - **Experimental format drift:** 2.1.9 is experimental; the exchange layout may
-  change between patches. Mitigation: version-aware codec, fixtures tagged with
-  the exact version.
+  change between patches. Mitigation: version-aware codec keyed on the full
+  4-tuple, fixtures tagged with the exact version.
 - **Unconfirmed field offsets:** terrain / per-planet / map-settings byte
-  offsets beyond autoplace need more single-setting diff fixtures before the
-  encoder is trustworthy. Round-trip tests are the gate.
-- **Space-optimized varint edge cases:** dictionary counts and large ints use
-  Factorio's variable-length encoding; needs fixture coverage of values > 255.
+  offsets beyond autoplace (~55 unmapped bytes in Default, plus the typed tail)
+  need more single-setting diff fixtures before the encoder is trustworthy.
+  Round-trip tests are the gate.
+- **Absent-optional path untested:** the corpus is all-present flags; the `0x00`
+  branch needs a dedicated test or a fixture that omits a field.
+- **Space-optimized varint:** observed counts (autoplace = 28, prop-expr dict)
+  are plain `uint8`, NOT varint. Confirm where Factorio's varint actually applies
+  (values > 255) before implementing it, or the encoder may wrongly varint a
+  plain count and break round-trip.
+- **JSON schemas undefined:** the game's `map-gen-settings.json` /
+  `map-settings.json` shapes must be pinned (Appendix A) before JSON export/ZIP
+  can claim validity (criterion #4).
 
 ## 15. Success criteria
 
-1. All 9 fixtures round-trip byte-identically through `encode(decode(s))`.
+1. **Primary:** all 9 fixtures round-trip at the **payload level** -
+   `inflate(encode(decode(s)))` equals `inflate(s)`. **Secondary (caveated):**
+   full-string byte-identity with deflate pinned to level 9.
 2. A preset built in the UI exports an exchange string the real game accepts.
 3. Full multi-planet editing works for all five planets via the control catalog.
-4. Presets persist across reloads; ZIP export produces valid
-   `map-gen-settings.json` / `map-settings.json`.
+4. Presets persist across reloads; ZIP export produces `map-gen-settings.json` /
+   `map-settings.json` matching the Appendix A schemas.
 5. `vp check` and `vp test` pass clean.
+
+## Appendix A - Game JSON schemas (to pin in Phase 1)
+
+The two files Factorio consumes (recoverable via `factorio
+--dump-data` / the `/config` templates and the documented JSON format) must be
+captured before JSON export is implemented. Known shape to confirm against a real
+dump:
+
+- `map-gen-settings.json`: `autoplace_controls` is **nested per control**
+  (`{ "coal": { "frequency": 1, "size": 1, "richness": 1 }, ... }`, snake_case),
+  plus `terrain_segmentation`, `water`, `cliff_settings`,
+  `property_expression_names`, `starting_points`, `seed`, `width`, `height`,
+  `autoplace_settings`, `default_enable_all_autoplace_controls`.
+- `map-settings.json`: `pollution`, `enemy_evolution`, `enemy_expansion`,
+  `steering`, `unit_group`, `path_finder`, `max_failed_behavior_count`, and
+  `difficulty_settings` (where `technology_price_multiplier` lives).
+
+Action: dump both from Factorio 2.1.9 and commit as `test/fixtures/` references,
+then write the model->JSON mapping against them.
