@@ -1,0 +1,73 @@
+import { createPinia, setActivePinia } from "pinia";
+import { beforeEach, describe, expect, it } from "vite-plus/test";
+import { ExchangeStringError } from "../src/codec/mapExchangeString";
+import { STORAGE_KEY, usePresetsStore } from "../src/store/presets";
+import fixtures from "./fixtures/builtin-presets.json";
+
+const presets = fixtures.presets as Record<string, string>;
+
+describe("presets store", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    setActivePinia(createPinia());
+  });
+
+  it('seeds a "My preset" clone of Default on first launch', () => {
+    const store = usePresetsStore();
+    expect(store.userPresets.map((p) => p.name)).toEqual(["My preset"]);
+    expect(store.activePreset?.autoplaceControls["coal"]?.frequency).toBe(1);
+    expect(store.activePreset?.builtin).toBe(false);
+  });
+
+  it("creates a preset from a builtin and makes it active", () => {
+    const store = usePresetsStore();
+    store.createFromBuiltin("Rich Resources", "richer");
+    expect(store.activeName).toBe("richer");
+    expect(store.activePreset?.autoplaceControls["coal"]?.richness).toBe(2);
+  });
+
+  it("deduplicates preset names", () => {
+    const store = usePresetsStore();
+    store.createFromBuiltin("Default", "My preset");
+    expect(store.activeName).toBe("My preset (2)");
+  });
+
+  it("persists on save and restores across a fresh pinia", () => {
+    const store = usePresetsStore();
+    const coal = store.activePreset?.autoplaceControls["coal"];
+    if (coal) coal.frequency = 3;
+    store.saveToStorage();
+
+    setActivePinia(createPinia());
+    const reloaded = usePresetsStore();
+    expect(reloaded.activePreset?.autoplaceControls["coal"]?.frequency).toBe(3);
+  });
+
+  it("imports a valid exchange string as a new preset", () => {
+    const store = usePresetsStore();
+    store.importExchangeString("imported", presets["Marathon"] as string);
+    expect(store.activeName).toBe("imported");
+    expect(store.activePreset?.formatVersion).toEqual([2, 1, 9, 3]);
+  });
+
+  it("propagates ExchangeStringError on invalid import and leaves state unchanged", () => {
+    const store = usePresetsStore();
+    expect(() => store.importExchangeString("bad", "garbage")).toThrow(ExchangeStringError);
+    expect(store.userPresets).toHaveLength(1);
+  });
+
+  it("duplicate and delete work and persist", () => {
+    const store = usePresetsStore();
+    store.duplicateActive();
+    expect(store.activeName).toBe("My preset (copy)");
+    store.deleteActive();
+    expect(store.activeName).toBe("My preset");
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY) as string).userPresets).toHaveLength(1);
+  });
+
+  it("survives corrupted localStorage by reseeding", () => {
+    localStorage.setItem(STORAGE_KEY, "{not json");
+    const store = usePresetsStore();
+    expect(store.userPresets).toHaveLength(1);
+  });
+});
