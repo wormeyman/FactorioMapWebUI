@@ -1,9 +1,6 @@
-import { createApp } from "vue";
 import { createPinia } from "pinia";
+import { createApp } from "vue";
 import App from "./App.vue";
+import "./ui/factorio.css";
 
-const app = createApp(App);
-
-app.use(createPinia());
-
-app.mount("#app");
+createApp(App).use(createPinia()).mount("#app");
