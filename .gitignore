@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+*.local
+
+# Vite / Vite+ caches
+.vite/
+.vite-plus/
+vite.config.ts.timestamp-*
+
+# Test / coverage
+coverage/
+test-results/
+
+# Editor / OS
+.DS_Store
+*.log
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
