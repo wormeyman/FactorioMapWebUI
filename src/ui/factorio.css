@@ -1,0 +1,43 @@
+:root {
+  --f-bg: #1c1b1c;
+  --f-panel: #313031;
+  --f-panel-raised: #414041;
+  --f-inset: #242324;
+  --f-edge-light: #5f5e5f;
+  --f-edge-dark: #141314;
+  --f-text: #ffe6c0;
+  --f-text-dim: #b0aca7;
+  --f-orange: #e39827;
+  --f-orange-bright: #f9b44b;
+  --f-green: #47a447;
+  --f-red: #d6413b;
+  --f-value-box: #8e8e8e;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--f-bg);
+  color: var(--f-text);
+  font-family:
+    "Titillium Web",
+    system-ui,
+    -apple-system,
+    sans-serif;
+  font-size: 14px;
+}
+
+.f-bevel-out {
+  box-shadow:
+    inset 1px 1px 0 var(--f-edge-light),
+    inset -1px -1px 0 var(--f-edge-dark);
+}
+
+.f-bevel-in {
+  box-shadow:
+    inset 1px 1px 0 var(--f-edge-dark),
+    inset -1px -1px 0 var(--f-edge-light);
+}
