@@ -82,13 +82,22 @@ Reverse-engineered from 9 real preset strings exported from Factorio 2.1.9
   `aquilo_crude_oil, calcite, coal, copper-ore, crude-oil, enemy-base, ...`. The
   encoder MUST sort by code point to be byte-perfect. Planet association is
   encoded in the names (see catalog below).
-- After autoplace comes `property_expression_names` (a **string -> string
-  dictionary**, count byte then key/value length-prefixed strings). It is
-  **empty in most presets** but **populated in Lakes/Island/Ribbon world** (keys
-  like `elevation`, `cliff_elevation_from_elevation`, `moisture_basic`), which is
-  why those three inflate larger. This dict is first-class, not an afterthought.
-- Then terrain / water / starting-area MapGenSettings (~55 bytes in Default,
-  still to be fully mapped - Phase 1), a **cliff block** using `float32` (e.g.
+- After autoplace comes a **55-byte undecoded MapGenSettings block** (terrain /
+  water / starting-area scalars; it VARIES between presets - 3 distinct values
+  across the 9 fixtures - and is fully mapped in Phase 1). *Corrected
+  2026-07-01 during Phase 0 implementation: this spec originally placed the
+  block after `property_expression_names`; the original byte-verification
+  passed coincidentally because Default's byte at the wrong offset is `0x00`
+  (an empty dict). Re-verified against all 9 fixtures at the corrected offset.*
+- Then `property_expression_names` (a **string -> string dictionary**, count
+  byte then key/value length-prefixed strings). It is **empty in the six
+  Nauvis-only presets** but **populated in Lakes/Island (6 keys: `aux`,
+  `cliff_elevation`, `cliffiness`, `elevation`, `moisture`,
+  `trees_forest_path_cutout`) and Ribbon world (2 keys: `elevation`,
+  `trees_forest_path_cutout`)**, which is why those three inflate larger. This
+  dict is first-class, not an afterthought.
+- Then the remaining tail (640 bytes in every fixture except Default's 645 -
+  the cliff anomaly below lives here): a **cliff block** using `float32` (e.g.
   `10.0`, `40.0`), and **MapSettings** (pollution / enemy_evolution /
   enemy_expansion / unit_group / path_finder / steering).
 - MapSettings fields are **presence-byte + a value whose type is fixed by that

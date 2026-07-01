@@ -611,6 +611,8 @@ export interface DecodedExchange {
   version: FormatVersion
   flagByte: number
   autoplaceControls: Record<string, AutoplaceSetting>
+  /** The 55-byte undecoded MapGenSettings block between autoplace and property_expression_names (terrain / water / starting area; varies per preset; mapped in Phase 1). */
+  midBlock: Uint8Array
   propertyExpressionNames: Record<string, string>
   /** Payload bytes after property_expression_names, excluding the trailing CRC. Undecoded until Phase 1. */
   tail: Uint8Array
@@ -624,7 +626,7 @@ export class ExchangeStringError extends Error {}
 export function decodeExchangeString(input: string): DecodedExchange
 ```
 
-Payload layout being implemented (spec Section 4): `[u16 x4 version][u8 flag][u8 count + autoplace entries][u8 count + string-dict entries][tail...][u32 CRC LE over everything before it]`. Autoplace entry = `readString()` + 3x `float32` (frequency, size, richness). String-dict entry = `readString()` key + `readString()` value.
+Payload layout being implemented (spec Section 4, as corrected 2026-07-01): `[u16 x4 version][u8 flag][u8 count + autoplace entries][55-byte mid block][u8 count + string-dict entries][tail...][u32 CRC LE over everything before it]`. Autoplace entry = `readString()` + 3x `float32` (frequency, size, richness). String-dict entry = `readString()` key + `readString()` value. The 55-byte mid block is undecoded MapGenSettings scalars, carried opaquely; its length is empirical for format 2.1.9.3, verified on all 9 fixtures (the property dict parses to plausible expression names on every fixture only at this offset).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -706,18 +708,33 @@ describe('decodeExchangeString', () => {
     ])
   })
 
-  it('property_expression_names is empty in Default and populated in Lakes, Island, Ribbon world', () => {
+  it.each(NAMES)('mid block of %s is exactly 55 bytes', (name) => {
+    expect(decodeExchangeString(presets[name] as string).midBlock.length).toBe(55)
+  })
+
+  it('property_expression_names is empty in Default and pinned in Lakes, Island, Ribbon world', () => {
     expect(
       decodeExchangeString(presets['Default'] as string).propertyExpressionNames,
     ).toEqual({})
-    for (const name of ['Lakes', 'Island', 'Ribbon world']) {
-      const dict = decodeExchangeString(presets[name] as string).propertyExpressionNames
-      expect(Object.keys(dict).length).toBeGreaterThan(0)
-      for (const [key, value] of Object.entries(dict)) {
-        expect(key.length).toBeGreaterThan(0)
-        expect(typeof value).toBe('string')
-      }
-    }
+    const lakesKeys = [
+      'aux',
+      'cliff_elevation',
+      'cliffiness',
+      'elevation',
+      'moisture',
+      'trees_forest_path_cutout',
+    ]
+    expect(
+      Object.keys(decodeExchangeString(presets['Lakes'] as string).propertyExpressionNames),
+    ).toEqual(lakesKeys)
+    expect(
+      Object.keys(decodeExchangeString(presets['Island'] as string).propertyExpressionNames),
+    ).toEqual(lakesKeys)
+    expect(
+      Object.keys(
+        decodeExchangeString(presets['Ribbon world'] as string).propertyExpressionNames,
+      ),
+    ).toEqual(['elevation', 'trees_forest_path_cutout'])
   })
 
   it.each(NAMES)('tail of %s is non-empty (terrain/cliff/map settings live there)', (name) => {
@@ -771,6 +788,8 @@ export interface DecodedExchange {
   version: FormatVersion
   flagByte: number
   autoplaceControls: Record<string, AutoplaceSetting>
+  /** The 55-byte undecoded MapGenSettings block between autoplace and property_expression_names (terrain / water / starting area; varies per preset; mapped in Phase 1). */
+  midBlock: Uint8Array
   propertyExpressionNames: Record<string, string>
   /** Payload bytes after property_expression_names, excluding the trailing CRC. Undecoded until Phase 1. */
   tail: Uint8Array
@@ -781,8 +800,12 @@ export interface DecodedExchange {
 
 export class ExchangeStringError extends Error {}
 
-// version (8) + flag (1) + two count bytes (2) + CRC (4)
-const MIN_PAYLOAD_LENGTH = 15
+// version (8) + flag (1) + count (1) + mid block (55) + count (1) + CRC (4)
+const MIN_PAYLOAD_LENGTH = 70
+
+// Undecoded MapGenSettings block between autoplace and property_expression_names.
+// Empirical for format 2.1.9.3, verified on all 9 fixtures (Phase 1 maps its fields).
+const MID_BLOCK_LENGTH = 55
 
 export function decodeExchangeString(input: string): DecodedExchange {
   const compact = input.replaceAll(/\s+/g, '')
@@ -841,6 +864,8 @@ export function decodeExchangeString(input: string): DecodedExchange {
       }
     }
 
+    const midBlock = reader.readBytes(MID_BLOCK_LENGTH)
+
     const propertyExpressionNames: Record<string, string> = {}
     const propertyCount = reader.readUint8()
     for (let i = 0; i < propertyCount; i++) {
@@ -852,6 +877,7 @@ export function decodeExchangeString(input: string): DecodedExchange {
       version,
       flagByte,
       autoplaceControls,
+      midBlock,
       propertyExpressionNames,
       tail: reader.remaining(),
       crc: storedCrc,
@@ -869,7 +895,7 @@ export function decodeExchangeString(input: string): DecodedExchange {
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `vp test`
-Expected: PASS - every decode test green against all 9 fixtures. If the Lakes/Island/Ribbon property-dict test fails while the others pass, the string-dict offset assumption is wrong; stop and debug with the systematic-debugging skill before touching the layout (the spec's layout was byte-verified, so suspect the implementation first).
+Expected: PASS - every decode test green against all 9 fixtures. The layout (including the 55-byte mid block) was re-verified against all 9 fixtures on 2026-07-01, so a failure means an implementation bug: suspect your transcription first, and if a layout-level test still fails after a faithful transcription, stop and report rather than adjusting the layout.
 
 - [ ] **Step 5: Check and commit**
 
@@ -1003,10 +1029,17 @@ export interface Preset {
   seed: number | null
   randomEachMap: boolean
   autoplaceControls: Record<string, AutoplaceSetting>
+  /**
+   * Base64 of the undecoded 55-byte MapGenSettings block that sits between
+   * autoplace and property_expression_names on the wire (terrain / water /
+   * starting-area scalars; varies per preset). Mapped to typed fields in
+   * Phase 1.
+   */
+  opaqueMidB64: string
   propertyExpressionNames: Record<string, string>
   /**
    * Base64 of the undecoded payload bytes after property_expression_names
-   * (terrain, water, starting area, cliffs, MapSettings, difficulty).
+   * (cliffs, MapSettings, difficulty).
    * Carried opaquely so the Phase 1 encoder can round-trip before those
    * fields are individually mapped. Replaced by typed fields in Phase 1.
    */
@@ -1133,6 +1166,7 @@ describe('builtin presets', () => {
       expect(preset.builtin).toBe(true)
       expect(preset.formatVersion).toEqual([2, 1, 9, 3])
       expect(Object.keys(preset.autoplaceControls)).toHaveLength(28)
+      expect(preset.opaqueMidB64.length).toBeGreaterThan(0)
       expect(preset.opaqueTailB64.length).toBeGreaterThan(0)
     }
   })
@@ -1189,6 +1223,7 @@ export function presetFromDecoded(
     seed: null,
     randomEachMap: true,
     autoplaceControls: structuredClone(decoded.autoplaceControls),
+    opaqueMidB64: bytesToBase64(decoded.midBlock),
     propertyExpressionNames: structuredClone(decoded.propertyExpressionNames),
     opaqueTailB64: bytesToBase64(decoded.tail),
     formatVersion: [...decoded.version],
@@ -2929,7 +2964,7 @@ built-in presets captured from Factorio 2.1.9 and is read-only ground truth.
 
 Verify these facts hold and note any deviation in the commit message (the Phase 1 plan depends on them):
 - The compressor-fidelity tests (Task 4) pass for all 9 fixtures, or the divergences are recorded as `it.fails` cases.
-- `DecodedExchange.tail` + `Preset.opaqueTailB64` carry all undecoded bytes, so the Phase 1 encoder can emit `header + autoplace + property dict + tail + CRC` and hit payload-level round-trip immediately.
+- `DecodedExchange.midBlock`/`tail` + `Preset.opaqueMidB64`/`opaqueTailB64` carry all undecoded bytes, so the Phase 1 encoder can emit `header + flag + autoplace + mid block + property dict + tail + CRC` and hit payload-level round-trip immediately.
 - Open items deliberately NOT addressed in Phase 0 (spec Sections 4/14): the Default cliff-string anomaly (re-capture + diff), absent-optional path, float32-rounding test, varint confirmation, Appendix A JSON schema dumps, seed offset mapping.
 
 - [ ] **Step 4: Commit**
