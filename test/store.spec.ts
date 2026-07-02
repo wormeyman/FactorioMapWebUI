@@ -82,5 +82,16 @@ describe("presets store", () => {
       Object.keys((active as NonNullable<typeof active>).autoplaceControls).sort(),
     );
     expect(decoded.version).toEqual([2, 1, 9, 3]);
+
+    // Values (not just keys) must survive the store's presetToEncodable ->
+    // encode -> decode bridge; this is the only test that exercises that path
+    // for autoplace scalars. Wire scalars are float32, so compare via fround.
+    const coal = (active as NonNullable<typeof active>).autoplaceControls["coal"];
+    expect(coal).toBeDefined();
+    expect(decoded.autoplaceControls["coal"]).toEqual({
+      frequency: Math.fround(coal.frequency),
+      size: Math.fround(coal.size),
+      richness: Math.fround(coal.richness),
+    });
   });
 });
