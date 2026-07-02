@@ -26,12 +26,11 @@ describe("deflate", () => {
     expect(inflate(compressedBytesOf(presets[name] as string)).length).toBe(expectedSize);
   });
 
-  // COMPRESSOR-FIDELITY GATE (spec Sections 6 and 10): if this fails, pako@9
-  // diverges from the game's zlib@9 stream. Byte-identical STRING export is
-  // then off the table with pako; the payload-level round-trip remains the
-  // primary guarantee. On failure: do NOT delete - change to it.fails(...) and
-  // record the divergence in the Phase 1 plan.
-  it.fails.each(NAMES)("pako level 9 reproduces the compressed bytes of %s", (name) => {
+  // COMPRESSOR-FIDELITY GATE (spec Sections 6 and 10): deflateLevel9 must
+  // reproduce the game's zlib@9 stream byte-for-byte, or byte-identical STRING
+  // export is off the table. pako and fflate diverge; zlib-asm matches. If this
+  // regresses, the compressor changed - do not weaken it, fix the compressor.
+  it.each(NAMES)("level 9 reproduces the compressed bytes of %s", (name) => {
     const compressed = compressedBytesOf(presets[name] as string);
     expect(deflateLevel9(inflate(compressed))).toEqual(compressed);
   });

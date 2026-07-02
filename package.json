@@ -10,9 +10,9 @@
     "check": "vp check --fix"
   },
   "dependencies": {
-    "pako": "^3.0.0",
     "pinia": "^3.0.4",
-    "vue": "^3.5.39"
+    "vue": "^3.5.39",
+    "zlib-asm": "^1.0.7"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.7",

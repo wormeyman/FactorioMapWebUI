@@ -207,15 +207,15 @@ importers:
 
   .:
     dependencies:
-      pako:
-        specifier: ^3.0.0
-        version: 3.0.0
       pinia:
         specifier: ^3.0.4
         version: 3.0.4(typescript@6.0.3)(vue@3.5.39(typescript@6.0.3))
       vue:
         specifier: ^3.5.39
         version: 3.5.39(typescript@6.0.3)
+      zlib-asm:
+        specifier: ^1.0.7
+        version: 1.0.7
     devDependencies:
       '@vitejs/plugin-vue':
         specifier: ^6.0.7
@@ -711,6 +711,9 @@ packages:
 
   '@types/node@26.0.1':
     resolution: {integrity: sha512-fc3KiUoBt6kie0N9bIW3E47vZsuaMf0PM2AaUpLCLT0s/LvX1nxAim6Fc049cNxODPpGm6qRAuUOB86SkRuPQw==}
+
+  '@types/node@6.14.13':
+    resolution: {integrity: sha512-J1F0XJ/9zxlZel5ZlbeSuHW2OpabrUAqpFuC2sm2I3by8sERQ8+KCjNKUcq8QHuzpGMWiJpo9ZxeHrqrP2KzQw==}
 
   '@types/whatwg-mimetype@3.0.2':
     resolution: {integrity: sha512-c2AKvDT8ToxLIOUlN51gTiHXflsfIFisS4pO7pDPoKouJCESkhZnEy623gwP9laCy5lnLDAw1vAzu2vM2YLOrA==}
@@ -1249,9 +1252,6 @@ packages:
   package-json-from-dist@1.0.1:
     resolution: {integrity: sha512-UEZIS3/by4OC8vL3P2dTXRETpebLI2NiI5vIrjaD/5UtrkFX/tNbwjTSRAGC/+7CAo2pIcBaRgWmcBBHcsaCIw==}
 
-  pako@3.0.0:
-    resolution: {integrity: sha512-TGPtlCI1pSUSbkOIxOUUHNrBa0muz4mAp32cYUF3RoSa5c73jiQTKOKo22gaa4DxLggQrda/DAdax5QkcHPvYA==}
-
   path-key@3.1.1:
     resolution: {integrity: sha512-ojmeN0qd+y0jszEtoY48r0Peq5dwMEkIlCOu6Q5f41lfkswXuKtYrhgoTpLnyIcHm24Uhqx+5Tqm2InSwLhE6Q==}
     engines: {node: '>=8'}
@@ -1541,6 +1541,9 @@ packages:
         optional: true
       utf-8-validate:
         optional: true
+
+  zlib-asm@1.0.7:
+    resolution: {integrity: sha512-uxYdG+xa7yxQEa3GbXlubbonNpgCNS9kA293/YuHP3N/DG83N+Ll7qAbP4uws59stHuEFlfGkteMf6txOhhw6A==}
 
 snapshots:
 
@@ -1835,6 +1838,8 @@ snapshots:
   '@types/node@26.0.1':
     dependencies:
       undici-types: 8.3.0
+
+  '@types/node@6.14.13': {}
 
   '@types/whatwg-mimetype@3.0.2': {}
 
@@ -2323,8 +2328,6 @@ snapshots:
 
   package-json-from-dist@1.0.1: {}
 
-  pako@3.0.0: {}
-
   path-key@3.1.1: {}
 
   path-scurry@1.11.1:
@@ -2596,3 +2599,7 @@ snapshots:
       strip-ansi: 7.2.0
 
   ws@8.21.0: {}
+
+  zlib-asm@1.0.7:
+    dependencies:
+      '@types/node': 6.14.13
