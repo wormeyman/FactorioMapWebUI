@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import { bytesToBase64 } from "../src/codec/base64";
+import { crc32 } from "../src/codec/crc32";
 import { deflateLevel9 } from "../src/codec/deflate";
 import { decodeExchangeString, ExchangeStringError } from "../src/codec/mapExchangeString";
 import fixtures from "./fixtures/builtin-presets.json";
@@ -113,5 +114,17 @@ describe("decodeExchangeString", () => {
     corrupted[20] = (corrupted[20] as number) ^ 0xff;
     const tampered = `>>>${bytesToBase64(deflateLevel9(corrupted))}<<<`;
     expect(() => decodeExchangeString(tampered)).toThrow(/CRC/);
+  });
+
+  it("rejects a payload with an unsupported format version", () => {
+    const good = decodeExchangeString(presets["Default"] as string);
+    const body = good.payload.slice(0, -4);
+    body[0] = 3; // version major 2 -> 3 (uint16 LE low byte)
+    const crc = crc32(body);
+    const tampered = new Uint8Array(body.length + 4);
+    tampered.set(body, 0);
+    new DataView(tampered.buffer).setUint32(body.length, crc, true);
+    const restrung = `>>>${bytesToBase64(deflateLevel9(tampered))}<<<`;
+    expect(() => decodeExchangeString(restrung)).toThrow(/unsupported exchange format 3\.1\.9\.3/);
   });
 });

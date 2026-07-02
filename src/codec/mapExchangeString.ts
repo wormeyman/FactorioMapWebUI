@@ -34,6 +34,9 @@ const MIN_PAYLOAD_LENGTH = 70;
 // Empirical for format 2.1.9.3, verified on all 9 fixtures (Phase 1 maps its fields).
 const MID_BLOCK_LENGTH = 55;
 
+// The only format this decoder understands; MID_BLOCK_LENGTH is empirical for it.
+const SUPPORTED_VERSION: FormatVersion = [2, 1, 9, 3];
+
 export function decodeExchangeString(input: string): DecodedExchange {
   const compact = input.replaceAll(/\s+/g, "");
   if (!compact.startsWith(">>>") || !compact.endsWith("<<<") || compact.length < 7) {
@@ -77,6 +80,11 @@ export function decodeExchangeString(input: string): DecodedExchange {
       reader.readUint16(),
       reader.readUint16(),
     ];
+    if (!version.every((v, i) => v === SUPPORTED_VERSION[i])) {
+      throw new ExchangeStringError(
+        `unsupported exchange format ${version.join(".")} (supported: ${SUPPORTED_VERSION.join(".")})`,
+      );
+    }
     const flagByte = reader.readUint8();
 
     const autoplaceControls: Record<string, AutoplaceSetting> = {};
