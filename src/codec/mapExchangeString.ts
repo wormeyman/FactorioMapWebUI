@@ -1,5 +1,6 @@
 import { base64ToBytes } from "./base64";
 import { BinaryReader } from "./binaryReader";
+import { BinaryWriter } from "./binaryWriter";
 import { crc32 } from "./crc32";
 import { inflate } from "./deflate";
 
@@ -123,4 +124,53 @@ export function decodeExchangeString(input: string): DecodedExchange {
     }
     throw error;
   }
+}
+
+export interface EncodableExchange {
+  version: FormatVersion;
+  flagByte: number;
+  autoplaceControls: Record<string, AutoplaceSetting>;
+  midBlock: Uint8Array;
+  propertyExpressionNames: Record<string, string>;
+  tail: Uint8Array;
+}
+
+/**
+ * Assemble the uncompressed payload (through the trailing CRC) as the exact
+ * inverse of decodeExchangeString. Autoplace keys are emitted in code-point
+ * order (spec Sections 4 and 5); the mid-block and tail are re-emitted verbatim.
+ */
+export function encodePayload(input: EncodableExchange): Uint8Array {
+  const w = new BinaryWriter();
+  for (const part of input.version) {
+    w.writeUint16(part);
+  }
+  w.writeUint8(input.flagByte);
+
+  const controlNames = Object.keys(input.autoplaceControls).sort();
+  w.writeUint8(controlNames.length);
+  for (const name of controlNames) {
+    const control = input.autoplaceControls[name] as AutoplaceSetting;
+    w.writeString(name);
+    w.writeFloat32(control.frequency);
+    w.writeFloat32(control.size);
+    w.writeFloat32(control.richness);
+  }
+
+  w.writeBytes(input.midBlock);
+
+  const propertyKeys = Object.keys(input.propertyExpressionNames);
+  w.writeUint8(propertyKeys.length);
+  for (const key of propertyKeys) {
+    w.writeString(key);
+    w.writeString(input.propertyExpressionNames[key] as string);
+  }
+
+  w.writeBytes(input.tail);
+
+  const body = w.toBytes();
+  const payload = new Uint8Array(body.length + 4);
+  payload.set(body, 0);
+  new DataView(payload.buffer).setUint32(body.length, crc32(body), true);
+  return payload;
 }
