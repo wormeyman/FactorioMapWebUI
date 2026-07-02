@@ -8,6 +8,7 @@ export default defineConfig({
   plugins: [vue()],
   test: {
     environment: "happy-dom",
+    setupFiles: ["./test/setup.ts"],
   },
   // Never reformat the byte-verified spec docs or the read-only fixture
   // ground truth - `vp check --fix` would otherwise rewrite them on every run.
