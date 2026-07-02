@@ -4,6 +4,7 @@ import {
   encodeExchangeString,
   encodePayload,
 } from "../src/codec/mapExchangeString";
+import { presetFromDecoded, presetToEncodable } from "../src/model/convert";
 import fixtures from "./fixtures/builtin-presets.json";
 
 const presets = fixtures.presets as Record<string, string>;
@@ -44,5 +45,24 @@ describe("encodeExchangeString", () => {
     expect(out.startsWith(">>>")).toBe(true);
     expect(out.endsWith("<<<")).toBe(true);
     expect(/\s/.test(out.slice(3, -3))).toBe(false);
+  });
+});
+
+describe("presetToEncodable", () => {
+  it.each(NAMES)("round-trips %s through the full Preset model path", (name) => {
+    const original = presets[name] as string;
+    const decoded = decodeExchangeString(original);
+    const preset = presetFromDecoded(name, decoded);
+    expect(encodeExchangeString(presetToEncodable(preset))).toBe(original);
+  });
+
+  it("rounds a non-float32-representable richness on encode (documented, not a bug)", () => {
+    const decoded = decodeExchangeString(presets["Default"] as string);
+    const preset = presetFromDecoded("edited", decoded);
+    (preset.autoplaceControls["coal"] as { richness: number }).richness = 1.3;
+    const reDecoded = decodeExchangeString(encodeExchangeString(presetToEncodable(preset)));
+    // 1.3 is not exactly representable as float32; it round-trips to fround(1.3).
+    expect(reDecoded.autoplaceControls["coal"]?.richness).toBe(Math.fround(1.3));
+    expect(reDecoded.autoplaceControls["coal"]?.richness).not.toBe(1.3);
   });
 });
