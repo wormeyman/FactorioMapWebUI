@@ -1,20 +1,39 @@
 <script setup lang="ts">
+import { onBeforeUnmount, ref } from "vue";
 import { usePresetsStore } from "../store/presets";
 import FButton from "../ui/FButton.vue";
 
 const store = usePresetsStore();
 const emit = defineEmits<{ "import-requested": [] }>();
 
+type CopyStatus = "idle" | "copied" | "failed";
+const copyStatus = ref<CopyStatus>("idle");
+let clearTimer: ReturnType<typeof setTimeout> | undefined;
+
+function flashStatus(status: Exclude<CopyStatus, "idle">) {
+  copyStatus.value = status;
+  clearTimeout(clearTimer);
+  clearTimer = setTimeout(() => {
+    copyStatus.value = "idle";
+  }, 2000);
+}
+
 async function copyString() {
   const text = store.activeExchangeString;
-  if (!text || !navigator.clipboard) return;
+  if (!text) return;
   try {
+    // Clipboard write can reject (denied permission, unfocused document) and
+    // the API is absent on insecure origins; treat both as a copy failure so
+    // the user always gets feedback instead of a silently dead button.
+    if (!navigator.clipboard) throw new Error("Clipboard API unavailable");
     await navigator.clipboard.writeText(text);
+    flashStatus("copied");
   } catch {
-    // Clipboard write can reject (denied permission, unfocused document);
-    // swallow so an edited preset copy never surfaces an unhandled rejection.
+    flashStatus("failed");
   }
 }
+
+onBeforeUnmount(() => clearTimeout(clearTimer));
 </script>
 
 <template>
@@ -23,6 +42,16 @@ async function copyString() {
     <FButton data-test="copy-string" :disabled="!store.activePreset" @click="copyString()">
       Copy string
     </FButton>
+    <span
+      v-if="copyStatus !== 'idle'"
+      data-test="copy-status"
+      class="copy-status"
+      :class="copyStatus"
+      role="status"
+      aria-live="polite"
+    >
+      {{ copyStatus === "copied" ? "Copied!" : "Copy failed" }}
+    </span>
     <span class="spacer" />
     <FButton data-test="duplicate" @click="store.duplicateActive()">Duplicate</FButton>
     <FButton disabled title="ZIP export lands in a later phase">Download ZIP</FButton>
@@ -38,6 +67,20 @@ async function copyString() {
   justify-content: flex-end;
   padding: 8px;
   background: var(--f-panel);
+}
+
+.copy-status {
+  align-self: center;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.copy-status.copied {
+  color: var(--f-green);
+}
+
+.copy-status.failed {
+  color: var(--f-red);
 }
 
 .spacer {
