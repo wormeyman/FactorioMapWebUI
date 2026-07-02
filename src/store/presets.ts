@@ -1,7 +1,7 @@
 import { defineStore } from "pinia";
-import { decodeExchangeString } from "../codec/mapExchangeString";
+import { decodeExchangeString, encodeExchangeString } from "../codec/mapExchangeString";
 import { getBuiltinPreset } from "../model/builtins";
-import { presetFromDecoded } from "../model/convert";
+import { presetFromDecoded, presetToEncodable } from "../model/convert";
 import type { Preset } from "../model/types";
 
 export const STORAGE_KEY = "factorio-map-webui.presets.v1";
@@ -43,6 +43,11 @@ export const usePresetsStore = defineStore("presets", {
   getters: {
     activePreset(state): Preset | undefined {
       return state.userPresets.find((p) => p.name === state.activeName);
+    },
+
+    activeExchangeString(): string | null {
+      const active = this.activePreset;
+      return active ? encodeExchangeString(presetToEncodable(active)) : null;
     },
   },
 

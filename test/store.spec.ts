@@ -1,6 +1,6 @@
 import { createPinia, setActivePinia } from "pinia";
 import { beforeEach, describe, expect, it } from "vite-plus/test";
-import { ExchangeStringError } from "../src/codec/mapExchangeString";
+import { decodeExchangeString, ExchangeStringError } from "../src/codec/mapExchangeString";
 import { STORAGE_KEY, usePresetsStore } from "../src/store/presets";
 import fixtures from "./fixtures/builtin-presets.json";
 
@@ -69,5 +69,18 @@ describe("presets store", () => {
     localStorage.setItem(STORAGE_KEY, "{not json");
     const store = usePresetsStore();
     expect(store.userPresets).toHaveLength(1);
+  });
+
+  it("exposes an activeExchangeString that decodes back to the active preset", () => {
+    const store = usePresetsStore();
+    const active = store.activePreset;
+    expect(active).toBeDefined();
+    const encoded = store.activeExchangeString;
+    expect(encoded).not.toBeNull();
+    const decoded = decodeExchangeString(encoded as string);
+    expect(Object.keys(decoded.autoplaceControls)).toEqual(
+      Object.keys((active as NonNullable<typeof active>).autoplaceControls).sort(),
+    );
+    expect(decoded.version).toEqual([2, 1, 9, 3]);
   });
 });
