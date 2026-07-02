@@ -137,8 +137,11 @@ export interface EncodableExchange {
 
 /**
  * Assemble the uncompressed payload (through the trailing CRC) as the exact
- * inverse of decodeExchangeString. Autoplace keys are emitted in code-point
- * order (spec Sections 4 and 5); the mid-block and tail are re-emitted verbatim.
+ * inverse of decodeExchangeString. Autoplace keys AND property_expression_names
+ * keys are both emitted in code-point (ordinal) sort order (spec Sections 4 and
+ * 5) so edited presets stay canonical; the mid-block and tail are re-emitted
+ * verbatim. `.sort()` compares UTF-16 code units, which equals code-point order
+ * for the ASCII prototype names Factorio uses.
  */
 export function encodePayload(input: EncodableExchange): Uint8Array {
   const w = new BinaryWriter();
@@ -159,7 +162,7 @@ export function encodePayload(input: EncodableExchange): Uint8Array {
 
   w.writeBytes(input.midBlock);
 
-  const propertyKeys = Object.keys(input.propertyExpressionNames);
+  const propertyKeys = Object.keys(input.propertyExpressionNames).sort();
   w.writeUint8(propertyKeys.length);
   for (const key of propertyKeys) {
     w.writeString(key);

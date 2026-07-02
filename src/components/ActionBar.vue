@@ -7,8 +7,12 @@ const emit = defineEmits<{ "import-requested": [] }>();
 
 async function copyString() {
   const text = store.activeExchangeString;
-  if (text && navigator.clipboard) {
+  if (!text || !navigator.clipboard) return;
+  try {
     await navigator.clipboard.writeText(text);
+  } catch {
+    // Clipboard write can reject (denied permission, unfocused document);
+    // swallow so an edited preset copy never surfaces an unhandled rejection.
   }
 }
 </script>
@@ -16,7 +20,7 @@ async function copyString() {
 <template>
   <div class="action-bar">
     <FButton data-test="open-import" @click="emit('import-requested')">Import string</FButton>
-    <FButton data-test="copy-string" :disabled="!store.activeExchangeString" @click="copyString()">
+    <FButton data-test="copy-string" :disabled="!store.activePreset" @click="copyString()">
       Copy string
     </FButton>
     <span class="spacer" />
