@@ -1,8 +1,8 @@
-import { base64ToBytes } from "./base64";
+import { base64ToBytes, bytesToBase64 } from "./base64";
 import { BinaryReader } from "./binaryReader";
 import { BinaryWriter } from "./binaryWriter";
 import { crc32 } from "./crc32";
-import { inflate } from "./deflate";
+import { deflateLevel9, inflate } from "./deflate";
 
 export interface AutoplaceSetting {
   frequency: number;
@@ -173,4 +173,14 @@ export function encodePayload(input: EncodableExchange): Uint8Array {
   payload.set(body, 0);
   new DataView(payload.buffer).setUint32(body.length, crc32(body), true);
   return payload;
+}
+
+/**
+ * Encode a full map-exchange string: payload -> zlib deflate@9 -> base64,
+ * wrapped in the >>> <<< envelope on a single line (the game ignores interior
+ * whitespace on import, and the captured fixtures carry none).
+ */
+export function encodeExchangeString(input: EncodableExchange): string {
+  const compressed = deflateLevel9(encodePayload(input));
+  return `>>>${bytesToBase64(compressed)}<<<`;
 }

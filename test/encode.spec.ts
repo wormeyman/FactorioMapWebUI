@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vite-plus/test";
-import { decodeExchangeString, encodePayload } from "../src/codec/mapExchangeString";
+import {
+  decodeExchangeString,
+  encodeExchangeString,
+  encodePayload,
+} from "../src/codec/mapExchangeString";
 import fixtures from "./fixtures/builtin-presets.json";
 
 const presets = fixtures.presets as Record<string, string>;
@@ -24,5 +28,21 @@ describe("encodePayload", () => {
       const decoded = decodeExchangeString(presets[name] as string);
       expect(encodePayload(decoded)).toEqual(decoded.payload);
     }
+  });
+});
+
+describe("encodeExchangeString", () => {
+  it.each(NAMES)("re-emits the exact %s string (secondary round-trip)", (name) => {
+    const original = presets[name] as string;
+    const decoded = decodeExchangeString(original);
+    expect(encodeExchangeString(decoded)).toBe(original);
+  });
+
+  it("produces a single-line >>> ... <<< envelope with no interior whitespace", () => {
+    const decoded = decodeExchangeString(presets["Default"] as string);
+    const out = encodeExchangeString(decoded);
+    expect(out.startsWith(">>>")).toBe(true);
+    expect(out.endsWith("<<<")).toBe(true);
+    expect(/\s/.test(out.slice(3, -3))).toBe(false);
   });
 });
