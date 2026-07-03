@@ -95,6 +95,28 @@ export const TAIL_SCHEMA: Schema = [
   { name: "pollution.pollutionRestoredPerTreeDamage", type: { optional: "f64" } },
   { name: "pollution.maxPollutionToRestoreTrees", type: { optional: "f64" } },
   { name: "pollution.enemyAttackPollutionConsumptionModifier", type: { optional: "f64" } },
+  // Both "enabled" fields below decode as an optional bool (flag byte + value
+  // byte), not a plain bool like pollution.enabled - byte-fitting showed a
+  // plain bool is one byte short of the real layout for these two sections.
+  { name: "enemyEvolution.enabled", type: { optional: "bool" } },
+  { name: "enemyEvolution.timeFactor", type: { optional: "f64" } },
+  { name: "enemyEvolution.destroyFactor", type: { optional: "f64" } },
+  { name: "enemyEvolution.pollutionFactor", type: { optional: "f64" } },
+  { name: "enemyExpansion.enabled", type: { optional: "bool" } },
+  { name: "enemyExpansion.maxExpansionDistance", type: { optional: "u32" } },
+  { name: "enemyExpansion.minExpansionDistance", type: { optional: "u32" } },
+  { name: "enemyExpansion.friendlyBaseInfluenceRadius", type: { optional: "u32" } },
+  { name: "enemyExpansion.enemyBuildingInfluenceRadius", type: { optional: "u32" } },
+  { name: "enemyExpansion.buildingCoefficient", type: { optional: "f64" } },
+  { name: "enemyExpansion.otherBaseCoefficient", type: { optional: "f64" } },
+  { name: "enemyExpansion.neighbouringChunkCoefficient", type: { optional: "f64" } },
+  { name: "enemyExpansion.neighbouringBaseChunkCoefficient", type: { optional: "f64" } },
+  { name: "enemyExpansion.maxCollidingTilesCoefficient", type: { optional: "f64" } },
+  { name: "enemyExpansion.settlerGroupMinSize", type: { optional: "u32" } },
+  { name: "enemyExpansion.settlerGroupMaxSize", type: { optional: "u32" } },
+  { name: "enemyExpansion.evolutionGroupSizeFactor", type: { optional: "f64" } },
+  { name: "enemyExpansion.minExpansionCooldown", type: { optional: "u32" } },
+  { name: "enemyExpansion.maxExpansionCooldown", type: { optional: "u32" } },
   { name: "opaqueTail", type: { opaque: 0 } }, // width set dynamically below
 ];
 

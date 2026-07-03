@@ -147,6 +147,22 @@ describe("decodeExchangeString", () => {
     expect(t["pollution.enemyAttackPollutionConsumptionModifier"]).toBeCloseTo(1, 9);
   });
 
+  it("types enemy_evolution and enemy_expansion for Default", () => {
+    const t = decodeExchangeString(presets["Default"] as string).tail;
+    expect(t["enemyEvolution.timeFactor"]).toBeCloseTo(0.000004, 12);
+    expect(t["enemyEvolution.destroyFactor"]).toBeCloseTo(0.002, 9);
+    expect(t["enemyEvolution.pollutionFactor"]).toBeCloseTo(0.0000009, 12);
+    expect(t["enemyExpansion.maxExpansionDistance"]).toBe(5);
+    expect(t["enemyExpansion.otherBaseCoefficient"]).toBeCloseTo(3.0, 9);
+    expect(t["enemyExpansion.maxExpansionCooldown"]).toBe(216000);
+  });
+
+  it("Death world has a higher enemy_evolution time_factor than Default", () => {
+    const def = decodeExchangeString(presets["Default"] as string).tail;
+    const dw = decodeExchangeString(presets["Death world"] as string).tail;
+    expect(dw["enemyEvolution.timeFactor"]).not.toBe(def["enemyEvolution.timeFactor"]);
+  });
+
   it("rejects a missing envelope", () => {
     expect(() => decodeExchangeString("eNqLjgUAARUAuQ==")).toThrow(ExchangeStringError);
     expect(() => decodeExchangeString(">>>eNqLjgUAARUAuQ==")).toThrow(ExchangeStringError);
