@@ -76,6 +76,25 @@ export interface TailBlock {
 export const TAIL_SCHEMA: Schema = [
   { name: "cliff.name", type: "string" },
   { name: "cliff.control", type: "string" },
+  { name: "cliff.cliffElevation0", type: "f32" },
+  { name: "cliff.cliffElevationInterval", type: "f32" },
+  { name: "cliff.cliffSmoothing", type: "f32" },
+  { name: "cliff.richness", type: "f32" },
+  // Two unmapped bytes between the cliff floats and the pollution section
+  // (Default-tail offset 23-24); round-trip-only, values unknown.
+  { name: "cliff.trailing", type: { opaque: 2 } },
+  { name: "pollution.enabled", type: "bool" },
+  { name: "pollution.diffusionRatio", type: { optional: "f64" } },
+  { name: "pollution.minToDiffuse", type: { optional: "f64" } },
+  { name: "pollution.ageing", type: { optional: "f64" } },
+  { name: "pollution.expectedMaxPerChunk", type: { optional: "f64" } },
+  { name: "pollution.minToShowPerChunk", type: { optional: "f64" } },
+  { name: "pollution.minPollutionToDamageTrees", type: { optional: "f64" } },
+  { name: "pollution.pollutionWithMaxForestDamage", type: { optional: "f64" } },
+  { name: "pollution.pollutionPerTreeDamage", type: { optional: "f64" } },
+  { name: "pollution.pollutionRestoredPerTreeDamage", type: { optional: "f64" } },
+  { name: "pollution.maxPollutionToRestoreTrees", type: { optional: "f64" } },
+  { name: "pollution.enemyAttackPollutionConsumptionModifier", type: { optional: "f64" } },
   { name: "opaqueTail", type: { opaque: 0 } }, // width set dynamically below
 ];
 

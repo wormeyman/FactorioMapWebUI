@@ -137,6 +137,16 @@ describe("decodeExchangeString", () => {
     expect(decodeExchangeString(presets["Default"] as string).tail["cliff.control"]).toBe("");
   });
 
+  it("types the cliff floats and the pollution section for Default", () => {
+    const t = decodeExchangeString(presets["Default"] as string).tail;
+    expect(t["cliff.cliffElevation0"]).toBeCloseTo(10, 4);
+    expect(t["cliff.cliffElevationInterval"]).toBeCloseTo(40, 4);
+    expect(t["pollution.diffusionRatio"]).toBeCloseTo(0.02, 9);
+    expect(t["pollution.minToDiffuse"]).toBeCloseTo(15, 9);
+    expect(t["pollution.expectedMaxPerChunk"]).toBeCloseTo(150, 9);
+    expect(t["pollution.enemyAttackPollutionConsumptionModifier"]).toBeCloseTo(1, 9);
+  });
+
   it("rejects a missing envelope", () => {
     expect(() => decodeExchangeString("eNqLjgUAARUAuQ==")).toThrow(ExchangeStringError);
     expect(() => decodeExchangeString(">>>eNqLjgUAARUAuQ==")).toThrow(ExchangeStringError);
