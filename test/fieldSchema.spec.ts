@@ -141,4 +141,15 @@ describe("bool / optional / array field types", () => {
     writeFields(w, schema, out);
     expect(w.toBytes()).toEqual(bytes);
   });
+
+  it("reads an array with a u8 count (countType: 'u8') and round-trips", () => {
+    const schema: Schema = [{ name: "arr", type: { array: "u32", countType: "u8" } }];
+    // count 2 (single byte, not u32), then 0x00000001, 0x00000002
+    const bytes = new Uint8Array([0x02, 0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00]);
+    const out = readFields(new BinaryReader(bytes), schema);
+    expect(out["arr"]).toEqual([1, 2]);
+    const w = new BinaryWriter();
+    writeFields(w, schema, out);
+    expect(w.toBytes()).toEqual(bytes);
+  });
 });

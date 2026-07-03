@@ -4,6 +4,7 @@ import { crc32 } from "../src/codec/crc32";
 import { deflateLevel9 } from "../src/codec/deflate";
 import { decodeExchangeString, ExchangeStringError } from "../src/codec/mapExchangeString";
 import fixtures from "./fixtures/builtin-presets.json";
+import nauvisDump from "./fixtures/map-gen-settings.default-nauvis.dump.json";
 import mapDefaults from "./fixtures/map-settings.example.json";
 
 const presets = fixtures.presets as Record<string, string>;
@@ -142,10 +143,20 @@ describe("decodeExchangeString", () => {
     const t = decodeExchangeString(presets["Default"] as string).tail;
     expect(t["cliff.cliffElevation0"]).toBeCloseTo(10, 4);
     expect(t["cliff.cliffElevationInterval"]).toBeCloseTo(40, 4);
+    expect(t["cliff.richness"]).toBeCloseTo(1, 6);
+    expect(t["cliff.unknownFloat"]).toBeCloseTo(1, 6);
+    expect(t["cliff.cliffSmoothing"]).toBe(0);
+    expect(t["pollution.enabled"]).toBe(true);
     expect(t["pollution.diffusionRatio"]).toBeCloseTo(0.02, 9);
     expect(t["pollution.minToDiffuse"]).toBeCloseTo(15, 9);
     expect(t["pollution.expectedMaxPerChunk"]).toBeCloseTo(150, 9);
     expect(t["pollution.enemyAttackPollutionConsumptionModifier"]).toBeCloseTo(1, 9);
+  });
+
+  it("cliff_smoothing and richness match the Nauvis dump exactly", () => {
+    const t = decodeExchangeString(presets["Default"] as string).tail;
+    expect(t["cliff.cliffSmoothing"]).toBe(nauvisDump.cliff_settings.cliff_smoothing);
+    expect(t["cliff.richness"]).toBeCloseTo(nauvisDump.cliff_settings.richness, 6);
   });
 
   it("types enemy_evolution and enemy_expansion for Default", () => {

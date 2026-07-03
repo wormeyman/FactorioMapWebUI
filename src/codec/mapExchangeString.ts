@@ -37,7 +37,14 @@ export interface DecodedExchange {
   /** The 55-byte MapGenSettings block between autoplace and property_expression_names, with width/height typed and the rest opaque (typed further in Phase 1c). */
   mid: MidBlock;
   propertyExpressionNames: Record<string, string>;
-  /** Payload bytes after property_expression_names, excluding the trailing CRC. Fully typed via TAIL_SCHEMA; opaqueTail decodes to length 0. */
+  /**
+   * Payload bytes after property_expression_names, excluding the trailing
+   * CRC. The full cliff block plus every MapSettings section (pollution,
+   * enemy_evolution, enemy_expansion, unit_group, path_finder, difficulty,
+   * asteroids, max_failed_behavior_count) is typed via TAIL_SCHEMA;
+   * `opaqueTail` is the dynamically-sized trailer that normally decodes to
+   * length 0 for every known fixture.
+   */
   tail: TailBlock;
   crc: number;
   /** The full inflated payload (including CRC), for round-trip tests. */
@@ -80,12 +87,20 @@ export const TAIL_SCHEMA: Schema = [
   { name: "cliff.control", type: "string" },
   { name: "cliff.cliffElevation0", type: "f32" },
   { name: "cliff.cliffElevationInterval", type: "f32" },
-  { name: "cliff.cliffSmoothing", type: "f32" },
   { name: "cliff.richness", type: "f32" },
-  // Two unmapped bytes between the cliff floats and the pollution section
-  // (Default-tail offset 23-24); round-trip-only, values unknown.
-  { name: "cliff.trailing", type: { opaque: 2 } },
-  { name: "pollution.enabled", type: "bool" },
+  // Unidentified 4th cliff float; both fixtures observed so far carry 1.0.
+  // Kept typed (rather than folded into an opaque span) purely for
+  // byte-exactness until its meaning is confirmed.
+  { name: "cliff.unknownFloat", type: "f32" },
+  // Single byte (u8, not part of a float) - Default-tail offset 23. Matches
+  // the Nauvis dump's cliff_settings.cliff_smoothing (0) exactly.
+  { name: "cliff.cliffSmoothing", type: "u8" },
+  // Unlike a plain bool, this is presence-flag + value (2 bytes) - the byte
+  // immediately preceding it (cliff.cliffSmoothing) is NOT part of this
+  // field; byte-fitting against pollution.diffusionRatio's known offset
+  // proved the extra flag byte belongs here, matching every other section's
+  // "enabled" convention (see enemyEvolution/enemyExpansion below).
+  { name: "pollution.enabled", type: { optional: "bool" } },
   { name: "pollution.diffusionRatio", type: { optional: "f64" } },
   { name: "pollution.minToDiffuse", type: { optional: "f64" } },
   { name: "pollution.ageing", type: { optional: "f64" } },
