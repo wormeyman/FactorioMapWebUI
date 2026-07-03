@@ -86,3 +86,52 @@ describe("writeFields", () => {
     expect(w.toBytes()).toEqual(bytes);
   });
 });
+
+describe("bool / optional / array field types", () => {
+  it("reads and writes bool", () => {
+    const schema: Schema = [{ name: "a", type: "bool" }, { name: "b", type: "bool" }];
+    const bytes = new Uint8Array([0x01, 0x00]);
+    const out = readFields(new BinaryReader(bytes), schema);
+    expect(out["a"]).toBe(true);
+    expect(out["b"]).toBe(false);
+    const w = new BinaryWriter();
+    writeFields(w, schema, out);
+    expect(w.toBytes()).toEqual(bytes);
+  });
+
+  it("reads a present optional (presence 01 + value) and round-trips", () => {
+    const schema: Schema = [{ name: "x", type: { optional: "f64" } }];
+    // 01 + f64 1.5
+    const bytes = new Uint8Array([0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xf8, 0x3f]);
+    const out = readFields(new BinaryReader(bytes), schema);
+    expect(out["x"]).toBe(1.5);
+    const w = new BinaryWriter();
+    writeFields(w, schema, out);
+    expect(w.toBytes()).toEqual(bytes);
+  });
+
+  it("reads an absent optional (presence 00, no value) and round-trips", () => {
+    const schema: Schema = [{ name: "x", type: { optional: "u32" } }, { name: "y", type: "u8" }];
+    // 00 (absent) then y = 7
+    const bytes = new Uint8Array([0x00, 0x07]);
+    const out = readFields(new BinaryReader(bytes), schema);
+    expect(out["x"]).toBeNull();
+    expect(out["y"]).toBe(7);
+    const w = new BinaryWriter();
+    writeFields(w, schema, out);
+    expect(w.toBytes()).toEqual(bytes);
+  });
+
+  it("reads an array (u32 count + values) and round-trips", () => {
+    const schema: Schema = [{ name: "arr", type: { array: "u32" } }];
+    // count 3, then 0,100,500
+    const bytes = new Uint8Array([
+      0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x64, 0x00, 0x00, 0x00, 0xf4, 0x01, 0x00, 0x00,
+    ]);
+    const out = readFields(new BinaryReader(bytes), schema);
+    expect(out["arr"]).toEqual([0, 100, 500]);
+    const w = new BinaryWriter();
+    writeFields(w, schema, out);
+    expect(w.toBytes()).toEqual(bytes);
+  });
+});
