@@ -37,7 +37,7 @@ export interface DecodedExchange {
   /** The 55-byte MapGenSettings block between autoplace and property_expression_names, with width/height typed and the rest opaque (typed further in Phase 1c). */
   mid: MidBlock;
   propertyExpressionNames: Record<string, string>;
-  /** Payload bytes after property_expression_names, excluding the trailing CRC. Cliff name/control are typed; the rest is opaque until later Phase 1c tasks. */
+  /** Payload bytes after property_expression_names, excluding the trailing CRC. Fully typed via TAIL_SCHEMA; opaqueTail decodes to length 0. */
   tail: TailBlock;
   crc: number;
   /** The full inflated payload (including CRC), for round-trip tests. */
@@ -71,8 +71,10 @@ export interface TailBlock {
 }
 
 // The tail, walked as one flat schema (dotted names encode section membership).
-// Grows across Phase 1c; ALWAYS ends with an opaque span that absorbs the rest,
-// so round-trip is byte-exact at every stage of typing.
+// Grew across Phase 1c; the entire MapSettings tail is now typed and
+// "opaqueTail" decodes to length 0 for every fixture. It stays as the final,
+// dynamically-sized schema entry so round-trip remains byte-exact even if a
+// future format revision adds fields we haven't typed yet.
 export const TAIL_SCHEMA: Schema = [
   { name: "cliff.name", type: "string" },
   { name: "cliff.control", type: "string" },
@@ -192,6 +194,19 @@ export const TAIL_SCHEMA: Schema = [
     type: { optional: { array: "f64", countType: "u8" } },
   },
   { name: "pathFinder.negativePathCacheDelayInterval", type: { optional: "u32" } },
+  // Wire order for the final MapSettings fields does not follow the JSON key
+  // order (difficulty_settings, ..., asteroids, max_failed_behavior_count) -
+  // byte-fitting shows max_failed_behavior_count comes FIRST here, as a bare
+  // u32 (no presence flag).
+  { name: "maxFailedBehaviorCount", type: "u32" },
+  // Bare f64s (no presence flag), unlike most numeric fields in this tail -
+  // byte-fitting the exact 1.0/4.0 double patterns (Marathon flips
+  // technologyPriceMultiplier to 4.0 right after maxFailedBehaviorCount)
+  // confirms both are plain, not optional-wrapped.
+  { name: "difficulty.technologyPriceMultiplier", type: "f64" },
+  { name: "difficulty.spoilTimeModifier", type: "f64" },
+  { name: "asteroids.spawningRate", type: { optional: "f64" } },
+  { name: "asteroids.maxRayPortalsExpandedPerTick", type: { optional: "u32" } },
   { name: "opaqueTail", type: { opaque: 0 } }, // width set dynamically below
 ];
 

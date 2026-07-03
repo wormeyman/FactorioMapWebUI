@@ -121,10 +121,10 @@ describe("decodeExchangeString", () => {
     ).toEqual(["elevation", "trees_forest_path_cutout"]);
   });
 
-  it.each(NAMES)("tail of %s is non-empty (terrain/cliff/map settings live there)", (name) => {
+  it.each(NAMES)("tail of %s is fully typed: opaqueTail is empty", (name) => {
     expect(
       (decodeExchangeString(presets[name] as string).tail.opaqueTail as Uint8Array).length,
-    ).toBeGreaterThan(0);
+    ).toBe(0);
   });
 
   it("resolves the cliff anomaly: Default cliff name is 'cliff', others are ''", () => {
@@ -281,6 +281,30 @@ describe("decodeExchangeString", () => {
     expect(t["pathFinder.negativePathCacheDelayInterval"]).toBe(
       pf.negative_path_cache_delay_interval,
     );
+  });
+
+  it("types difficulty/asteroids/max_failed and closes the opaque tail for Default", () => {
+    const t = decodeExchangeString(presets["Default"] as string).tail;
+    expect(t["difficulty.technologyPriceMultiplier"]).toBeCloseTo(
+      mapDefaults.difficulty_settings.technology_price_multiplier,
+      6,
+    );
+    expect(t["difficulty.spoilTimeModifier"]).toBeCloseTo(
+      mapDefaults.difficulty_settings.spoil_time_modifier,
+      6,
+    );
+    expect(t["asteroids.spawningRate"]).toBeCloseTo(mapDefaults.asteroids.spawning_rate, 6);
+    expect(t["asteroids.maxRayPortalsExpandedPerTick"]).toBe(
+      mapDefaults.asteroids.max_ray_portals_expanded_per_tick,
+    );
+    expect(t["maxFailedBehaviorCount"]).toBe(mapDefaults.max_failed_behavior_count);
+    // Whole MapSettings typed: no bytes left over.
+    expect((t["opaqueTail"] as Uint8Array).length).toBe(0);
+  });
+
+  it("Marathon has technology_price_multiplier 4", () => {
+    const t = decodeExchangeString(presets["Marathon"] as string).tail;
+    expect(t["difficulty.technologyPriceMultiplier"]).toBeCloseTo(4.0, 6);
   });
 
   it("rejects a missing envelope", () => {
