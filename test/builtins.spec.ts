@@ -10,7 +10,10 @@ describe("builtin presets", () => {
       expect(preset.builtin).toBe(true);
       expect(preset.formatVersion).toEqual([2, 1, 9, 3]);
       expect(Object.keys(preset.autoplaceControls)).toHaveLength(28);
-      expect(preset.opaqueMidB64.length).toBeGreaterThan(0);
+      expect(typeof preset.width).toBe("number");
+      expect(typeof preset.height).toBe("number");
+      expect(preset.opaqueMidHeadB64.length).toBeGreaterThan(0);
+      expect(preset.opaqueMidRestB64.length).toBeGreaterThan(0);
       expect(preset.opaqueTailB64.length).toBeGreaterThan(0);
     }
   });

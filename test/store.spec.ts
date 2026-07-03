@@ -94,4 +94,22 @@ describe("presets store", () => {
       richness: Math.fround(coal.richness),
     });
   });
+
+  it("exposes typed map width/height on the active preset and persists edits", () => {
+    const store = usePresetsStore();
+    expect(store.activePreset?.width).toBe(2000000);
+    expect(store.activePreset?.height).toBe(2000000);
+
+    const active = store.activePreset;
+    if (active) active.height = 128;
+    store.saveToStorage();
+
+    setActivePinia(createPinia());
+    const reloaded = usePresetsStore();
+    expect(reloaded.activePreset?.height).toBe(128);
+
+    // The edited height must survive the encode bridge, not just localStorage.
+    const encoded = reloaded.activeExchangeString as string;
+    expect(decodeExchangeString(encoded).mid.height).toBe(128);
+  });
 });

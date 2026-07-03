@@ -9,13 +9,14 @@ export interface Preset {
   seed: number | null;
   randomEachMap: boolean;
   autoplaceControls: Record<string, AutoplaceSetting>;
-  /**
-   * Base64 of the undecoded 55-byte MapGenSettings block that sits between
-   * autoplace and property_expression_names on the wire (terrain / water /
-   * starting-area scalars; varies per preset). Mapped to typed fields in
-   * Phase 1.
-   */
-  opaqueMidB64: string;
+  /** Map width in tiles (typed from the mid-block; editable). */
+  width: number;
+  /** Map height in tiles (typed from the mid-block; editable). */
+  height: number;
+  /** Base64 of the 6 opaque mid-block bytes before width (unmapped until Phase 1c). */
+  opaqueMidHeadB64: string;
+  /** Base64 of the 41 opaque mid-block bytes after height (unmapped until Phase 1c). */
+  opaqueMidRestB64: string;
   propertyExpressionNames: Record<string, string>;
   /**
    * Base64 of the undecoded payload bytes after property_expression_names
