@@ -37,8 +37,8 @@ export interface DecodedExchange {
   /** The 55-byte MapGenSettings block between autoplace and property_expression_names, with width/height typed and the rest opaque (typed further in Phase 1c). */
   mid: MidBlock;
   propertyExpressionNames: Record<string, string>;
-  /** Payload bytes after property_expression_names, excluding the trailing CRC. Undecoded until Phase 1. */
-  tail: Uint8Array;
+  /** Payload bytes after property_expression_names, excluding the trailing CRC. Cliff name/control are typed; the rest is opaque until later Phase 1c tasks. */
+  tail: TailBlock;
   crc: number;
   /** The full inflated payload (including CRC), for round-trip tests. */
   payload: Uint8Array;
@@ -65,6 +65,45 @@ export const MID_BLOCK_SCHEMA: Schema = [
 
 // The only format this decoder understands; MID_BLOCK_SCHEMA is empirical for it.
 const SUPPORTED_VERSION: FormatVersion = [2, 1, 9, 3];
+
+export interface TailBlock {
+  [key: string]: string | number | boolean | Uint8Array | null | (string | number | boolean)[];
+}
+
+// The tail, walked as one flat schema (dotted names encode section membership).
+// Grows across Phase 1c; ALWAYS ends with an opaque span that absorbs the rest,
+// so round-trip is byte-exact at every stage of typing.
+export const TAIL_SCHEMA: Schema = [
+  { name: "cliff.name", type: "string" },
+  { name: "cliff.control", type: "string" },
+  { name: "opaqueTail", type: { opaque: 0 } }, // width set dynamically below
+];
+
+// Fields of TAIL_SCHEMA excluding the trailing dynamic "opaqueTail".
+const TAIL_FIXED_SCHEMA: Schema = TAIL_SCHEMA.filter((f) => f.name !== "opaqueTail");
+
+function readTail(reader: BinaryReader): TailBlock {
+  const out = readFields(reader, TAIL_FIXED_SCHEMA) as TailBlock;
+  out["opaqueTail"] = reader.remaining();
+  return out;
+}
+
+function writeTail(writer: BinaryWriter, tail: TailBlock): void {
+  writeFields(writer, TAIL_FIXED_SCHEMA, tail as Record<string, FieldValue>);
+  writer.writeBytes(tail["opaqueTail"] as Uint8Array);
+}
+
+/** Bytes for the full tail (fixed prefix + opaque remainder), for the Preset-model interim bridge. */
+export function tailToBytes(tail: TailBlock): Uint8Array {
+  const writer = new BinaryWriter();
+  writeTail(writer, tail);
+  return writer.toBytes();
+}
+
+/** The inverse of tailToBytes, for the Preset-model interim bridge. */
+export function bytesToTail(bytes: Uint8Array): TailBlock {
+  return readTail(new BinaryReader(bytes));
+}
 
 export function decodeExchangeString(input: string): DecodedExchange {
   const compact = input.replaceAll(/\s+/g, "");
@@ -136,13 +175,15 @@ export function decodeExchangeString(input: string): DecodedExchange {
       propertyExpressionNames[key] = reader.readString();
     }
 
+    const tail = readTail(reader);
+
     return {
       version,
       flagByte,
       autoplaceControls,
       mid,
       propertyExpressionNames,
-      tail: reader.remaining(),
+      tail,
       crc: storedCrc,
       payload,
     };
@@ -160,7 +201,7 @@ export interface EncodableExchange {
   autoplaceControls: Record<string, AutoplaceSetting>;
   mid: MidBlock;
   propertyExpressionNames: Record<string, string>;
-  tail: Uint8Array;
+  tail: TailBlock;
 }
 
 /**
@@ -197,7 +238,7 @@ export function encodePayload(input: EncodableExchange): Uint8Array {
     w.writeString(input.propertyExpressionNames[key] as string);
   }
 
-  w.writeBytes(input.tail);
+  writeTail(w, input.tail);
 
   const body = w.toBytes();
   const payload = new Uint8Array(body.length + 4);

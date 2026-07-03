@@ -121,7 +121,20 @@ describe("decodeExchangeString", () => {
   });
 
   it.each(NAMES)("tail of %s is non-empty (terrain/cliff/map settings live there)", (name) => {
-    expect(decodeExchangeString(presets[name] as string).tail.length).toBeGreaterThan(0);
+    expect(
+      (decodeExchangeString(presets[name] as string).tail.opaqueTail as Uint8Array).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("resolves the cliff anomaly: Default cliff name is 'cliff', others are ''", () => {
+    expect(decodeExchangeString(presets["Default"] as string).tail["cliff.name"]).toBe("cliff");
+    for (const name of NAMES.filter((n) => n !== "Default")) {
+      expect(decodeExchangeString(presets[name] as string).tail["cliff.name"]).toBe("");
+    }
+  });
+
+  it("decodes the cliff control string (empty across the corpus)", () => {
+    expect(decodeExchangeString(presets["Default"] as string).tail["cliff.control"]).toBe("");
   });
 
   it("rejects a missing envelope", () => {
