@@ -11,7 +11,7 @@ export type FieldType =
   | "bool"
   | { opaque: number }
   | { optional: FieldType }
-  | { array: FieldType };
+  | { array: FieldType; countType?: "u8" | "u32" };
 
 export interface Field {
   name: string;
@@ -29,7 +29,7 @@ function readOne(reader: BinaryReader, type: FieldType): FieldValue {
       return reader.readUint8() === 0 ? null : readOne(reader, type.optional);
     }
     // array
-    const count = reader.readUint32();
+    const count = type.countType === "u8" ? reader.readUint8() : reader.readUint32();
     const items: FieldValue[] = [];
     for (let i = 0; i < count; i++) items.push(readOne(reader, type.array));
     return items;
@@ -78,7 +78,8 @@ function writeOne(writer: BinaryWriter, type: FieldType, value: FieldValue): voi
     }
     // array
     const items = value as FieldValue[];
-    writer.writeUint32(items.length);
+    if (type.countType === "u8") writer.writeUint8(items.length);
+    else writer.writeUint32(items.length);
     for (const item of items) writeOne(writer, type.array, item);
     return;
   }

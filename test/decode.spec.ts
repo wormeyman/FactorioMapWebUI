@@ -193,6 +193,96 @@ describe("decodeExchangeString", () => {
     expect(t["unitGroup.maxUnitGroupSize"]).toBe(ug.max_unit_group_size);
   });
 
+  it("types the path_finder section incl. overload arrays for Default, matching every map-settings.example.json default", () => {
+    const t = decodeExchangeString(presets["Default"] as string).tail;
+    const pf = mapDefaults.path_finder;
+    expect(t["pathFinder.fwd2bwdRatio"]).toBe(pf.fwd2bwd_ratio);
+    expect(t["pathFinder.goalPressureRatio"]).toBeCloseTo(pf.goal_pressure_ratio, 6);
+    expect(t["pathFinder.maxStepsWorkedPerTick"]).toBe(pf.max_steps_worked_per_tick);
+    expect(t["pathFinder.maxWorkDonePerTick"]).toBe(pf.max_work_done_per_tick);
+    expect(t["pathFinder.usePathCache"]).toBe(pf.use_path_cache);
+    expect(t["pathFinder.shortCacheSize"]).toBe(pf.short_cache_size);
+    expect(t["pathFinder.longCacheSize"]).toBe(pf.long_cache_size);
+    expect(t["pathFinder.shortCacheMinCacheableDistance"]).toBe(
+      pf.short_cache_min_cacheable_distance,
+    );
+    expect(t["pathFinder.shortCacheMinAlgoStepsToCache"]).toBe(
+      pf.short_cache_min_algo_steps_to_cache,
+    );
+    expect(t["pathFinder.longCacheMinCacheableDistance"]).toBe(
+      pf.long_cache_min_cacheable_distance,
+    );
+    expect(t["pathFinder.cacheMaxConnectToCacheStepsMultiplier"]).toBe(
+      pf.cache_max_connect_to_cache_steps_multiplier,
+    );
+    expect(t["pathFinder.cacheAcceptPathStartDistanceRatio"]).toBeCloseTo(
+      pf.cache_accept_path_start_distance_ratio,
+      6,
+    );
+    expect(t["pathFinder.cacheAcceptPathEndDistanceRatio"]).toBeCloseTo(
+      pf.cache_accept_path_end_distance_ratio,
+      6,
+    );
+    expect(t["pathFinder.negativeCacheAcceptPathStartDistanceRatio"]).toBeCloseTo(
+      pf.negative_cache_accept_path_start_distance_ratio,
+      6,
+    );
+    expect(t["pathFinder.negativeCacheAcceptPathEndDistanceRatio"]).toBeCloseTo(
+      pf.negative_cache_accept_path_end_distance_ratio,
+      6,
+    );
+    expect(t["pathFinder.cachePathStartDistanceRatingMultiplier"]).toBe(
+      pf.cache_path_start_distance_rating_multiplier,
+    );
+    expect(t["pathFinder.cachePathEndDistanceRatingMultiplier"]).toBe(
+      pf.cache_path_end_distance_rating_multiplier,
+    );
+    expect(t["pathFinder.staleEnemyWithSameDestinationCollisionPenalty"]).toBeCloseTo(
+      pf.stale_enemy_with_same_destination_collision_penalty,
+      6,
+    );
+    expect(t["pathFinder.ignoreMovingEnemyCollisionDistance"]).toBeCloseTo(
+      pf.ignore_moving_enemy_collision_distance,
+      6,
+    );
+    expect(t["pathFinder.enemyWithDifferentDestinationCollisionPenalty"]).toBeCloseTo(
+      pf.enemy_with_different_destination_collision_penalty,
+      6,
+    );
+    expect(t["pathFinder.generalEntityCollisionPenalty"]).toBeCloseTo(
+      pf.general_entity_collision_penalty,
+      6,
+    );
+    expect(t["pathFinder.generalEntitySubsequentCollisionPenalty"]).toBeCloseTo(
+      pf.general_entity_subsequent_collision_penalty,
+      6,
+    );
+    expect(t["pathFinder.extendedCollisionPenalty"]).toBeCloseTo(pf.extended_collision_penalty, 6);
+    expect(t["pathFinder.maxClientsToAcceptAnyNewRequest"]).toBe(
+      pf.max_clients_to_accept_any_new_request,
+    );
+    expect(t["pathFinder.maxClientsToAcceptShortNewRequest"]).toBe(
+      pf.max_clients_to_accept_short_new_request,
+    );
+    expect(t["pathFinder.directDistanceToConsiderShortRequest"]).toBe(
+      pf.direct_distance_to_consider_short_request,
+    );
+    expect(t["pathFinder.shortRequestMaxSteps"]).toBe(pf.short_request_max_steps);
+    expect(t["pathFinder.shortRequestRatio"]).toBeCloseTo(pf.short_request_ratio, 6);
+    expect(t["pathFinder.minStepsToCheckPathFindTermination"]).toBe(
+      pf.min_steps_to_check_path_find_termination,
+    );
+    expect(t["pathFinder.startToGoalCostMultiplierToTerminatePathFind"]).toBeCloseTo(
+      pf.start_to_goal_cost_multiplier_to_terminate_path_find,
+      6,
+    );
+    expect(t["pathFinder.overloadLevels"]).toEqual(pf.overload_levels);
+    expect(t["pathFinder.overloadMultipliers"]).toEqual(pf.overload_multipliers);
+    expect(t["pathFinder.negativePathCacheDelayInterval"]).toBe(
+      pf.negative_path_cache_delay_interval,
+    );
+  });
+
   it("rejects a missing envelope", () => {
     expect(() => decodeExchangeString("eNqLjgUAARUAuQ==")).toThrow(ExchangeStringError);
     expect(() => decodeExchangeString(">>>eNqLjgUAARUAuQ==")).toThrow(ExchangeStringError);

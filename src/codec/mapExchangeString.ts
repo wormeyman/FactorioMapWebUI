@@ -134,6 +134,64 @@ export const TAIL_SCHEMA: Schema = [
   { name: "unitGroup.tickToleranceWhenMemberArrives", type: { optional: "u32" } },
   { name: "unitGroup.maxGatheringUnitGroups", type: { optional: "u32" } },
   { name: "unitGroup.maxUnitGroupSize", type: { optional: "u32" } },
+  { name: "pathFinder.fwd2bwdRatio", type: { optional: "u32" } },
+  { name: "pathFinder.goalPressureRatio", type: { optional: "f64" } },
+  // Two unmapped bytes (01 01 in Default) between goalPressureRatio and
+  // maxStepsWorkedPerTick; byte-fitting the anchor values around them (2000,
+  // 8000, etc.) confirms this gap, round-trip-only, values unknown.
+  { name: "pathFinder.trailingA", type: { opaque: 2 } },
+  // f64, not u32 as the JSON's integer-looking default (1000) suggests -
+  // byte-fitting against the exact 1000.0 double pattern confirms f64.
+  { name: "pathFinder.maxStepsWorkedPerTick", type: { optional: "f64" } },
+  { name: "pathFinder.maxWorkDonePerTick", type: { optional: "u32" } },
+  { name: "pathFinder.usePathCache", type: "bool" },
+  // Bare u32 (no presence flag), unlike every other numeric field in this
+  // section - byte-fitting shows the byte right after usePathCache is the
+  // raw value 5, not a 0/1 flag.
+  { name: "pathFinder.shortCacheSize", type: "u32" },
+  { name: "pathFinder.longCacheSize", type: { optional: "u32" } },
+  // f64, not u32 - same anchor-driven correction as maxStepsWorkedPerTick.
+  { name: "pathFinder.shortCacheMinCacheableDistance", type: { optional: "f64" } },
+  { name: "pathFinder.shortCacheMinAlgoStepsToCache", type: { optional: "u32" } },
+  { name: "pathFinder.longCacheMinCacheableDistance", type: { optional: "f64" } },
+  { name: "pathFinder.cacheMaxConnectToCacheStepsMultiplier", type: { optional: "u32" } },
+  { name: "pathFinder.cacheAcceptPathStartDistanceRatio", type: { optional: "f64" } },
+  { name: "pathFinder.cacheAcceptPathEndDistanceRatio", type: { optional: "f64" } },
+  { name: "pathFinder.negativeCacheAcceptPathStartDistanceRatio", type: { optional: "f64" } },
+  { name: "pathFinder.negativeCacheAcceptPathEndDistanceRatio", type: { optional: "f64" } },
+  // f64, not u32 - same anchor-driven correction as maxStepsWorkedPerTick.
+  { name: "pathFinder.cachePathStartDistanceRatingMultiplier", type: { optional: "f64" } },
+  { name: "pathFinder.cachePathEndDistanceRatingMultiplier", type: { optional: "f64" } },
+  { name: "pathFinder.staleEnemyWithSameDestinationCollisionPenalty", type: { optional: "f64" } },
+  { name: "pathFinder.ignoreMovingEnemyCollisionDistance", type: { optional: "f64" } },
+  {
+    name: "pathFinder.enemyWithDifferentDestinationCollisionPenalty",
+    type: { optional: "f64" },
+  },
+  { name: "pathFinder.generalEntityCollisionPenalty", type: { optional: "f64" } },
+  { name: "pathFinder.generalEntitySubsequentCollisionPenalty", type: { optional: "f64" } },
+  { name: "pathFinder.extendedCollisionPenalty", type: { optional: "f64" } },
+  { name: "pathFinder.maxClientsToAcceptAnyNewRequest", type: { optional: "u32" } },
+  { name: "pathFinder.maxClientsToAcceptShortNewRequest", type: { optional: "u32" } },
+  { name: "pathFinder.directDistanceToConsiderShortRequest", type: { optional: "u32" } },
+  { name: "pathFinder.shortRequestMaxSteps", type: { optional: "u32" } },
+  { name: "pathFinder.shortRequestRatio", type: { optional: "f64" } },
+  { name: "pathFinder.minStepsToCheckPathFindTermination", type: { optional: "u32" } },
+  {
+    name: "pathFinder.startToGoalCostMultiplierToTerminatePathFind",
+    type: { optional: "f64" },
+  },
+  // Both overload arrays are optional-wrapped (presence flag) with a single
+  // BYTE count (countType: "u8"), not the u32 count a bare `{ array }` reads -
+  // byte-fitting the exact [0,100,500] / [2.0,3.0,4.0] patterns pins the count
+  // to one byte. overloadMultipliers' elements are f64, not u32 - the JSON's
+  // integer-looking defaults (2, 3, 4) are floats on the wire.
+  { name: "pathFinder.overloadLevels", type: { optional: { array: "u32", countType: "u8" } } },
+  {
+    name: "pathFinder.overloadMultipliers",
+    type: { optional: { array: "f64", countType: "u8" } },
+  },
+  { name: "pathFinder.negativePathCacheDelayInterval", type: { optional: "u32" } },
   { name: "opaqueTail", type: { opaque: 0 } }, // width set dynamically below
 ];
 
