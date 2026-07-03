@@ -3,6 +3,7 @@ import { BinaryReader } from "./binaryReader";
 import { BinaryWriter } from "./binaryWriter";
 import { crc32 } from "./crc32";
 import { deflateLevel9, inflate } from "./deflate";
+import { readFields, writeFields, type FieldValue, type Schema } from "./fieldSchema";
 
 export interface AutoplaceSetting {
   frequency: number;
@@ -12,12 +13,23 @@ export interface AutoplaceSetting {
 
 export type FormatVersion = [number, number, number, number];
 
+export interface MidBlock {
+  /** 6 opaque bytes before width (unmapped; typed in a later phase). */
+  opaqueHead: Uint8Array;
+  /** Map width in tiles (u32 LE at mid offset 6). */
+  width: number;
+  /** Map height in tiles (u32 LE at mid offset 10). */
+  height: number;
+  /** 41 opaque bytes after height (terrain/size scalars; unmapped until diff fixtures exist). */
+  opaqueRest: Uint8Array;
+}
+
 export interface DecodedExchange {
   version: FormatVersion;
   flagByte: number;
   autoplaceControls: Record<string, AutoplaceSetting>;
-  /** The 55-byte undecoded MapGenSettings block between autoplace and property_expression_names (terrain / water / starting area; varies per preset; mapped in Phase 1). */
-  midBlock: Uint8Array;
+  /** The 55-byte MapGenSettings block between autoplace and property_expression_names, with width/height typed and the rest opaque (typed further in Phase 1c). */
+  mid: MidBlock;
   propertyExpressionNames: Record<string, string>;
   /** Payload bytes after property_expression_names, excluding the trailing CRC. Undecoded until Phase 1. */
   tail: Uint8Array;
@@ -31,11 +43,18 @@ export class ExchangeStringError extends Error {}
 // version (8) + flag (1) + count (1) + mid block (55) + count (1) + CRC (4)
 const MIN_PAYLOAD_LENGTH = 70;
 
-// Undecoded MapGenSettings block between autoplace and property_expression_names.
-// Empirical for format 2.1.9.3, verified on all 9 fixtures (Phase 1 maps its fields).
-const MID_BLOCK_LENGTH = 55;
+// Schema for the 55-byte MapGenSettings block between autoplace and
+// property_expression_names (terrain / water / starting area; varies per preset).
+// Empirical for format 2.1.9.3, verified on all 9 fixtures.
+// One ordered schema shared by decode and encode; fixed widths MUST sum to 55: 6 + 4 + 4 + 41.
+export const MID_BLOCK_SCHEMA: Schema = [
+  { name: "opaqueHead", type: { opaque: 6 } },
+  { name: "width", type: "u32" },
+  { name: "height", type: "u32" },
+  { name: "opaqueRest", type: { opaque: 41 } },
+];
 
-// The only format this decoder understands; MID_BLOCK_LENGTH is empirical for it.
+// The only format this decoder understands; MID_BLOCK_SCHEMA is empirical for it.
 const SUPPORTED_VERSION: FormatVersion = [2, 1, 9, 3];
 
 export function decodeExchangeString(input: string): DecodedExchange {
@@ -99,7 +118,7 @@ export function decodeExchangeString(input: string): DecodedExchange {
       };
     }
 
-    const midBlock = reader.readBytes(MID_BLOCK_LENGTH);
+    const mid = readFields(reader, MID_BLOCK_SCHEMA) as unknown as MidBlock;
 
     const propertyExpressionNames: Record<string, string> = {};
     const propertyCount = reader.readUint8();
@@ -112,7 +131,7 @@ export function decodeExchangeString(input: string): DecodedExchange {
       version,
       flagByte,
       autoplaceControls,
-      midBlock,
+      mid,
       propertyExpressionNames,
       tail: reader.remaining(),
       crc: storedCrc,
@@ -130,7 +149,7 @@ export interface EncodableExchange {
   version: FormatVersion;
   flagByte: number;
   autoplaceControls: Record<string, AutoplaceSetting>;
-  midBlock: Uint8Array;
+  mid: MidBlock;
   propertyExpressionNames: Record<string, string>;
   tail: Uint8Array;
 }
@@ -160,7 +179,7 @@ export function encodePayload(input: EncodableExchange): Uint8Array {
     w.writeFloat32(control.richness);
   }
 
-  w.writeBytes(input.midBlock);
+  writeFields(w, MID_BLOCK_SCHEMA, input.mid as unknown as Record<string, FieldValue>);
 
   const propertyKeys = Object.keys(input.propertyExpressionNames).sort();
   w.writeUint8(propertyKeys.length);

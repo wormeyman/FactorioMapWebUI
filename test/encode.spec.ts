@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
+import { bytesToBase64 } from "../src/codec/base64";
+import { deflateLevel9 } from "../src/codec/deflate";
 import {
   decodeExchangeString,
   encodeExchangeString,
@@ -29,6 +31,16 @@ describe("encodePayload", () => {
       const decoded = decodeExchangeString(presets[name] as string);
       expect(encodePayload(decoded)).toEqual(decoded.payload);
     }
+  });
+
+  it("round-trips an edited map height through the schema", () => {
+    const decoded = decodeExchangeString(presets["Default"] as string);
+    const edited = { ...decoded, mid: { ...decoded.mid, height: 128 } };
+    const reDecoded = decodeExchangeString(
+      `>>>${bytesToBase64(deflateLevel9(encodePayload(edited)))}<<<`,
+    );
+    expect(reDecoded.mid.height).toBe(128);
+    expect(reDecoded.mid.width).toBe(2000000);
   });
 });
 

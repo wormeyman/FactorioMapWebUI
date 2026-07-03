@@ -69,8 +69,19 @@ describe("decodeExchangeString", () => {
     ]);
   });
 
-  it.each(NAMES)("mid block of %s is exactly 55 bytes", (name) => {
-    expect(decodeExchangeString(presets[name] as string).midBlock.length).toBe(55);
+  it.each(NAMES)("mid block of %s splits into head(6) + width + height + rest(41)", (name) => {
+    const mid = decodeExchangeString(presets[name] as string).mid;
+    expect(mid.opaqueHead.length).toBe(6);
+    expect(mid.opaqueRest.length).toBe(41);
+    expect(mid.width).toBe(2000000);
+  });
+
+  it("types map width and height from the mid-block (Ribbon world proves the height offset)", () => {
+    expect(decodeExchangeString(presets["Default"] as string).mid.height).toBe(2000000);
+    // Ribbon world is the only fixture with a non-default height (128), which is
+    // what pins the u32 height offset at mid+10.
+    expect(decodeExchangeString(presets["Ribbon world"] as string).mid.height).toBe(128);
+    expect(decodeExchangeString(presets["Ribbon world"] as string).mid.width).toBe(2000000);
   });
 
   it("property_expression_names is empty in Default and pinned in Lakes, Island, Ribbon world", () => {
