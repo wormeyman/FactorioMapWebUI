@@ -226,11 +226,28 @@ semantic cross-checks the corpus provides for free:
 
 ## 8. Execution shape
 
-One Phase 1c plan with a **codec-first checkpoint**: the codec + model half (tail
-typing, seed/starting_area, cliff anomaly, model/convert) reaches a green
-round-trip + semantic-test checkpoint before the IO + UI half (JSON, ZIP, inputs,
-Download button). One merge at the end, one natural mid-point review. New
-dependency: JSZip.
+One Phase 1c plan (~11-13 tasks) with a **codec-first checkpoint**. The codec +
+model half comes first and reaches a green round-trip + semantic-test checkpoint
+before the IO + UI half:
+
+1. `FieldType` extension (`bool` / `optional` / `array`) + engine unit tests.
+2. Mid-block: type `seed` + `starting_area`.
+3. Cliff block schema (resolves the anomaly; name + control strings + floats).
+4. MapSettings typed **section by section**, each its own task, each gated by
+   round-trip + the Default-equals-defaults test, with still-untyped regions kept
+   as `opaque` spans so the suite is green at every step: pollution -> enemy_evolution
+   -> enemy_expansion -> unit_group -> path_finder -> difficulty -> asteroids ->
+   max_failed (real wire order, refined during implementation).
+5. Model + `convert.ts` (assemble nested `cliffSettings` / `mapSettings` from the
+   flat dotted keys).
+
+--- codec-first checkpoint: full round-trip + all semantic tests green ---
+
+6. `jsonExport.ts` (both files) + `zipExport.ts` (JSZip).
+7. UI: `seed` + `starting_area` inputs; wire the "Download ZIP" button.
+
+One merge at the end, one mid-point review at the checkpoint. New dependency:
+JSZip.
 
 ## 9. Risks
 
