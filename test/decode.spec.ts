@@ -4,6 +4,7 @@ import { crc32 } from "../src/codec/crc32";
 import { deflateLevel9 } from "../src/codec/deflate";
 import { decodeExchangeString, ExchangeStringError } from "../src/codec/mapExchangeString";
 import fixtures from "./fixtures/builtin-presets.json";
+import mapDefaults from "./fixtures/map-settings.example.json";
 
 const presets = fixtures.presets as Record<string, string>;
 const NAMES = Object.keys(presets);
@@ -161,6 +162,35 @@ describe("decodeExchangeString", () => {
     const def = decodeExchangeString(presets["Default"] as string).tail;
     const dw = decodeExchangeString(presets["Death world"] as string).tail;
     expect(dw["enemyEvolution.timeFactor"]).not.toBe(def["enemyEvolution.timeFactor"]);
+  });
+
+  it("types the unit_group section for Default, matching every map-settings.example.json default", () => {
+    const t = decodeExchangeString(presets["Default"] as string).tail;
+    const ug = mapDefaults.unit_group;
+    expect(t["unitGroup.minGroupGatheringTime"]).toBe(ug.min_group_gathering_time);
+    expect(t["unitGroup.maxGroupGatheringTime"]).toBe(ug.max_group_gathering_time);
+    expect(t["unitGroup.maxWaitTimeForLateMembers"]).toBe(ug.max_wait_time_for_late_members);
+    expect(t["unitGroup.maxGroupRadius"]).toBeCloseTo(ug.max_group_radius, 6);
+    expect(t["unitGroup.minGroupRadius"]).toBeCloseTo(ug.min_group_radius, 6);
+    expect(t["unitGroup.maxMemberSpeedupWhenBehind"]).toBeCloseTo(
+      ug.max_member_speedup_when_behind,
+      6,
+    );
+    expect(t["unitGroup.maxMemberSlowdownWhenAhead"]).toBeCloseTo(
+      ug.max_member_slowdown_when_ahead,
+      6,
+    );
+    expect(t["unitGroup.maxGroupSlowdownFactor"]).toBeCloseTo(ug.max_group_slowdown_factor, 6);
+    expect(t["unitGroup.maxGroupMemberFallbackFactor"]).toBeCloseTo(
+      ug.max_group_member_fallback_factor,
+      6,
+    );
+    expect(t["unitGroup.memberDisownDistance"]).toBeCloseTo(ug.member_disown_distance, 6);
+    expect(t["unitGroup.tickToleranceWhenMemberArrives"]).toBe(
+      ug.tick_tolerance_when_member_arrives,
+    );
+    expect(t["unitGroup.maxGatheringUnitGroups"]).toBe(ug.max_gathering_unit_groups);
+    expect(t["unitGroup.maxUnitGroupSize"]).toBe(ug.max_unit_group_size);
   });
 
   it("rejects a missing envelope", () => {

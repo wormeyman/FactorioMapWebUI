@@ -117,6 +117,23 @@ export const TAIL_SCHEMA: Schema = [
   { name: "enemyExpansion.evolutionGroupSizeFactor", type: { optional: "f64" } },
   { name: "enemyExpansion.minExpansionCooldown", type: { optional: "u32" } },
   { name: "enemyExpansion.maxExpansionCooldown", type: { optional: "u32" } },
+  // unit_group has no "enabled" field - it starts directly with its first value.
+  { name: "unitGroup.minGroupGatheringTime", type: { optional: "u32" } },
+  { name: "unitGroup.maxGroupGatheringTime", type: { optional: "u32" } },
+  { name: "unitGroup.maxWaitTimeForLateMembers", type: { optional: "u32" } },
+  { name: "unitGroup.maxGroupRadius", type: { optional: "f64" } },
+  { name: "unitGroup.minGroupRadius", type: { optional: "f64" } },
+  { name: "unitGroup.maxMemberSpeedupWhenBehind", type: { optional: "f64" } },
+  { name: "unitGroup.maxMemberSlowdownWhenAhead", type: { optional: "f64" } },
+  { name: "unitGroup.maxGroupSlowdownFactor", type: { optional: "f64" } },
+  // These two decode as f64 despite their integer-looking JSON defaults (3, 10)
+  // and "factor count"-sounding names - byte-fitting against the anchor offsets
+  // (maxUnitGroupSize@339) confirms f64, not u32.
+  { name: "unitGroup.maxGroupMemberFallbackFactor", type: { optional: "f64" } },
+  { name: "unitGroup.memberDisownDistance", type: { optional: "f64" } },
+  { name: "unitGroup.tickToleranceWhenMemberArrives", type: { optional: "u32" } },
+  { name: "unitGroup.maxGatheringUnitGroups", type: { optional: "u32" } },
+  { name: "unitGroup.maxUnitGroupSize", type: { optional: "u32" } },
   { name: "opaqueTail", type: { opaque: 0 } }, // width set dynamically below
 ];
 
