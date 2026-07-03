@@ -5,9 +5,11 @@ import {
   type DecodedExchange,
   type EncodableExchange,
 } from "../codec/mapExchangeString";
+import { tailToNested } from "./mapSettings";
 import type { Preset } from "./types";
 
 export function presetFromDecoded(name: string, decoded: DecodedExchange, builtin = false): Preset {
+  const { cliff, mapSettings } = tailToNested(decoded.tail);
   return {
     name,
     builtin,
@@ -22,6 +24,8 @@ export function presetFromDecoded(name: string, decoded: DecodedExchange, builti
     opaqueMidRestBB64: bytesToBase64(decoded.mid.opaqueRestB),
     propertyExpressionNames: structuredClone(decoded.propertyExpressionNames),
     opaqueTailB64: bytesToBase64(tailToBytes(decoded.tail)),
+    cliffSettings: cliff,
+    mapSettings,
     formatVersion: [...decoded.version],
   };
 }

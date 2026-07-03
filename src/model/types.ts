@@ -1,4 +1,5 @@
 import type { AutoplaceSetting, FormatVersion } from "../codec/mapExchangeString";
+import type { CliffSettings, MapSettings } from "./mapSettings";
 
 export type { AutoplaceSetting, FormatVersion };
 
@@ -29,5 +30,9 @@ export interface Preset {
    * fields are individually mapped. Replaced by typed fields in Phase 1.
    */
   opaqueTailB64: string;
+  /** Nested, typed view of the cliff section of the tail, derived from `opaqueTailB64` for JSON export/display. Read-only this phase; not the round-trip source of truth. */
+  cliffSettings: CliffSettings;
+  /** Nested, typed view of the MapSettings sections of the tail, derived from `opaqueTailB64` for JSON export/display. Read-only this phase; not the round-trip source of truth. */
+  mapSettings: MapSettings;
   formatVersion: FormatVersion;
 }
