@@ -69,11 +69,26 @@ describe("decodeExchangeString", () => {
     ]);
   });
 
-  it.each(NAMES)("mid block of %s splits into head(6) + width + height + rest(41)", (name) => {
-    const mid = decodeExchangeString(presets[name] as string).mid;
-    expect(mid.opaqueHead.length).toBe(6);
-    expect(mid.opaqueRest.length).toBe(41);
-    expect(mid.width).toBe(2000000);
+  it.each(NAMES)(
+    "mid block of %s splits into head(2) + seed + width + height + restA(24) + startingArea + restB(13)",
+    (name) => {
+      const mid = decodeExchangeString(presets[name] as string).mid;
+      expect(mid.opaqueHead.length).toBe(2);
+      expect(mid.opaqueRestA.length).toBe(24);
+      expect(mid.opaqueRestB.length).toBe(13);
+      expect(mid.width).toBe(2000000);
+      expect(typeof mid.seed).toBe("number");
+      expect(typeof mid.startingArea).toBe("number");
+    },
+  );
+
+  it("types seed and starting_area from the mid-block", () => {
+    const mid = decodeExchangeString(presets["Default"] as string).mid;
+    expect(mid.seed).toBe(34658944); // 0x0210DA80, Default's baked seed
+    expect(mid.startingArea).toBeCloseTo(1.0, 6);
+    expect(mid.opaqueHead.length).toBe(2);
+    expect(mid.opaqueRestA.length).toBe(24);
+    expect(mid.opaqueRestB.length).toBe(13);
   });
 
   it("types map width and height from the mid-block (Ribbon world proves the height offset)", () => {

@@ -14,14 +14,20 @@ export interface AutoplaceSetting {
 export type FormatVersion = [number, number, number, number];
 
 export interface MidBlock {
-  /** 6 opaque bytes before width (unmapped; typed in a later phase). */
+  /** 2 opaque bytes before seed (00 01 in every fixture). */
   opaqueHead: Uint8Array;
+  /** Map generation seed (u32 LE at mid offset 2). */
+  seed: number;
   /** Map width in tiles (u32 LE at mid offset 6). */
   width: number;
   /** Map height in tiles (u32 LE at mid offset 10). */
   height: number;
-  /** 41 opaque bytes after height (terrain/size scalars; unmapped until diff fixtures exist). */
-  opaqueRest: Uint8Array;
+  /** 24 opaque bytes between height and starting_area (autoplace_settings flags, starting_points; unmapped). */
+  opaqueRestA: Uint8Array;
+  /** Starting-area size scale (f32 LE at mid offset 38). */
+  startingArea: number;
+  /** 13 opaque bytes after starting_area (peaceful/no_enemies bools; unmapped). */
+  opaqueRestB: Uint8Array;
 }
 
 export interface DecodedExchange {
@@ -46,12 +52,15 @@ const MIN_PAYLOAD_LENGTH = 70;
 // Schema for the 55-byte MapGenSettings block between autoplace and
 // property_expression_names (terrain / water / starting area; varies per preset).
 // Empirical for format 2.1.9.3, verified on all 9 fixtures.
-// One ordered schema shared by decode and encode; fixed widths MUST sum to 55: 6 + 4 + 4 + 41.
+// One ordered schema shared by decode and encode; fixed widths MUST sum to 55: 2 + 4 + 4 + 4 + 24 + 4 + 13.
 export const MID_BLOCK_SCHEMA: Schema = [
-  { name: "opaqueHead", type: { opaque: 6 } },
+  { name: "opaqueHead", type: { opaque: 2 } },
+  { name: "seed", type: "u32" },
   { name: "width", type: "u32" },
   { name: "height", type: "u32" },
-  { name: "opaqueRest", type: { opaque: 41 } },
+  { name: "opaqueRestA", type: { opaque: 24 } },
+  { name: "startingArea", type: "f32" },
+  { name: "opaqueRestB", type: { opaque: 13 } },
 ];
 
 // The only format this decoder understands; MID_BLOCK_SCHEMA is empirical for it.

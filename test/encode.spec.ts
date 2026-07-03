@@ -42,6 +42,17 @@ describe("encodePayload", () => {
     expect(reDecoded.mid.height).toBe(128);
     expect(reDecoded.mid.width).toBe(2000000);
   });
+
+  it("round-trips an edited seed and starting_area through the mid schema", () => {
+    const decoded = decodeExchangeString(presets["Default"] as string);
+    const edited = {
+      ...decoded,
+      mid: { ...decoded.mid, seed: 123456789, startingArea: Math.fround(1.3333334) },
+    };
+    const re = decodeExchangeString(`>>>${bytesToBase64(deflateLevel9(encodePayload(edited)))}<<<`);
+    expect(re.mid.seed).toBe(123456789);
+    expect(re.mid.startingArea).toBeCloseTo(1.3333334, 5);
+  });
 });
 
 describe("encodeExchangeString", () => {
