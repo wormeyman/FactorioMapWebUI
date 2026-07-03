@@ -1,4 +1,5 @@
 import type { BinaryReader } from "./binaryReader";
+import type { BinaryWriter } from "./binaryWriter";
 
 export type FieldType = "u8" | "u16" | "u32" | "f32" | "f64" | "string" | { opaque: number };
 
@@ -36,4 +37,42 @@ export function readFields(reader: BinaryReader, schema: Schema): Record<string,
     out[field.name] = readOne(reader, field.type);
   }
   return out;
+}
+
+function writeOne(writer: BinaryWriter, type: FieldType, value: FieldValue): void {
+  if (typeof type === "object") {
+    writer.writeBytes(value as Uint8Array);
+    return;
+  }
+  switch (type) {
+    case "u8":
+      writer.writeUint8(value as number);
+      return;
+    case "u16":
+      writer.writeUint16(value as number);
+      return;
+    case "u32":
+      writer.writeUint32(value as number);
+      return;
+    case "f32":
+      writer.writeFloat32(value as number);
+      return;
+    case "f64":
+      writer.writeFloat64(value as number);
+      return;
+    case "string":
+      writer.writeString(value as string);
+      return;
+  }
+}
+
+/** Walk `schema` in order, encoding `values[field.name]` into `writer`. The exact inverse of readFields. */
+export function writeFields(
+  writer: BinaryWriter,
+  schema: Schema,
+  values: Record<string, FieldValue>,
+): void {
+  for (const field of schema) {
+    writeOne(writer, field.type, values[field.name] as FieldValue);
+  }
 }
