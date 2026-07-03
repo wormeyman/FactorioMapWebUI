@@ -5,7 +5,7 @@ export type { AutoplaceSetting, FormatVersion };
 export interface Preset {
   name: string;
   builtin: boolean;
-  /** null = "Random each new map". Wired to the mid-block seed (u32 LE at mid offset 2) in Phase 1c. */
+  /** Map generation seed (u32 LE at mid offset 2). null means "random each new map"; encoded as 0 when null until Task 12 reconciles the random-seed UI. */
   seed: number | null;
   randomEachMap: boolean;
   autoplaceControls: Record<string, AutoplaceSetting>;
@@ -13,8 +13,6 @@ export interface Preset {
   width: number;
   /** Map height in tiles (typed from the mid-block; editable). */
   height: number;
-  /** Map generation seed (u32 LE at mid offset 2; typed in Phase 1c). Null means seed is not set/random. */
-  mapSeed: number | null;
   /** Starting-area size scale (f32 LE at mid offset 38; typed in Phase 1c). */
   startingArea: number;
   /** Base64 of the 2 opaque mid-block bytes before seed (unmapped). */

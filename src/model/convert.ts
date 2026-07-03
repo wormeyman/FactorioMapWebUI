@@ -6,12 +6,11 @@ export function presetFromDecoded(name: string, decoded: DecodedExchange, builti
   return {
     name,
     builtin,
-    seed: null,
+    seed: decoded.mid.seed,
     randomEachMap: true,
     autoplaceControls: structuredClone(decoded.autoplaceControls),
     width: decoded.mid.width,
     height: decoded.mid.height,
-    mapSeed: decoded.mid.seed,
     startingArea: decoded.mid.startingArea,
     opaqueMidHeadB64: bytesToBase64(decoded.mid.opaqueHead),
     opaqueMidRestAB64: bytesToBase64(decoded.mid.opaqueRestA),
@@ -34,7 +33,7 @@ export function presetToEncodable(preset: Preset): EncodableExchange {
     autoplaceControls: preset.autoplaceControls,
     mid: {
       opaqueHead: base64ToBytes(preset.opaqueMidHeadB64),
-      seed: preset.mapSeed ?? 0,
+      seed: preset.seed ?? 0,
       width: preset.width,
       height: preset.height,
       opaqueRestA: base64ToBytes(preset.opaqueMidRestAB64),
