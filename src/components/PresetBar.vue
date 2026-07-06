@@ -121,7 +121,9 @@ function rerollSeed() {
 }
 
 .name-input.seed {
-  width: 110px;
+  /* Wide enough for a full u32 seed (max 4294967295, 10 digits) plus the
+     number input's spinner buttons. */
+  width: 150px;
 }
 
 .spacer {
