@@ -16,6 +16,10 @@ const expressions = computed(() =>
     <div v-if="preset" class="size-row">
       <label>Width <FNumberInput v-model="preset.width" data-test="map-width" /></label>
       <label>Height <FNumberInput v-model="preset.height" data-test="map-height" /></label>
+      <label>
+        Starting area
+        <FNumberInput v-model="preset.startingArea" data-test="starting-area" />
+      </label>
     </div>
     <h3>Property expression names</h3>
     <p v-if="expressions.length === 0" class="note">
@@ -30,7 +34,8 @@ const expressions = computed(() =>
       </tbody>
     </table>
     <p class="note">
-      Terrain scale and map settings unlock in Phase 1c once their payload offsets are mapped.
+      Full map settings (pollution, enemies, path finder) are decoded and included in the exported
+      ZIP.
     </p>
   </div>
 </template>
