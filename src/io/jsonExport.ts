@@ -65,6 +65,25 @@ export function toMapSettingsJson(preset: Preset): object {
       enemy_attack_pollution_consumption_modifier:
         m.pollution.enemyAttackPollutionConsumptionModifier,
     },
+    // `steering` is a real Factorio MapSettings section but is NOT carried by
+    // the map-exchange string (the decoded tail closes to zero bytes without
+    // it), so there is no per-preset data to surface. Emit the game defaults as
+    // a constant, matching the other JSON-only fields, so the exported
+    // map-settings.json is a complete, valid document.
+    steering: {
+      default: {
+        radius: 1.2,
+        separation_force: 0.005,
+        separation_factor: 1.2,
+        force_unit_fuzzy_goto_behavior: false,
+      },
+      moving: {
+        radius: 3,
+        separation_force: 0.01,
+        separation_factor: 3,
+        force_unit_fuzzy_goto_behavior: false,
+      },
+    },
     enemy_evolution: {
       enabled: m.enemyEvolution.enabled,
       time_factor: m.enemyEvolution.timeFactor,
