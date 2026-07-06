@@ -1,0 +1,43 @@
+import { describe, expect, it } from "vite-plus/test";
+import { decodeExchangeString } from "../src/codec/mapExchangeString";
+import { presetFromDecoded } from "../src/model/convert";
+import { toMapGenSettingsJson, toMapSettingsJson } from "../src/io/jsonExport";
+import fixtures from "./fixtures/builtin-presets.json";
+import mapSettingsDefaults from "./fixtures/map-settings.example.json";
+
+const presets = fixtures.presets as Record<string, string>;
+
+function preset(name: string) {
+  return presetFromDecoded(name, decodeExchangeString(presets[name] as string), true);
+}
+
+describe("toMapGenSettingsJson", () => {
+  it("emits snake_case autoplace_controls, seed, width, height, cliff_settings", () => {
+    const j = toMapGenSettingsJson(preset("Default")) as Record<string, unknown>;
+    expect(j["seed"]).toBe(34658944);
+    expect(j["width"]).toBe(2000000);
+    expect((j["autoplace_controls"] as Record<string, unknown>)["coal"]).toBeDefined();
+    expect(
+      (j["cliff_settings"] as Record<string, unknown>)["cliff_elevation_interval"],
+    ).toBeCloseTo(40, 4);
+  });
+});
+
+describe("toMapSettingsJson", () => {
+  it("Default map-settings matches the example.json defaults for key fields", () => {
+    const j = toMapSettingsJson(preset("Default")) as Record<string, Record<string, unknown>>;
+    expect(j["pollution"]["diffusion_ratio"]).toBeCloseTo(
+      (mapSettingsDefaults as unknown as Record<string, Record<string, number>>)["pollution"][
+        "diffusion_ratio"
+      ],
+      9,
+    );
+    expect(j["enemy_evolution"]["time_factor"]).toBeCloseTo(0.000004, 12);
+    expect(j["difficulty_settings"]["technology_price_multiplier"]).toBeCloseTo(1, 6);
+  });
+
+  it("Marathon map-settings has technology_price_multiplier 4", () => {
+    const j = toMapSettingsJson(preset("Marathon")) as Record<string, Record<string, unknown>>;
+    expect(j["difficulty_settings"]["technology_price_multiplier"]).toBeCloseTo(4, 6);
+  });
+});
