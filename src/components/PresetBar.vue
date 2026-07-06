@@ -34,6 +34,14 @@ function onSeedChange(event: Event) {
     store.activePreset.seed = raw === "" ? null : Number(raw);
   }
 }
+
+// Roll a fresh concrete seed in the Factorio u32 range [1, 0xffffffff] and pin
+// it (turn off "random each new map") so the input shows and keeps the value.
+function rerollSeed() {
+  if (!store.activePreset) return;
+  store.activePreset.seed = 1 + Math.floor(Math.random() * 0xffffffff);
+  store.activePreset.randomEachMap = false;
+}
 </script>
 
 <template>
@@ -69,6 +77,15 @@ function onSeedChange(event: Event) {
       :value="store.activePreset?.seed ?? ''"
       @change="onSeedChange"
     />
+    <FButton
+      data-test="seed-reroll"
+      variant="tool"
+      :disabled="!store.activePreset"
+      title="Roll a new random seed"
+      @click="rerollSeed"
+    >
+      New seed
+    </FButton>
     <FCheckbox v-model="randomEachMap" data-test="random-each-map" label="Random each new map" />
   </div>
 </template>
@@ -104,7 +121,9 @@ function onSeedChange(event: Event) {
 }
 
 .name-input.seed {
-  width: 110px;
+  /* Wide enough for a full u32 seed (max 4294967295, 10 digits) plus the
+     number input's spinner buttons. */
+  width: 150px;
 }
 
 .spacer {
