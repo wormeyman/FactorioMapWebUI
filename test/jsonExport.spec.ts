@@ -40,4 +40,23 @@ describe("toMapSettingsJson", () => {
     const j = toMapSettingsJson(preset("Marathon")) as Record<string, Record<string, unknown>>;
     expect(j["difficulty_settings"]["technology_price_multiplier"]).toBeCloseTo(4, 6);
   });
+
+  it("emits a complete steering section (JSON-only; not carried by the exchange string)", () => {
+    const j = toMapSettingsJson(preset("Default")) as Record<
+      string,
+      Record<string, Record<string, unknown>>
+    >;
+    expect(j["steering"]["default"]).toEqual({
+      radius: 1.2,
+      separation_force: 0.005,
+      separation_factor: 1.2,
+      force_unit_fuzzy_goto_behavior: false,
+    });
+    expect(j["steering"]["moving"]).toEqual({
+      radius: 3,
+      separation_force: 0.01,
+      separation_factor: 3,
+      force_unit_fuzzy_goto_behavior: false,
+    });
+  });
 });
