@@ -12,8 +12,11 @@ describe("builtin presets", () => {
       expect(Object.keys(preset.autoplaceControls)).toHaveLength(28);
       expect(typeof preset.width).toBe("number");
       expect(typeof preset.height).toBe("number");
+      expect(typeof preset.seed).toBe("number");
+      expect(typeof preset.startingArea).toBe("number");
       expect(preset.opaqueMidHeadB64.length).toBeGreaterThan(0);
-      expect(preset.opaqueMidRestB64.length).toBeGreaterThan(0);
+      expect(preset.opaqueMidRestAB64.length).toBeGreaterThan(0);
+      expect(preset.opaqueMidRestBB64.length).toBeGreaterThan(0);
       expect(preset.opaqueTailB64.length).toBeGreaterThan(0);
     }
   });

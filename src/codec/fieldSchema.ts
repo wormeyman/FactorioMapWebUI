@@ -1,7 +1,17 @@
 import type { BinaryReader } from "./binaryReader";
 import type { BinaryWriter } from "./binaryWriter";
 
-export type FieldType = "u8" | "u16" | "u32" | "f32" | "f64" | "string" | { opaque: number };
+export type FieldType =
+  | "u8"
+  | "u16"
+  | "u32"
+  | "f32"
+  | "f64"
+  | "string"
+  | "bool"
+  | { opaque: number }
+  | { optional: FieldType }
+  | { array: FieldType; countType?: "u8" | "u32" };
 
 export interface Field {
   name: string;
@@ -10,10 +20,20 @@ export interface Field {
 
 export type Schema = readonly Field[];
 
-export type FieldValue = number | string | Uint8Array;
+export type FieldValue = number | string | boolean | Uint8Array | null | FieldValue[];
 
 function readOne(reader: BinaryReader, type: FieldType): FieldValue {
-  if (typeof type === "object") return reader.readBytes(type.opaque);
+  if (typeof type === "object") {
+    if ("opaque" in type) return reader.readBytes(type.opaque);
+    if ("optional" in type) {
+      return reader.readUint8() === 0 ? null : readOne(reader, type.optional);
+    }
+    // array
+    const count = type.countType === "u8" ? reader.readUint8() : reader.readUint32();
+    const items: FieldValue[] = [];
+    for (let i = 0; i < count; i++) items.push(readOne(reader, type.array));
+    return items;
+  }
   switch (type) {
     case "u8":
       return reader.readUint8();
@@ -27,6 +47,8 @@ function readOne(reader: BinaryReader, type: FieldType): FieldValue {
       return reader.readFloat64();
     case "string":
       return reader.readString();
+    case "bool":
+      return reader.readUint8() !== 0;
   }
 }
 
@@ -41,7 +63,24 @@ export function readFields(reader: BinaryReader, schema: Schema): Record<string,
 
 function writeOne(writer: BinaryWriter, type: FieldType, value: FieldValue): void {
   if (typeof type === "object") {
-    writer.writeBytes(value as Uint8Array);
+    if ("opaque" in type) {
+      writer.writeBytes(value as Uint8Array);
+      return;
+    }
+    if ("optional" in type) {
+      if (value === null || value === undefined) {
+        writer.writeUint8(0);
+        return;
+      }
+      writer.writeUint8(1);
+      writeOne(writer, type.optional, value);
+      return;
+    }
+    // array
+    const items = value as FieldValue[];
+    if (type.countType === "u8") writer.writeUint8(items.length);
+    else writer.writeUint32(items.length);
+    for (const item of items) writeOne(writer, type.array, item);
     return;
   }
   switch (type) {
@@ -62,6 +101,9 @@ function writeOne(writer: BinaryWriter, type: FieldType, value: FieldValue): voi
       return;
     case "string":
       writer.writeString(value as string);
+      return;
+    case "bool":
+      writer.writeUint8(value ? 1 : 0);
       return;
   }
 }

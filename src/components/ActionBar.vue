@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref } from "vue";
+import { buildZip } from "../io/zipExport";
 import { usePresetsStore } from "../store/presets";
 import FButton from "../ui/FButton.vue";
 
@@ -33,6 +34,18 @@ async function copyString() {
   }
 }
 
+async function downloadZip() {
+  const preset = store.activePreset;
+  if (!preset) return;
+  const blob = await buildZip(preset);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${preset.name}.zip`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 onBeforeUnmount(() => clearTimeout(clearTimer));
 </script>
 
@@ -54,7 +67,9 @@ onBeforeUnmount(() => clearTimeout(clearTimer));
     </span>
     <span class="spacer" />
     <FButton data-test="duplicate" @click="store.duplicateActive()">Duplicate</FButton>
-    <FButton disabled title="ZIP export lands in a later phase">Download ZIP</FButton>
+    <FButton data-test="download-zip" :disabled="!store.activePreset" @click="downloadZip()">
+      Download ZIP
+    </FButton>
     <FButton data-test="delete" variant="danger" @click="store.deleteActive()">Delete</FButton>
     <FButton data-test="save" variant="confirm" @click="store.saveToStorage()">Save</FButton>
   </div>

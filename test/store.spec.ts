@@ -112,4 +112,16 @@ describe("presets store", () => {
     const encoded = reloaded.activeExchangeString as string;
     expect(decodeExchangeString(encoded).mid.height).toBe(128);
   });
+
+  it("exposes typed nested mapSettings/cliffSettings views, and leaves the byte-exact round-trip untouched", () => {
+    const store = usePresetsStore();
+    expect(store.activePreset?.mapSettings.pollution.diffusionRatio).toBe(0.02);
+    expect(store.activePreset?.cliffSettings.cliffSmoothing).toBe(0);
+
+    // Nested views are derived read-only display data; they must not affect
+    // the encode bridge, which still rebuilds the tail from opaqueTailB64.
+    const encoded = store.activeExchangeString as string;
+    const decoded = decodeExchangeString(encoded);
+    expect(decoded.tail["pollution.diffusionRatio"]).toBeCloseTo(0.02, 9);
+  });
 });

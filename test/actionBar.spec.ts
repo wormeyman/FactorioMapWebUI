@@ -55,4 +55,25 @@ describe("ActionBar", () => {
     const wrapper = mount(ActionBar);
     expect(wrapper.find('[data-test="copy-status"]').exists()).toBe(false);
   });
+
+  it("enables Download ZIP and builds a blob URL on click", async () => {
+    setActivePinia(createPinia());
+    const createObjectURL = vi.fn(() => "blob:stub");
+    const revokeObjectURL = vi.fn();
+    Object.defineProperty(URL, "createObjectURL", { value: createObjectURL, configurable: true });
+    Object.defineProperty(URL, "revokeObjectURL", { value: revokeObjectURL, configurable: true });
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+
+    const wrapper = mount(ActionBar);
+    const btn = wrapper.find('[data-test="download-zip"]');
+    expect(btn.attributes("disabled")).toBeUndefined();
+
+    await btn.trigger("click");
+    // buildZip -> JSZip.generateAsync resolves across macrotasks/setImmediate,
+    // which flushPromises (microtasks only) does not drain; wait on a real timer.
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    expect(createObjectURL).toHaveBeenCalledTimes(1);
+    expect(revokeObjectURL).toHaveBeenCalledTimes(1);
+  });
 });

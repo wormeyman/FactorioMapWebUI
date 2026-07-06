@@ -14,14 +14,20 @@ export interface AutoplaceSetting {
 export type FormatVersion = [number, number, number, number];
 
 export interface MidBlock {
-  /** 6 opaque bytes before width (unmapped; typed in a later phase). */
+  /** 2 opaque bytes before seed (00 01 in every fixture). */
   opaqueHead: Uint8Array;
+  /** Map generation seed (u32 LE at mid offset 2). */
+  seed: number;
   /** Map width in tiles (u32 LE at mid offset 6). */
   width: number;
   /** Map height in tiles (u32 LE at mid offset 10). */
   height: number;
-  /** 41 opaque bytes after height (terrain/size scalars; unmapped until diff fixtures exist). */
-  opaqueRest: Uint8Array;
+  /** 24 opaque bytes between height and starting_area (autoplace_settings flags, starting_points; unmapped). */
+  opaqueRestA: Uint8Array;
+  /** Starting-area size scale (f32 LE at mid offset 38). */
+  startingArea: number;
+  /** 13 opaque bytes after starting_area (peaceful/no_enemies bools; unmapped). */
+  opaqueRestB: Uint8Array;
 }
 
 export interface DecodedExchange {
@@ -31,8 +37,15 @@ export interface DecodedExchange {
   /** The 55-byte MapGenSettings block between autoplace and property_expression_names, with width/height typed and the rest opaque (typed further in Phase 1c). */
   mid: MidBlock;
   propertyExpressionNames: Record<string, string>;
-  /** Payload bytes after property_expression_names, excluding the trailing CRC. Undecoded until Phase 1. */
-  tail: Uint8Array;
+  /**
+   * Payload bytes after property_expression_names, excluding the trailing
+   * CRC. The full cliff block plus every MapSettings section (pollution,
+   * enemy_evolution, enemy_expansion, unit_group, path_finder, difficulty,
+   * asteroids, max_failed_behavior_count) is typed via TAIL_SCHEMA;
+   * `opaqueTail` is the dynamically-sized trailer that normally decodes to
+   * length 0 for every known fixture.
+   */
+  tail: TailBlock;
   crc: number;
   /** The full inflated payload (including CRC), for round-trip tests. */
   payload: Uint8Array;
@@ -46,16 +59,197 @@ const MIN_PAYLOAD_LENGTH = 70;
 // Schema for the 55-byte MapGenSettings block between autoplace and
 // property_expression_names (terrain / water / starting area; varies per preset).
 // Empirical for format 2.1.9.3, verified on all 9 fixtures.
-// One ordered schema shared by decode and encode; fixed widths MUST sum to 55: 6 + 4 + 4 + 41.
+// One ordered schema shared by decode and encode; fixed widths MUST sum to 55: 2 + 4 + 4 + 4 + 24 + 4 + 13.
 export const MID_BLOCK_SCHEMA: Schema = [
-  { name: "opaqueHead", type: { opaque: 6 } },
+  { name: "opaqueHead", type: { opaque: 2 } },
+  { name: "seed", type: "u32" },
   { name: "width", type: "u32" },
   { name: "height", type: "u32" },
-  { name: "opaqueRest", type: { opaque: 41 } },
+  { name: "opaqueRestA", type: { opaque: 24 } },
+  { name: "startingArea", type: "f32" },
+  { name: "opaqueRestB", type: { opaque: 13 } },
 ];
 
 // The only format this decoder understands; MID_BLOCK_SCHEMA is empirical for it.
 const SUPPORTED_VERSION: FormatVersion = [2, 1, 9, 3];
+
+export interface TailBlock {
+  [key: string]: string | number | boolean | Uint8Array | null | (string | number | boolean)[];
+}
+
+// The tail, walked as one flat schema (dotted names encode section membership).
+// Grew across Phase 1c; the entire MapSettings tail is now typed and
+// "opaqueTail" decodes to length 0 for every fixture. It stays as the final,
+// dynamically-sized schema entry so round-trip remains byte-exact even if a
+// future format revision adds fields we haven't typed yet.
+export const TAIL_SCHEMA: Schema = [
+  { name: "cliff.name", type: "string" },
+  { name: "cliff.control", type: "string" },
+  { name: "cliff.cliffElevation0", type: "f32" },
+  { name: "cliff.cliffElevationInterval", type: "f32" },
+  { name: "cliff.richness", type: "f32" },
+  // Unidentified 4th cliff float; both fixtures observed so far carry 1.0.
+  // Kept typed (rather than folded into an opaque span) purely for
+  // byte-exactness until its meaning is confirmed.
+  { name: "cliff.unknownFloat", type: "f32" },
+  // Single byte (u8, not part of a float) - Default-tail offset 23. Matches
+  // the Nauvis dump's cliff_settings.cliff_smoothing (0) exactly.
+  { name: "cliff.cliffSmoothing", type: "u8" },
+  // Unlike a plain bool, this is presence-flag + value (2 bytes) - the byte
+  // immediately preceding it (cliff.cliffSmoothing) is NOT part of this
+  // field; byte-fitting against pollution.diffusionRatio's known offset
+  // proved the extra flag byte belongs here, matching every other section's
+  // "enabled" convention (see enemyEvolution/enemyExpansion below).
+  { name: "pollution.enabled", type: { optional: "bool" } },
+  { name: "pollution.diffusionRatio", type: { optional: "f64" } },
+  { name: "pollution.minToDiffuse", type: { optional: "f64" } },
+  { name: "pollution.ageing", type: { optional: "f64" } },
+  { name: "pollution.expectedMaxPerChunk", type: { optional: "f64" } },
+  { name: "pollution.minToShowPerChunk", type: { optional: "f64" } },
+  { name: "pollution.minPollutionToDamageTrees", type: { optional: "f64" } },
+  { name: "pollution.pollutionWithMaxForestDamage", type: { optional: "f64" } },
+  { name: "pollution.pollutionPerTreeDamage", type: { optional: "f64" } },
+  { name: "pollution.pollutionRestoredPerTreeDamage", type: { optional: "f64" } },
+  { name: "pollution.maxPollutionToRestoreTrees", type: { optional: "f64" } },
+  { name: "pollution.enemyAttackPollutionConsumptionModifier", type: { optional: "f64" } },
+  // Both "enabled" fields below decode as an optional bool (flag byte + value
+  // byte), not a plain bool like pollution.enabled - byte-fitting showed a
+  // plain bool is one byte short of the real layout for these two sections.
+  { name: "enemyEvolution.enabled", type: { optional: "bool" } },
+  { name: "enemyEvolution.timeFactor", type: { optional: "f64" } },
+  { name: "enemyEvolution.destroyFactor", type: { optional: "f64" } },
+  { name: "enemyEvolution.pollutionFactor", type: { optional: "f64" } },
+  { name: "enemyExpansion.enabled", type: { optional: "bool" } },
+  { name: "enemyExpansion.maxExpansionDistance", type: { optional: "u32" } },
+  { name: "enemyExpansion.minExpansionDistance", type: { optional: "u32" } },
+  { name: "enemyExpansion.friendlyBaseInfluenceRadius", type: { optional: "u32" } },
+  { name: "enemyExpansion.enemyBuildingInfluenceRadius", type: { optional: "u32" } },
+  { name: "enemyExpansion.buildingCoefficient", type: { optional: "f64" } },
+  { name: "enemyExpansion.otherBaseCoefficient", type: { optional: "f64" } },
+  { name: "enemyExpansion.neighbouringChunkCoefficient", type: { optional: "f64" } },
+  { name: "enemyExpansion.neighbouringBaseChunkCoefficient", type: { optional: "f64" } },
+  { name: "enemyExpansion.maxCollidingTilesCoefficient", type: { optional: "f64" } },
+  { name: "enemyExpansion.settlerGroupMinSize", type: { optional: "u32" } },
+  { name: "enemyExpansion.settlerGroupMaxSize", type: { optional: "u32" } },
+  { name: "enemyExpansion.evolutionGroupSizeFactor", type: { optional: "f64" } },
+  { name: "enemyExpansion.minExpansionCooldown", type: { optional: "u32" } },
+  { name: "enemyExpansion.maxExpansionCooldown", type: { optional: "u32" } },
+  // unit_group has no "enabled" field - it starts directly with its first value.
+  { name: "unitGroup.minGroupGatheringTime", type: { optional: "u32" } },
+  { name: "unitGroup.maxGroupGatheringTime", type: { optional: "u32" } },
+  { name: "unitGroup.maxWaitTimeForLateMembers", type: { optional: "u32" } },
+  { name: "unitGroup.maxGroupRadius", type: { optional: "f64" } },
+  { name: "unitGroup.minGroupRadius", type: { optional: "f64" } },
+  { name: "unitGroup.maxMemberSpeedupWhenBehind", type: { optional: "f64" } },
+  { name: "unitGroup.maxMemberSlowdownWhenAhead", type: { optional: "f64" } },
+  { name: "unitGroup.maxGroupSlowdownFactor", type: { optional: "f64" } },
+  // These two decode as f64 despite their integer-looking JSON defaults (3, 10)
+  // and "factor count"-sounding names - byte-fitting against the anchor offsets
+  // (maxUnitGroupSize@339) confirms f64, not u32.
+  { name: "unitGroup.maxGroupMemberFallbackFactor", type: { optional: "f64" } },
+  { name: "unitGroup.memberDisownDistance", type: { optional: "f64" } },
+  { name: "unitGroup.tickToleranceWhenMemberArrives", type: { optional: "u32" } },
+  { name: "unitGroup.maxGatheringUnitGroups", type: { optional: "u32" } },
+  { name: "unitGroup.maxUnitGroupSize", type: { optional: "u32" } },
+  { name: "pathFinder.fwd2bwdRatio", type: { optional: "u32" } },
+  { name: "pathFinder.goalPressureRatio", type: { optional: "f64" } },
+  // Two unmapped bytes (01 01 in Default) between goalPressureRatio and
+  // maxStepsWorkedPerTick; byte-fitting the anchor values around them (2000,
+  // 8000, etc.) confirms this gap, round-trip-only, values unknown.
+  { name: "pathFinder.trailingA", type: { opaque: 2 } },
+  // f64, not u32 as the JSON's integer-looking default (1000) suggests -
+  // byte-fitting against the exact 1000.0 double pattern confirms f64.
+  { name: "pathFinder.maxStepsWorkedPerTick", type: { optional: "f64" } },
+  { name: "pathFinder.maxWorkDonePerTick", type: { optional: "u32" } },
+  { name: "pathFinder.usePathCache", type: "bool" },
+  // Bare u32 (no presence flag), unlike every other numeric field in this
+  // section - byte-fitting shows the byte right after usePathCache is the
+  // raw value 5, not a 0/1 flag.
+  { name: "pathFinder.shortCacheSize", type: "u32" },
+  { name: "pathFinder.longCacheSize", type: { optional: "u32" } },
+  // f64, not u32 - same anchor-driven correction as maxStepsWorkedPerTick.
+  { name: "pathFinder.shortCacheMinCacheableDistance", type: { optional: "f64" } },
+  { name: "pathFinder.shortCacheMinAlgoStepsToCache", type: { optional: "u32" } },
+  { name: "pathFinder.longCacheMinCacheableDistance", type: { optional: "f64" } },
+  { name: "pathFinder.cacheMaxConnectToCacheStepsMultiplier", type: { optional: "u32" } },
+  { name: "pathFinder.cacheAcceptPathStartDistanceRatio", type: { optional: "f64" } },
+  { name: "pathFinder.cacheAcceptPathEndDistanceRatio", type: { optional: "f64" } },
+  { name: "pathFinder.negativeCacheAcceptPathStartDistanceRatio", type: { optional: "f64" } },
+  { name: "pathFinder.negativeCacheAcceptPathEndDistanceRatio", type: { optional: "f64" } },
+  // f64, not u32 - same anchor-driven correction as maxStepsWorkedPerTick.
+  { name: "pathFinder.cachePathStartDistanceRatingMultiplier", type: { optional: "f64" } },
+  { name: "pathFinder.cachePathEndDistanceRatingMultiplier", type: { optional: "f64" } },
+  { name: "pathFinder.staleEnemyWithSameDestinationCollisionPenalty", type: { optional: "f64" } },
+  { name: "pathFinder.ignoreMovingEnemyCollisionDistance", type: { optional: "f64" } },
+  {
+    name: "pathFinder.enemyWithDifferentDestinationCollisionPenalty",
+    type: { optional: "f64" },
+  },
+  { name: "pathFinder.generalEntityCollisionPenalty", type: { optional: "f64" } },
+  { name: "pathFinder.generalEntitySubsequentCollisionPenalty", type: { optional: "f64" } },
+  { name: "pathFinder.extendedCollisionPenalty", type: { optional: "f64" } },
+  { name: "pathFinder.maxClientsToAcceptAnyNewRequest", type: { optional: "u32" } },
+  { name: "pathFinder.maxClientsToAcceptShortNewRequest", type: { optional: "u32" } },
+  { name: "pathFinder.directDistanceToConsiderShortRequest", type: { optional: "u32" } },
+  { name: "pathFinder.shortRequestMaxSteps", type: { optional: "u32" } },
+  { name: "pathFinder.shortRequestRatio", type: { optional: "f64" } },
+  { name: "pathFinder.minStepsToCheckPathFindTermination", type: { optional: "u32" } },
+  {
+    name: "pathFinder.startToGoalCostMultiplierToTerminatePathFind",
+    type: { optional: "f64" },
+  },
+  // Both overload arrays are optional-wrapped (presence flag) with a single
+  // BYTE count (countType: "u8"), not the u32 count a bare `{ array }` reads -
+  // byte-fitting the exact [0,100,500] / [2.0,3.0,4.0] patterns pins the count
+  // to one byte. overloadMultipliers' elements are f64, not u32 - the JSON's
+  // integer-looking defaults (2, 3, 4) are floats on the wire.
+  { name: "pathFinder.overloadLevels", type: { optional: { array: "u32", countType: "u8" } } },
+  {
+    name: "pathFinder.overloadMultipliers",
+    type: { optional: { array: "f64", countType: "u8" } },
+  },
+  { name: "pathFinder.negativePathCacheDelayInterval", type: { optional: "u32" } },
+  // Wire order for the final MapSettings fields does not follow the JSON key
+  // order (difficulty_settings, ..., asteroids, max_failed_behavior_count) -
+  // byte-fitting shows max_failed_behavior_count comes FIRST here, as a bare
+  // u32 (no presence flag).
+  { name: "maxFailedBehaviorCount", type: "u32" },
+  // Bare f64s (no presence flag), unlike most numeric fields in this tail -
+  // byte-fitting the exact 1.0/4.0 double patterns (Marathon flips
+  // technologyPriceMultiplier to 4.0 right after maxFailedBehaviorCount)
+  // confirms both are plain, not optional-wrapped.
+  { name: "difficulty.technologyPriceMultiplier", type: "f64" },
+  { name: "difficulty.spoilTimeModifier", type: "f64" },
+  { name: "asteroids.spawningRate", type: { optional: "f64" } },
+  { name: "asteroids.maxRayPortalsExpandedPerTick", type: { optional: "u32" } },
+  { name: "opaqueTail", type: { opaque: 0 } }, // width set dynamically below
+];
+
+// Fields of TAIL_SCHEMA excluding the trailing dynamic "opaqueTail".
+const TAIL_FIXED_SCHEMA: Schema = TAIL_SCHEMA.filter((f) => f.name !== "opaqueTail");
+
+function readTail(reader: BinaryReader): TailBlock {
+  const out = readFields(reader, TAIL_FIXED_SCHEMA) as TailBlock;
+  out["opaqueTail"] = reader.remaining();
+  return out;
+}
+
+function writeTail(writer: BinaryWriter, tail: TailBlock): void {
+  writeFields(writer, TAIL_FIXED_SCHEMA, tail as Record<string, FieldValue>);
+  writer.writeBytes(tail["opaqueTail"] as Uint8Array);
+}
+
+/** Bytes for the full tail (fixed prefix + opaque remainder), for the Preset-model interim bridge. */
+export function tailToBytes(tail: TailBlock): Uint8Array {
+  const writer = new BinaryWriter();
+  writeTail(writer, tail);
+  return writer.toBytes();
+}
+
+/** The inverse of tailToBytes, for the Preset-model interim bridge. */
+export function bytesToTail(bytes: Uint8Array): TailBlock {
+  return readTail(new BinaryReader(bytes));
+}
 
 export function decodeExchangeString(input: string): DecodedExchange {
   const compact = input.replaceAll(/\s+/g, "");
@@ -127,13 +321,15 @@ export function decodeExchangeString(input: string): DecodedExchange {
       propertyExpressionNames[key] = reader.readString();
     }
 
+    const tail = readTail(reader);
+
     return {
       version,
       flagByte,
       autoplaceControls,
       mid,
       propertyExpressionNames,
-      tail: reader.remaining(),
+      tail,
       crc: storedCrc,
       payload,
     };
@@ -151,7 +347,7 @@ export interface EncodableExchange {
   autoplaceControls: Record<string, AutoplaceSetting>;
   mid: MidBlock;
   propertyExpressionNames: Record<string, string>;
-  tail: Uint8Array;
+  tail: TailBlock;
 }
 
 /**
@@ -188,7 +384,7 @@ export function encodePayload(input: EncodableExchange): Uint8Array {
     w.writeString(input.propertyExpressionNames[key] as string);
   }
 
-  w.writeBytes(input.tail);
+  writeTail(w, input.tail);
 
   const body = w.toBytes();
   const payload = new Uint8Array(body.length + 4);

@@ -1,11 +1,12 @@
 import type { AutoplaceSetting, FormatVersion } from "../codec/mapExchangeString";
+import type { CliffSettings, MapSettings } from "./mapSettings";
 
 export type { AutoplaceSetting, FormatVersion };
 
 export interface Preset {
   name: string;
   builtin: boolean;
-  /** null = "Random each new map". Not codec-wired until Phase 1 maps the seed offset. */
+  /** Map generation seed (u32 LE at mid offset 2). null means "random each new map"; encoded as 0 when null until Task 12 reconciles the random-seed UI. */
   seed: number | null;
   randomEachMap: boolean;
   autoplaceControls: Record<string, AutoplaceSetting>;
@@ -13,10 +14,14 @@ export interface Preset {
   width: number;
   /** Map height in tiles (typed from the mid-block; editable). */
   height: number;
-  /** Base64 of the 6 opaque mid-block bytes before width (unmapped until Phase 1c). */
+  /** Starting-area size scale (f32 LE at mid offset 38; typed in Phase 1c). */
+  startingArea: number;
+  /** Base64 of the 2 opaque mid-block bytes before seed (unmapped). */
   opaqueMidHeadB64: string;
-  /** Base64 of the 41 opaque mid-block bytes after height (unmapped until Phase 1c). */
-  opaqueMidRestB64: string;
+  /** Base64 of the 24 opaque mid-block bytes between height and starting_area (unmapped). */
+  opaqueMidRestAB64: string;
+  /** Base64 of the 13 opaque mid-block bytes after starting_area (unmapped). */
+  opaqueMidRestBB64: string;
   propertyExpressionNames: Record<string, string>;
   /**
    * Base64 of the undecoded payload bytes after property_expression_names
@@ -25,5 +30,9 @@ export interface Preset {
    * fields are individually mapped. Replaced by typed fields in Phase 1.
    */
   opaqueTailB64: string;
+  /** Nested, typed view of the cliff section of the tail, derived from `opaqueTailB64` for JSON export/display. Read-only this phase; not the round-trip source of truth. */
+  cliffSettings: CliffSettings;
+  /** Nested, typed view of the MapSettings sections of the tail, derived from `opaqueTailB64` for JSON export/display. Read-only this phase; not the round-trip source of truth. */
+  mapSettings: MapSettings;
   formatVersion: FormatVersion;
 }
