@@ -1,14 +1,29 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vite-plus/test";
 import { bytesToBase64 } from "../src/codec/base64";
 import { crc32 } from "../src/codec/crc32";
 import { deflateLevel9 } from "../src/codec/deflate";
-import { decodeExchangeString, ExchangeStringError } from "../src/codec/mapExchangeString";
+import {
+  decodeExchangeString,
+  encodeExchangeString,
+  ExchangeStringError,
+} from "../src/codec/mapExchangeString";
 import fixtures from "./fixtures/builtin-presets.json";
 import nauvisDump from "./fixtures/map-gen-settings.default-nauvis.dump.json";
 import mapDefaults from "./fixtures/map-settings.example.json";
 
 const presets = fixtures.presets as Record<string, string>;
 const NAMES = Object.keys(presets);
+
+// Positive single-toggle fixtures (captured from Factorio 2.1.9): the Default
+// preset with exactly one enemy toggle flipped. They pin the peaceful_mode and
+// no_enemies_mode byte offsets, which are byte-identical (false) across all 9
+// builtins on their own.
+const peacefulFixture = readFileSync("test/fixtures/defaultgenwithpeaceful.txt", "utf8").trim();
+const noEnemiesFixture = readFileSync(
+  "test/fixtures/defaultmodenoenemiespeacefulunchecked.txt",
+  "utf8",
+).trim();
 
 describe("decodeExchangeString", () => {
   it.each(NAMES)("decodes %s as format 2.1.9.3 with a valid CRC", (name) => {
@@ -72,15 +87,17 @@ describe("decodeExchangeString", () => {
   });
 
   it.each(NAMES)(
-    "mid block of %s splits into head(2) + seed + width + height + restA(24) + startingArea + restB(13)",
+    "mid block of %s splits into head(2) + seed + width + height + restA(24) + startingArea + peaceful + noEnemies + restB(11)",
     (name) => {
       const mid = decodeExchangeString(presets[name] as string).mid;
       expect(mid.opaqueHead.length).toBe(2);
       expect(mid.opaqueRestA.length).toBe(24);
-      expect(mid.opaqueRestB.length).toBe(13);
+      expect(mid.opaqueRestB.length).toBe(11);
       expect(mid.width).toBe(2000000);
       expect(typeof mid.seed).toBe("number");
       expect(typeof mid.startingArea).toBe("number");
+      expect(typeof mid.peacefulMode).toBe("boolean");
+      expect(typeof mid.noEnemiesMode).toBe("boolean");
     },
   );
 
@@ -90,7 +107,35 @@ describe("decodeExchangeString", () => {
     expect(mid.startingArea).toBeCloseTo(1.0, 6);
     expect(mid.opaqueHead.length).toBe(2);
     expect(mid.opaqueRestA.length).toBe(24);
-    expect(mid.opaqueRestB.length).toBe(13);
+    expect(mid.opaqueRestB.length).toBe(11);
+  });
+
+  it("decodes peaceful_mode and no_enemies_mode as false for every builtin", () => {
+    for (const name of NAMES) {
+      const mid = decodeExchangeString(presets[name] as string).mid;
+      expect(mid.peacefulMode).toBe(false);
+      expect(mid.noEnemiesMode).toBe(false);
+    }
+  });
+
+  it("decodes peaceful_mode true (and no_enemies false) from the peaceful fixture", () => {
+    const mid = decodeExchangeString(peacefulFixture).mid;
+    expect(mid.peacefulMode).toBe(true);
+    expect(mid.noEnemiesMode).toBe(false);
+  });
+
+  it("decodes no_enemies_mode true (and peaceful false) from the no-enemies fixture", () => {
+    const mid = decodeExchangeString(noEnemiesFixture).mid;
+    expect(mid.noEnemiesMode).toBe(true);
+    expect(mid.peacefulMode).toBe(false);
+  });
+
+  it.each([
+    ["peaceful", () => peacefulFixture],
+    ["no-enemies", () => noEnemiesFixture],
+  ])("round-trips the %s fixture byte-for-byte", (_label, get) => {
+    const decoded = decodeExchangeString(get());
+    expect(encodeExchangeString(decoded)).toBe(get());
   });
 
   it("types map width and height from the mid-block (Ribbon world proves the height offset)", () => {
