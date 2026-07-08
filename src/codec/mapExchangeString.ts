@@ -26,7 +26,11 @@ export interface MidBlock {
   opaqueRestA: Uint8Array;
   /** Starting-area size scale (f32 LE at mid offset 38). */
   startingArea: number;
-  /** 13 opaque bytes after starting_area (peaceful/no_enemies bools; unmapped). */
+  /** peaceful_mode flag (bool at mid offset 42, first byte after starting_area). */
+  peacefulMode: boolean;
+  /** no_enemies_mode flag (bool at mid offset 43). */
+  noEnemiesMode: boolean;
+  /** 11 opaque bytes after no_enemies_mode (starting_points and friends; unmapped). */
   opaqueRestB: Uint8Array;
 }
 
@@ -59,7 +63,10 @@ const MIN_PAYLOAD_LENGTH = 70;
 // Schema for the 55-byte MapGenSettings block between autoplace and
 // property_expression_names (terrain / water / starting area; varies per preset).
 // Empirical for format 2.1.9.3, verified on all 9 fixtures.
-// One ordered schema shared by decode and encode; fixed widths MUST sum to 55: 2 + 4 + 4 + 4 + 24 + 4 + 13.
+// One ordered schema shared by decode and encode; fixed widths MUST sum to 55: 2 + 4 + 4 + 4 + 24 + 4 + 1 + 1 + 11.
+// peaceful_mode and no_enemies_mode are the two bytes immediately after
+// starting_area, pinned by the single-toggle fixtures defaultgenwithpeaceful.txt
+// and defaultmodenoenemiespeacefulunchecked.txt (both flip exactly their byte).
 export const MID_BLOCK_SCHEMA: Schema = [
   { name: "opaqueHead", type: { opaque: 2 } },
   { name: "seed", type: "u32" },
@@ -67,7 +74,9 @@ export const MID_BLOCK_SCHEMA: Schema = [
   { name: "height", type: "u32" },
   { name: "opaqueRestA", type: { opaque: 24 } },
   { name: "startingArea", type: "f32" },
-  { name: "opaqueRestB", type: { opaque: 13 } },
+  { name: "peacefulMode", type: "bool" },
+  { name: "noEnemiesMode", type: "bool" },
+  { name: "opaqueRestB", type: { opaque: 11 } },
 ];
 
 // The only format this decoder understands; MID_BLOCK_SCHEMA is empirical for it.

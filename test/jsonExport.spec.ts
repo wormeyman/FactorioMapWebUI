@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vite-plus/test";
 import { decodeExchangeString } from "../src/codec/mapExchangeString";
 import { presetFromDecoded } from "../src/model/convert";
@@ -11,6 +12,10 @@ function preset(name: string) {
   return presetFromDecoded(name, decodeExchangeString(presets[name] as string), true);
 }
 
+function presetFromFile(path: string) {
+  return presetFromDecoded(path, decodeExchangeString(readFileSync(path, "utf8").trim()));
+}
+
 describe("toMapGenSettingsJson", () => {
   it("emits snake_case autoplace_controls, seed, width, height, cliff_settings", () => {
     const j = toMapGenSettingsJson(preset("Default")) as Record<string, unknown>;
@@ -20,6 +25,28 @@ describe("toMapGenSettingsJson", () => {
     expect(
       (j["cliff_settings"] as Record<string, unknown>)["cliff_elevation_interval"],
     ).toBeCloseTo(40, 4);
+  });
+
+  it("emits peaceful_mode and no_enemies_mode false for the Default preset", () => {
+    const j = toMapGenSettingsJson(preset("Default")) as Record<string, unknown>;
+    expect(j["peaceful_mode"]).toBe(false);
+    expect(j["no_enemies_mode"]).toBe(false);
+  });
+
+  it("emits the decoded peaceful_mode true for the peaceful fixture", () => {
+    const j = toMapGenSettingsJson(
+      presetFromFile("test/fixtures/defaultgenwithpeaceful.txt"),
+    ) as Record<string, unknown>;
+    expect(j["peaceful_mode"]).toBe(true);
+    expect(j["no_enemies_mode"]).toBe(false);
+  });
+
+  it("emits the decoded no_enemies_mode true for the no-enemies fixture", () => {
+    const j = toMapGenSettingsJson(
+      presetFromFile("test/fixtures/defaultmodenoenemiespeacefulunchecked.txt"),
+    ) as Record<string, unknown>;
+    expect(j["no_enemies_mode"]).toBe(true);
+    expect(j["peaceful_mode"]).toBe(false);
   });
 });
 

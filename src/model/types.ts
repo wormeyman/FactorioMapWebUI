@@ -16,11 +16,15 @@ export interface Preset {
   height: number;
   /** Starting-area size scale (f32 LE at mid offset 38; typed in Phase 1c). */
   startingArea: number;
+  /** peaceful_mode flag (bool at mid offset 42; typed from the mid-block). */
+  peacefulMode: boolean;
+  /** no_enemies_mode flag (bool at mid offset 43; typed from the mid-block). */
+  noEnemiesMode: boolean;
   /** Base64 of the 2 opaque mid-block bytes before seed (unmapped). */
   opaqueMidHeadB64: string;
   /** Base64 of the 24 opaque mid-block bytes between height and starting_area (unmapped). */
   opaqueMidRestAB64: string;
-  /** Base64 of the 13 opaque mid-block bytes after starting_area (unmapped). */
+  /** Base64 of the 11 opaque mid-block bytes after no_enemies_mode (unmapped). */
   opaqueMidRestBB64: string;
   propertyExpressionNames: Record<string, string>;
   /**
