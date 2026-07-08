@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { usePresetsStore } from "../store/presets";
+import FCheckbox from "../ui/FCheckbox.vue";
 import FNumberInput from "../ui/FNumberInput.vue";
 
 const store = usePresetsStore();
@@ -20,6 +21,11 @@ const expressions = computed(() =>
         Starting area
         <FNumberInput v-model="preset.startingArea" data-test="starting-area" />
       </label>
+    </div>
+    <h3>Enemies</h3>
+    <div v-if="preset" class="enemy-row">
+      <FCheckbox v-model="preset.peacefulMode" label="Peaceful mode" data-test="peaceful-mode" />
+      <FCheckbox v-model="preset.noEnemiesMode" label="No enemies" data-test="no-enemies-mode" />
     </div>
     <h3>Property expression names</h3>
     <p v-if="expressions.length === 0" class="note">
@@ -47,6 +53,12 @@ const expressions = computed(() =>
 }
 
 .size-row {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.enemy-row {
   display: flex;
   gap: 16px;
   margin-bottom: 16px;

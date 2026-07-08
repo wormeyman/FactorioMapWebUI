@@ -36,4 +36,26 @@ describe("AdvancedTab", () => {
     await input.trigger("change");
     expect(store.activePreset?.startingArea).toBe(2);
   });
+
+  it("shows peaceful_mode unchecked for the Default preset and writes it back on toggle", async () => {
+    setActivePinia(createPinia());
+    const store = usePresetsStore();
+    const wrapper = mount(AdvancedTab);
+    const input = wrapper.find('[data-test="peaceful-mode"] input');
+    expect((input.element as HTMLInputElement).checked).toBe(false);
+    (input.element as HTMLInputElement).checked = true;
+    await input.trigger("change");
+    expect(store.activePreset?.peacefulMode).toBe(true);
+  });
+
+  it("shows no_enemies_mode unchecked for the Default preset and writes it back on toggle", async () => {
+    setActivePinia(createPinia());
+    const store = usePresetsStore();
+    const wrapper = mount(AdvancedTab);
+    const input = wrapper.find('[data-test="no-enemies-mode"] input');
+    expect((input.element as HTMLInputElement).checked).toBe(false);
+    (input.element as HTMLInputElement).checked = true;
+    await input.trigger("change");
+    expect(store.activePreset?.noEnemiesMode).toBe(true);
+  });
 });
