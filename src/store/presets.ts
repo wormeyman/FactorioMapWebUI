@@ -28,6 +28,9 @@ function seedState(): { userPresets: Preset[]; activeName: string | null } {
   const first = getBuiltinPreset("Default");
   first.name = "My preset";
   first.builtin = false;
+  // A new preset from a builtin defaults to a random seed; the baked fixture
+  // seed is a capture artifact, not a meaningful choice.
+  first.seed = null;
   return { userPresets: [first], activeName: first.name };
 }
 
@@ -70,6 +73,8 @@ export const usePresetsStore = defineStore("presets", {
       const preset = getBuiltinPreset(builtinName);
       preset.name = this.uniqueName(newName);
       preset.builtin = false;
+      // New presets from a builtin default to a random seed (see seedState).
+      preset.seed = null;
       this.userPresets.push(preset);
       this.activeName = preset.name;
       this.saveToStorage();

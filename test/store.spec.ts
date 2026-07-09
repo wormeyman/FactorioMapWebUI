@@ -1,10 +1,23 @@
 import { createPinia, setActivePinia } from "pinia";
 import { beforeEach, describe, expect, it } from "vite-plus/test";
-import { decodeExchangeString, ExchangeStringError } from "../src/codec/mapExchangeString";
+import { bytesToBase64 } from "../src/codec/base64";
+import { deflateLevel9 } from "../src/codec/deflate";
+import {
+  decodeExchangeString,
+  encodePayload,
+  ExchangeStringError,
+} from "../src/codec/mapExchangeString";
 import { STORAGE_KEY, usePresetsStore } from "../src/store/presets";
 import fixtures from "./fixtures/builtin-presets.json";
 
 const presets = fixtures.presets as Record<string, string>;
+
+/** Re-encode a preset string with its mid-block seed overwritten. */
+function withSeed(name: string, seed: number): string {
+  const decoded = decodeExchangeString(presets[name] as string);
+  const edited = { ...decoded, mid: { ...decoded.mid, seed } };
+  return `>>>${bytesToBase64(deflateLevel9(encodePayload(edited)))}<<<`;
+}
 
 describe("presets store", () => {
   beforeEach(() => {
@@ -24,6 +37,29 @@ describe("presets store", () => {
     store.createFromBuiltin("Rich Resources", "richer");
     expect(store.activeName).toBe("richer");
     expect(store.activePreset?.autoplaceControls["coal"]?.richness).toBe(2);
+  });
+
+  it("starts the first-launch preset with a random (null) seed", () => {
+    const store = usePresetsStore();
+    expect(store.activePreset?.seed).toBeNull();
+  });
+
+  it("starts a preset created from a builtin with a random (null) seed", () => {
+    const store = usePresetsStore();
+    store.createFromBuiltin("Rich Resources", "richer");
+    expect(store.activePreset?.seed).toBeNull();
+  });
+
+  it("keeps the concrete seed when importing a string that carries one", () => {
+    const store = usePresetsStore();
+    store.importExchangeString("pinned", withSeed("Default", 123456789));
+    expect(store.activePreset?.seed).toBe(123456789);
+  });
+
+  it("treats an imported wire seed of 0 as random (null)", () => {
+    const store = usePresetsStore();
+    store.importExchangeString("randomish", withSeed("Default", 0));
+    expect(store.activePreset?.seed).toBeNull();
   });
 
   it("deduplicates preset names", () => {

@@ -15,10 +15,13 @@ const editOptions = computed(() =>
   store.userPresets.map((p) => ({ value: p.name, label: p.name })),
 );
 
+// "Random each new map" is a pure view over the seed: a null seed is random.
 const randomEachMap = computed({
-  get: () => store.activePreset?.randomEachMap ?? true,
+  get: () => store.activePreset?.seed == null,
   set: (value: boolean) => {
-    if (store.activePreset) store.activePreset.randomEachMap = value;
+    if (!store.activePreset) return;
+    if (value) store.activePreset.seed = null;
+    else rerollSeed();
   },
 });
 
@@ -35,12 +38,11 @@ function onSeedChange(event: Event) {
   }
 }
 
-// Roll a fresh concrete seed in the Factorio u32 range [1, 0xffffffff] and pin
-// it (turn off "random each new map") so the input shows and keeps the value.
+// Roll a fresh concrete seed in the Factorio u32 range [1, 0xffffffff]. Setting
+// a concrete seed makes it non-null, so "random each new map" derives to false.
 function rerollSeed() {
   if (!store.activePreset) return;
   store.activePreset.seed = 1 + Math.floor(Math.random() * 0xffffffff);
-  store.activePreset.randomEachMap = false;
 }
 </script>
 

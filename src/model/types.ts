@@ -6,9 +6,13 @@ export type { AutoplaceSetting, FormatVersion };
 export interface Preset {
   name: string;
   builtin: boolean;
-  /** Map generation seed (u32 LE at mid offset 2). null means "random each new map"; encoded as 0 when null until Task 12 reconciles the random-seed UI. */
+  /**
+   * Map generation seed (u32 LE at mid offset 2). `null` is the single source
+   * of truth for "random each new map" and encodes to wire 0; a wire 0 decodes
+   * back to `null`. The "Random each new map" UI checkbox is a pure computed
+   * view over this field (checked iff seed === null).
+   */
   seed: number | null;
-  randomEachMap: boolean;
   autoplaceControls: Record<string, AutoplaceSetting>;
   /** Map width in tiles (typed from the mid-block; editable). */
   width: number;
