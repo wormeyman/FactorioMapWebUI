@@ -21,7 +21,7 @@ export function presetFromDecoded(name: string, decoded: DecodedExchange, builti
     startingArea: decoded.mid.startingArea,
     peacefulMode: decoded.mid.peacefulMode,
     noEnemiesMode: decoded.mid.noEnemiesMode,
-    opaqueMidHeadB64: bytesToBase64(decoded.mid.opaqueHead),
+    defaultEnableAllAutoplaceControls: decoded.mid.defaultEnableAllAutoplaceControls,
     opaqueMidRestAB64: bytesToBase64(decoded.mid.opaqueRestA),
     opaqueMidRestBB64: bytesToBase64(decoded.mid.opaqueRestB),
     propertyExpressionNames: structuredClone(decoded.propertyExpressionNames),
@@ -34,8 +34,10 @@ export function presetFromDecoded(name: string, decoded: DecodedExchange, builti
 
 /**
  * Bridge a Preset back to the encoder's input. The flag byte is a constant 0
- * (never observed otherwise); width/height/seed/startingArea are typed fields, the remaining
- * mid-block bytes are carried opaquely, and the tail is re-emitted verbatim.
+ * (never observed otherwise); width/height/seed/startingArea/enable flags are
+ * typed fields, the remaining mid-block bytes are carried opaquely, and the
+ * tail is re-emitted verbatim. autoplaceSettingsCount is always 0 (decode
+ * rejects anything else), so it is re-emitted as 0.
  */
 export function presetToEncodable(preset: Preset): EncodableExchange {
   return {
@@ -43,7 +45,8 @@ export function presetToEncodable(preset: Preset): EncodableExchange {
     flagByte: 0,
     autoplaceControls: preset.autoplaceControls,
     mid: {
-      opaqueHead: base64ToBytes(preset.opaqueMidHeadB64),
+      autoplaceSettingsCount: 0,
+      defaultEnableAllAutoplaceControls: preset.defaultEnableAllAutoplaceControls,
       seed: preset.seed ?? 0,
       width: preset.width,
       height: preset.height,

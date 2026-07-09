@@ -6,6 +6,7 @@ import { deflateLevel9 } from "../src/codec/deflate";
 import {
   decodeExchangeString,
   encodeExchangeString,
+  encodePayload,
   ExchangeStringError,
 } from "../src/codec/mapExchangeString";
 import fixtures from "./fixtures/builtin-presets.json";
@@ -87,10 +88,11 @@ describe("decodeExchangeString", () => {
   });
 
   it.each(NAMES)(
-    "mid block of %s splits into head(2) + seed + width + height + restA(24) + startingArea + peaceful + noEnemies + restB(11)",
+    "mid block of %s splits into count + defaultEnable + seed + width + height + restA(24) + startingArea + peaceful + noEnemies + restB(11)",
     (name) => {
       const mid = decodeExchangeString(presets[name] as string).mid;
-      expect(mid.opaqueHead.length).toBe(2);
+      expect(mid.autoplaceSettingsCount).toBe(0);
+      expect(typeof mid.defaultEnableAllAutoplaceControls).toBe("boolean");
       expect(mid.opaqueRestA.length).toBe(24);
       expect(mid.opaqueRestB.length).toBe(11);
       expect(mid.width).toBe(2000000);
@@ -105,7 +107,6 @@ describe("decodeExchangeString", () => {
     const mid = decodeExchangeString(presets["Default"] as string).mid;
     expect(mid.seed).toBe(34658944); // 0x0210DA80, Default's baked seed
     expect(mid.startingArea).toBeCloseTo(1.0, 6);
-    expect(mid.opaqueHead.length).toBe(2);
     expect(mid.opaqueRestA.length).toBe(24);
     expect(mid.opaqueRestB.length).toBe(11);
   });
@@ -116,6 +117,24 @@ describe("decodeExchangeString", () => {
       expect(mid.peacefulMode).toBe(false);
       expect(mid.noEnemiesMode).toBe(false);
     }
+  });
+
+  it("types the mid-block head: autoplace_settings count 0, default_enable_all_autoplace_controls true", () => {
+    for (const name of NAMES) {
+      const mid = decodeExchangeString(presets[name] as string).mid;
+      expect(mid.autoplaceSettingsCount).toBe(0);
+      expect(mid.defaultEnableAllAutoplaceControls).toBe(true);
+    }
+  });
+
+  it("rejects a payload with a non-empty autoplace_settings dict (unsupported by the fixed schema)", () => {
+    const decoded = decodeExchangeString(presets["Default"] as string);
+    const tampered = {
+      ...decoded,
+      mid: { ...decoded.mid, autoplaceSettingsCount: 1 },
+    };
+    const restrung = `>>>${bytesToBase64(deflateLevel9(encodePayload(tampered)))}<<<`;
+    expect(() => decodeExchangeString(restrung)).toThrow(/autoplace_settings/);
   });
 
   it("decodes peaceful_mode true (and no_enemies false) from the peaceful fixture", () => {

@@ -14,8 +14,15 @@ export interface AutoplaceSetting {
 export type FormatVersion = [number, number, number, number];
 
 export interface MidBlock {
-  /** 2 opaque bytes before seed (00 01 in every fixture). */
-  opaqueHead: Uint8Array;
+  /**
+   * Count of the autoplace_settings dict (u8 at mid offset 0). Always 0 across
+   * the corpus (empty dict). A non-zero count injects a variable-length dict
+   * that the fixed-width mid-block schema cannot represent, so decode rejects
+   * it (see decodeExchangeString) rather than silently misparsing.
+   */
+  autoplaceSettingsCount: number;
+  /** default_enable_all_autoplace_controls (bool at mid offset 1, immediately before seed). */
+  defaultEnableAllAutoplaceControls: boolean;
   /** Map generation seed (u32 LE at mid offset 2). */
   seed: number;
   /** Map width in tiles (u32 LE at mid offset 6). */
@@ -63,12 +70,17 @@ const MIN_PAYLOAD_LENGTH = 70;
 // Schema for the 55-byte MapGenSettings block between autoplace and
 // property_expression_names (terrain / water / starting area; varies per preset).
 // Empirical for format 2.1.9.3, verified on all 9 fixtures.
-// One ordered schema shared by decode and encode; fixed widths MUST sum to 55: 2 + 4 + 4 + 4 + 24 + 4 + 1 + 1 + 11.
+// One ordered schema shared by decode and encode; fixed widths MUST sum to 55: 1 + 1 + 4 + 4 + 4 + 24 + 4 + 1 + 1 + 11.
+// The head is a length-prefixed autoplace_settings dict (empty: one 0x00 count
+// byte) followed by default_enable_all_autoplace_controls (0x01 = true), which
+// sits immediately before seed - matching flameSla's 1.x field order and the
+// self-consistent `00 01` observed in every fixture.
 // peaceful_mode and no_enemies_mode are the two bytes immediately after
 // starting_area, pinned by the single-toggle fixtures defaultgenwithpeaceful.txt
 // and defaultmodenoenemiespeacefulunchecked.txt (both flip exactly their byte).
 export const MID_BLOCK_SCHEMA: Schema = [
-  { name: "opaqueHead", type: { opaque: 2 } },
+  { name: "autoplaceSettingsCount", type: "u8" },
+  { name: "defaultEnableAllAutoplaceControls", type: "bool" },
   { name: "seed", type: "u32" },
   { name: "width", type: "u32" },
   { name: "height", type: "u32" },
@@ -322,6 +334,11 @@ export function decodeExchangeString(input: string): DecodedExchange {
     }
 
     const mid = readFields(reader, MID_BLOCK_SCHEMA) as unknown as MidBlock;
+    if (mid.autoplaceSettingsCount !== 0) {
+      throw new ExchangeStringError(
+        `unsupported autoplace_settings dict (count ${mid.autoplaceSettingsCount}); only the empty dict is handled by the fixed mid-block schema`,
+      );
+    }
 
     const propertyExpressionNames: Record<string, string> = {};
     const propertyCount = reader.readUint8();
