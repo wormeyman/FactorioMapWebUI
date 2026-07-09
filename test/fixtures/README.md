@@ -18,6 +18,19 @@ them byte-for-byte as captured.
 | `starting-points-1-x450.txt` | Same, `starting_points` = `[{x:450,y:0}]` | Pins the x coordinate (int32, 1/256 fixed-point: 450*256 = 115200 = `00 c2 01 00`) |
 | `starting-points-1-y450.txt` | Same, `starting_points` = `[{x:0,y:450}]` | Pins the y coordinate offset independently of x |
 | `starting-points-2pt.txt` | Same, `starting_points` = `[{x:0,y:0},{x:450,y:0}]` | Multi-point capture that proves the count byte + variable length (payload grows by one 10-byte point group) |
+| `starting-area-5.txt` | Minimal Space-Age map (seed 123456), `starting_area` = `5.0` | Negative control for `area_to_generate_at_start`: a 5x starting_area leaves the box unchanged. Also round-trip coverage for a large `starting_area`. |
+| `map-64x64.txt` | Minimal Space-Age map (seed 123456), `width` = `height` = `64` | Negative control for `area_to_generate_at_start`: a tiny finite map leaves the box unchanged. Also round-trip coverage for a small map. |
+| `map-exchange-parsed.default-seed123456.dump.json` | In-game dump of `helpers.parse_map_exchange_string(get_map_exchange_string())` for the default seed-123456 map (byte-identical to `starting-points-1-origin.txt`) | Authoritative field-by-field parse from the game itself; the oracle that cross-validates the whole mid-block decoder and confirms `area_to_generate_at_start` is absent from the public MapGenSettings table |
+
+Note on `area_to_generate_at_start` (the former `opaqueRestA`, 24 bytes between
+`height` and `starting_area`): it is a vestigial serialization field. It is
+absent from the 2.x MapGenSettings Lua type and from
+`helpers.parse_map_exchange_string`, and no input moves it - the fixtures above
+(varying `starting_area` up to 5.0, map size down to 64x64, `starting_points`,
+`seed`) all carry the identical constant `(-224,-224)-(+224,+224)` box, and the
+legacy `area_to_generate_at_start` JSON key is silently ignored on map creation.
+It is typed structurally (two `0x7fff`-sentinel MapPositions + a 4-byte trailer)
+purely for byte-exact round-trip.
 
 Note: the live 2.1.9 MapGenSettings has no top-level `terrain_segmentation` /
 `water` - `water` is an `autoplace_control`, and terrain/moisture scale live in

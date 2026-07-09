@@ -1,7 +1,13 @@
-import type { AutoplaceSetting, FormatVersion, StartingPoint } from "../codec/mapExchangeString";
+import type {
+  AreaToGenerateAtStart,
+  AutoplaceSetting,
+  FormatVersion,
+  MapPosition,
+  StartingPoint,
+} from "../codec/mapExchangeString";
 import type { CliffSettings, MapSettings } from "./mapSettings";
 
-export type { AutoplaceSetting, FormatVersion, StartingPoint };
+export type { AreaToGenerateAtStart, AutoplaceSetting, FormatVersion, MapPosition, StartingPoint };
 
 export interface Preset {
   name: string;
@@ -26,8 +32,8 @@ export interface Preset {
   noEnemiesMode: boolean;
   /** default_enable_all_autoplace_controls (bool at mid offset 1; typed from the mid-block). */
   defaultEnableAllAutoplaceControls: boolean;
-  /** Base64 of the 24 opaque mid-block bytes between height and starting_area (BoundingBox-shaped; likely territory_settings, not the 1.x-era area_to_generate_at_start; unmapped). */
-  opaqueMidRestAB64: string;
+  /** area_to_generate_at_start: the engine's pre-generated spawn region (a constant (-224,-224)-(+224,+224) box), typed from the mid-block. Vestigial and non-editable; carried for byte-exact round-trip. */
+  areaToGenerateAtStart: AreaToGenerateAtStart;
   /** starting_points (MapGenSettings.starting_points): map spawn positions in tile coordinates, typed from the variable-length mid-block trailer. */
   startingPoints: StartingPoint[];
   propertyExpressionNames: Record<string, string>;

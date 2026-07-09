@@ -30,15 +30,17 @@ export interface MidBlock {
   /** Map height in tiles (u32 LE at mid offset 10). */
   height: number;
   /**
-   * 24 opaque bytes between height and starting_area. The `ff 7f` / `ff ff`
-   * bytes look like Factorio's delta MapPosition encoding (0x7fff sentinel),
-   * so this is likely a BoundingBox-shaped field - possibly territory_settings
-   * or an internally-serialized region. NOT area_to_generate_at_start: that
-   * name is from a 1.x parser and does not exist in the 2.x MapGenSettings type
-   * (https://lua-api.factorio.com/latest/types/MapGenSettings.html). Byte-
-   * identical across the corpus; unmapped pending a positive fixture.
+   * area_to_generate_at_start: the region the engine pre-generates around
+   * spawn, serialized as a BoundingBox between height and starting_area. This
+   * is a VESTIGIAL field - it is absent from the 2.x MapGenSettings Lua type
+   * and from helpers.parse_map_exchange_string, and no map-gen-settings knob
+   * moves it (confirmed by fixtures varying starting_area, map size and
+   * starting_points, plus the ignored legacy JSON key). The engine always
+   * writes the same constant (-224,-224)-(+224,+224) box. Typed structurally
+   * from the same 0x7fff-sentinel + absolute-int32 MapPosition encoding
+   * validated against the game for starting_points.
    */
-  opaqueRestA: Uint8Array;
+  areaToGenerateAtStart: AreaToGenerateAtStart;
   /** Starting-area size scale (f32 LE at mid offset 38). */
   startingArea: number;
   /** peaceful_mode flag (bool at mid offset 42, first byte after starting_area). */
@@ -53,19 +55,36 @@ export interface MidBlock {
    * fixed-point. Stored here as TILE coordinates (raw int32 / 256, exact in
    * f64). Verified against four ground-truth fixtures incl. a two-point map.
    */
-  startingPoints: StartingPoint[];
+  startingPoints: MapPosition[];
 }
 
-export interface StartingPoint {
+/** A Factorio MapPosition in tile units (raw wire int32 / 256, exact in f64). */
+export interface MapPosition {
   x: number;
   y: number;
+}
+
+/** A starting point is a plain MapPosition; kept as a named alias for clarity. */
+export type StartingPoint = MapPosition;
+
+export interface AreaToGenerateAtStart {
+  /** Top-left corner (tile units). Constant (-224, -224) across the corpus. */
+  leftTop: MapPosition;
+  /** Bottom-right corner (tile units). Constant (+224, +224) across the corpus. */
+  rightBottom: MapPosition;
+  /**
+   * 4 trailing bytes after the two corners: `00 00 01 80`, unidentified
+   * (possibly an orientation or flag) and constant across the corpus. Carried
+   * verbatim for byte-exact round-trip.
+   */
+  trailer: Uint8Array;
 }
 
 export interface DecodedExchange {
   version: FormatVersion;
   flagByte: number;
   autoplaceControls: Record<string, AutoplaceSetting>;
-  /** The MapGenSettings block between autoplace and property_expression_names: a fixed 44-byte prefix plus the variable-length starting_points trailer; only opaqueRestA remains opaque. */
+  /** The MapGenSettings block between autoplace and property_expression_names: a fixed head, the area_to_generate_at_start box, the starting_area/enemy-flag rest, and the variable-length starting_points trailer - all typed. */
   mid: MidBlock;
   propertyExpressionNames: Record<string, string>;
   /**
@@ -89,80 +108,111 @@ export class ExchangeStringError extends Error {}
 // width: its starting_points trailer is variable-length.
 const MIN_PAYLOAD_LENGTH = 60;
 
-// int16 sentinel prefixing each starting point: "absolute int32 coords follow".
-// All observed data uses it; the alternative (delta-encoded positions) is
-// rejected by decode rather than silently misparsed.
-const STARTING_POINT_SENTINEL = 0x7fff;
+// int16 sentinel prefixing each serialized MapPosition: "absolute int32 coords
+// follow". All observed data uses it; the alternative (delta-encoded positions)
+// is rejected by decode rather than silently misparsed.
+const MAP_POSITION_SENTINEL = 0x7fff;
 
 // Factorio stores MapPosition coordinates as 1/256-tile fixed-point int32s.
 const POSITION_FRACTIONAL_UNITS = 256;
 
-// Schema for the fixed 44-byte prefix of the MapGenSettings block between
-// autoplace and property_expression_names. Empirical for format 2.1.9.3,
-// verified on all 9 fixtures. Field names/types cross-checked against the 2.x
+// The 4 trailing bytes of area_to_generate_at_start after its two corners.
+const AREA_TRAILER_LENGTH = 4;
+
+// The mid-block splits into a fixed head (through height), the fixed-width but
+// struct-shaped area_to_generate_at_start, a fixed rest (starting_area and the
+// two enemy flags), then the variable-length starting_points trailer. The two
+// struct fields (area corners + starting_points) use the 0x7fff-sentinel
+// MapPosition encoding, which the generic fieldSchema cannot express, so they
+// are read/written by custom loops around these two schemas.
+//
+// Head: a length-prefixed autoplace_settings dict (empty: one 0x00 count byte)
+// followed by default_enable_all_autoplace_controls (0x01 = true) immediately
+// before seed - matching flameSla's 1.x field order and the self-consistent
+// `00 01` in every fixture. Field names/types cross-checked against the 2.x
 // MapGenSettings type (https://lua-api.factorio.com/latest/types/MapGenSettings.html).
-// One ordered schema shared by decode and encode; fixed widths MUST sum to 44: 1 + 1 + 4 + 4 + 4 + 24 + 4 + 1 + 1.
-// The head is a length-prefixed autoplace_settings dict (empty: one 0x00 count
-// byte) followed by default_enable_all_autoplace_controls (0x01 = true), which
-// sits immediately before seed - matching flameSla's 1.x field order and the
-// self-consistent `00 01` observed in every fixture.
-// peaceful_mode and no_enemies_mode are the two bytes immediately after
-// starting_area, pinned by the single-toggle fixtures defaultgenwithpeaceful.txt
-// and defaultmodenoenemiespeacefulunchecked.txt (both flip exactly their byte).
-// The variable-length starting_points trailer follows this prefix and is
-// read/written by a custom loop (see readStartingPoints/writeStartingPoints),
-// since fieldSchema arrays cannot express its per-element struct. opaqueRestA
-// (BoundingBox-shaped; likely territory_settings) stays opaque - byte-identical
-// across the corpus, so cracking it needs a positive fixture (see its field doc).
-export const MID_BLOCK_PREFIX_SCHEMA: Schema = [
+export const MID_BLOCK_HEAD_SCHEMA: Schema = [
   { name: "autoplaceSettingsCount", type: "u8" },
   { name: "defaultEnableAllAutoplaceControls", type: "bool" },
   { name: "seed", type: "u32" },
   { name: "width", type: "u32" },
   { name: "height", type: "u32" },
-  { name: "opaqueRestA", type: { opaque: 24 } },
+];
+
+// Rest: starting_area (f32), then peaceful_mode and no_enemies_mode - the two
+// bytes pinned by the single-toggle fixtures defaultgenwithpeaceful.txt and
+// defaultmodenoenemiespeacefulunchecked.txt (each flips exactly its byte).
+export const MID_BLOCK_REST_SCHEMA: Schema = [
   { name: "startingArea", type: "f32" },
   { name: "peacefulMode", type: "bool" },
   { name: "noEnemiesMode", type: "bool" },
 ];
 
 /**
- * Read the variable-length starting_points trailer: a u8 count, then per point
- * a 0x7fff int16 sentinel followed by x,y as signed int32 in 1/256 fixed-point.
- * Coordinates are returned as tile units (raw int32 / 256, exact in f64). A
- * non-sentinel value means delta-encoded positions, which this codec does not
- * support - it throws rather than silently misparse (mirrors the autoplace
- * count guard).
+ * Read one serialized MapPosition: a 0x7fff int16 sentinel followed by x,y as
+ * signed int32 in 1/256 fixed-point, returned as tile units (raw int32 / 256,
+ * exact in f64). A non-sentinel value means a delta-encoded position, which
+ * this codec does not support - it throws rather than silently misparse
+ * (mirrors the autoplace count guard). `context` names the field for the error.
  */
-function readStartingPoints(reader: BinaryReader): StartingPoint[] {
+function readMapPosition(reader: BinaryReader, context: string): MapPosition {
+  const sentinel = reader.readUint16();
+  if (sentinel !== MAP_POSITION_SENTINEL) {
+    throw new ExchangeStringError(
+      `unsupported ${context} encoding (sentinel ${sentinel.toString(16)}, expected 7fff); delta-encoded positions are not handled`,
+    );
+  }
+  return {
+    x: reader.readInt32() / POSITION_FRACTIONAL_UNITS,
+    y: reader.readInt32() / POSITION_FRACTIONAL_UNITS,
+  };
+}
+
+/** The exact inverse of readMapPosition. */
+function writeMapPosition(writer: BinaryWriter, point: MapPosition): void {
+  writer.writeUint16(MAP_POSITION_SENTINEL);
+  writer.writeInt32(Math.round(point.x * POSITION_FRACTIONAL_UNITS));
+  writer.writeInt32(Math.round(point.y * POSITION_FRACTIONAL_UNITS));
+}
+
+/** Read the area_to_generate_at_start BoundingBox: two corners + a 4-byte trailer. */
+function readAreaToGenerateAtStart(reader: BinaryReader): AreaToGenerateAtStart {
+  return {
+    leftTop: readMapPosition(reader, "area_to_generate_at_start"),
+    rightBottom: readMapPosition(reader, "area_to_generate_at_start"),
+    trailer: reader.readBytes(AREA_TRAILER_LENGTH),
+  };
+}
+
+/** The exact inverse of readAreaToGenerateAtStart. */
+function writeAreaToGenerateAtStart(writer: BinaryWriter, area: AreaToGenerateAtStart): void {
+  writeMapPosition(writer, area.leftTop);
+  writeMapPosition(writer, area.rightBottom);
+  writer.writeBytes(area.trailer);
+}
+
+/**
+ * Read the variable-length starting_points trailer: a u8 count, then that many
+ * serialized MapPositions.
+ */
+function readStartingPoints(reader: BinaryReader): MapPosition[] {
   const count = reader.readUint8();
-  const points: StartingPoint[] = [];
+  const points: MapPosition[] = [];
   for (let i = 0; i < count; i++) {
-    const sentinel = reader.readUint16();
-    if (sentinel !== STARTING_POINT_SENTINEL) {
-      throw new ExchangeStringError(
-        `unsupported starting_points encoding (sentinel ${sentinel.toString(16)}, expected 7fff); delta-encoded positions are not handled`,
-      );
-    }
-    points.push({
-      x: reader.readInt32() / POSITION_FRACTIONAL_UNITS,
-      y: reader.readInt32() / POSITION_FRACTIONAL_UNITS,
-    });
+    points.push(readMapPosition(reader, "starting_points"));
   }
   return points;
 }
 
 /** The exact inverse of readStartingPoints. */
-function writeStartingPoints(writer: BinaryWriter, points: StartingPoint[]): void {
+function writeStartingPoints(writer: BinaryWriter, points: MapPosition[]): void {
   writer.writeUint8(points.length);
   for (const point of points) {
-    writer.writeUint16(STARTING_POINT_SENTINEL);
-    writer.writeInt32(Math.round(point.x * POSITION_FRACTIONAL_UNITS));
-    writer.writeInt32(Math.round(point.y * POSITION_FRACTIONAL_UNITS));
+    writeMapPosition(writer, point);
   }
 }
 
-// The only format this decoder understands; MID_BLOCK_SCHEMA is empirical for it.
+// The only format this decoder understands; the mid-block schemas are empirical for it.
 const SUPPORTED_VERSION: FormatVersion = [2, 1, 9, 3];
 
 export interface TailBlock {
@@ -404,14 +454,18 @@ export function decodeExchangeString(input: string): DecodedExchange {
       };
     }
 
-    const midPrefix = readFields(reader, MID_BLOCK_PREFIX_SCHEMA);
-    if (midPrefix["autoplaceSettingsCount"] !== 0) {
+    const midHead = readFields(reader, MID_BLOCK_HEAD_SCHEMA);
+    if (midHead["autoplaceSettingsCount"] !== 0) {
       throw new ExchangeStringError(
-        `unsupported autoplace_settings dict (count ${String(midPrefix["autoplaceSettingsCount"])}); only the empty dict is handled by the fixed mid-block schema`,
+        `unsupported autoplace_settings dict (count ${String(midHead["autoplaceSettingsCount"])}); only the empty dict is handled by the fixed mid-block schema`,
       );
     }
+    const areaToGenerateAtStart = readAreaToGenerateAtStart(reader);
+    const midRest = readFields(reader, MID_BLOCK_REST_SCHEMA);
     const mid = {
-      ...midPrefix,
+      ...midHead,
+      areaToGenerateAtStart,
+      ...midRest,
       startingPoints: readStartingPoints(reader),
     } as unknown as MidBlock;
 
@@ -476,7 +530,9 @@ export function encodePayload(input: EncodableExchange): Uint8Array {
     w.writeFloat32(control.richness);
   }
 
-  writeFields(w, MID_BLOCK_PREFIX_SCHEMA, input.mid as unknown as Record<string, FieldValue>);
+  writeFields(w, MID_BLOCK_HEAD_SCHEMA, input.mid as unknown as Record<string, FieldValue>);
+  writeAreaToGenerateAtStart(w, input.mid.areaToGenerateAtStart);
+  writeFields(w, MID_BLOCK_REST_SCHEMA, input.mid as unknown as Record<string, FieldValue>);
   writeStartingPoints(w, input.mid.startingPoints);
 
   const propertyKeys = Object.keys(input.propertyExpressionNames).sort();

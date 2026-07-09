@@ -23,7 +23,7 @@ export function presetFromDecoded(name: string, decoded: DecodedExchange, builti
     peacefulMode: decoded.mid.peacefulMode,
     noEnemiesMode: decoded.mid.noEnemiesMode,
     defaultEnableAllAutoplaceControls: decoded.mid.defaultEnableAllAutoplaceControls,
-    opaqueMidRestAB64: bytesToBase64(decoded.mid.opaqueRestA),
+    areaToGenerateAtStart: structuredClone(decoded.mid.areaToGenerateAtStart),
     startingPoints: structuredClone(decoded.mid.startingPoints),
     propertyExpressionNames: structuredClone(decoded.propertyExpressionNames),
     opaqueTailB64: bytesToBase64(tailToBytes(decoded.tail)),
@@ -35,12 +35,14 @@ export function presetFromDecoded(name: string, decoded: DecodedExchange, builti
 
 /**
  * Bridge a Preset back to the encoder's input. The flag byte is a constant 0
- * (never observed otherwise); width/height/seed/startingArea/enable flags and
- * startingPoints are typed fields, opaqueRestA is carried opaquely, and the
- * tail is re-emitted verbatim. autoplaceSettingsCount is always 0 (decode
- * rejects anything else), so it is re-emitted as 0.
+ * (never observed otherwise); width/height/seed/startingArea/enable flags,
+ * areaToGenerateAtStart and startingPoints are typed fields, and the tail is
+ * re-emitted verbatim. autoplaceSettingsCount is always 0 (decode rejects
+ * anything else), so it is re-emitted as 0. Nested structs are rebuilt as
+ * plain objects so a reactive (Vue proxy) Preset round-trips cleanly.
  */
 export function presetToEncodable(preset: Preset): EncodableExchange {
+  const area = preset.areaToGenerateAtStart;
   return {
     version: preset.formatVersion,
     flagByte: 0,
@@ -51,7 +53,11 @@ export function presetToEncodable(preset: Preset): EncodableExchange {
       seed: preset.seed ?? 0,
       width: preset.width,
       height: preset.height,
-      opaqueRestA: base64ToBytes(preset.opaqueMidRestAB64),
+      areaToGenerateAtStart: {
+        leftTop: { x: area.leftTop.x, y: area.leftTop.y },
+        rightBottom: { x: area.rightBottom.x, y: area.rightBottom.y },
+        trailer: Uint8Array.from(area.trailer),
+      },
       startingArea: preset.startingArea,
       peacefulMode: preset.peacefulMode,
       noEnemiesMode: preset.noEnemiesMode,

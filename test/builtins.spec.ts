@@ -15,7 +15,8 @@ describe("builtin presets", () => {
       expect(typeof preset.seed).toBe("number");
       expect(typeof preset.startingArea).toBe("number");
       expect(typeof preset.defaultEnableAllAutoplaceControls).toBe("boolean");
-      expect(preset.opaqueMidRestAB64.length).toBeGreaterThan(0);
+      expect(preset.areaToGenerateAtStart.leftTop).toEqual({ x: -224, y: -224 });
+      expect(preset.areaToGenerateAtStart.rightBottom).toEqual({ x: 224, y: 224 });
       expect(preset.startingPoints).toEqual([{ x: 0, y: 0 }]);
       expect(preset.opaqueTailB64.length).toBeGreaterThan(0);
     }
