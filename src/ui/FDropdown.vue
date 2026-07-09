@@ -1,8 +1,12 @@
 <script setup lang="ts">
-defineProps<{
-  modelValue: string;
-  options: { value: string; label: string }[];
-}>();
+withDefaults(
+  defineProps<{
+    modelValue: string;
+    options: { value: string; label: string }[];
+    disabled?: boolean;
+  }>(),
+  { disabled: false },
+);
 const emit = defineEmits<{ "update:modelValue": [value: string] }>();
 
 function onChange(event: Event) {
@@ -11,7 +15,7 @@ function onChange(event: Event) {
 </script>
 
 <template>
-  <select class="f-dropdown" :value="modelValue" @change="onChange">
+  <select class="f-dropdown" :value="modelValue" :disabled="disabled" @change="onChange">
     <option v-for="option in options" :key="option.value" :value="option.value">
       {{ option.label }}
     </option>

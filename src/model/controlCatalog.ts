@@ -2,19 +2,41 @@ import { PLANETS, type Planet } from "./planets";
 
 export type ControlCategory = "resource" | "terrain" | "enemy";
 
+/** Which of the shared autoplace knobs a table column edits. */
+export type ControlColumnKey = "frequency" | "size" | "richness";
+
+/** A relabelled autoplace column, e.g. Scale/Coverage for terrain coverage. */
+export interface ControlColumn {
+  key: ControlColumnKey;
+  label: string;
+}
+
+/** Terrain splits into two tables: coverage (scale/coverage) and cliffs (frequency/continuity). */
+export type TerrainGroup = "coverage" | "cliff";
+
 export interface ControlEntry {
   planet: Planet;
   category: ControlCategory;
   label: string;
   hasRichness: boolean;
+  /** Set only for terrain controls, to split them into their two tables. */
+  terrainGroup?: TerrainGroup;
 }
 
 function resource(planet: Planet, label: string): ControlEntry {
   return { planet, category: "resource", label, hasRichness: true };
 }
 
-function terrain(planet: Planet, label: string): ControlEntry {
-  return { planet, category: "terrain", label, hasRichness: false };
+function terrain(
+  planet: Planet,
+  label: string,
+  terrainGroup: TerrainGroup = "coverage",
+): ControlEntry {
+  return { planet, category: "terrain", label, hasRichness: false, terrainGroup };
+}
+
+function cliff(planet: Planet, label: string): ControlEntry {
+  return terrain(planet, label, "cliff");
 }
 
 function enemy(planet: Planet, label: string): ControlEntry {
@@ -34,7 +56,7 @@ export const CONTROL_CATALOG: Record<string, ControlEntry> = {
   trees: terrain("nauvis", "Trees"),
   water: terrain("nauvis", "Water"),
   rocks: terrain("nauvis", "Rocks"),
-  nauvis_cliff: terrain("nauvis", "Cliffs"),
+  nauvis_cliff: cliff("nauvis", "Cliffs"),
   starting_area_moisture: terrain("nauvis", "Starting area moisture"),
   // Vulcanus
   vulcanus_coal: resource("vulcanus", "Coal"),
@@ -46,12 +68,12 @@ export const CONTROL_CATALOG: Record<string, ControlEntry> = {
   gleba_stone: resource("gleba", "Stone"),
   gleba_water: terrain("gleba", "Water"),
   gleba_plants: terrain("gleba", "Plants"),
-  gleba_cliff: terrain("gleba", "Cliffs"),
+  gleba_cliff: cliff("gleba", "Cliffs"),
   gleba_enemy_base: enemy("gleba", "Enemy bases"),
   // Fulgora
   scrap: resource("fulgora", "Scrap"),
   lithium_brine: resource("fulgora", "Lithium brine"),
-  fulgora_cliff: terrain("fulgora", "Cliffs"),
+  fulgora_cliff: cliff("fulgora", "Cliffs"),
   fulgora_islands: terrain("fulgora", "Islands"),
   // Aquilo
   aquilo_crude_oil: resource("aquilo", "Crude oil"),
@@ -70,4 +92,14 @@ export function controlsFor(planet: Planet, category: ControlCategory): string[]
  */
 export function controlsForCategory(category: ControlCategory): string[] {
   return PLANETS.flatMap((planet) => controlsFor(planet, category));
+}
+
+/**
+ * Terrain controls of one group (coverage or cliff), in planet order, so the
+ * Terrain tab can render its two tables from the single terrain category.
+ */
+export function controlsForTerrainGroup(group: TerrainGroup): string[] {
+  return controlsForCategory("terrain").filter(
+    (name) => CONTROL_CATALOG[name]?.terrainGroup === group,
+  );
 }
