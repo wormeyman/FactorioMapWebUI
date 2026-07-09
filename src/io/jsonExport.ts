@@ -23,6 +23,7 @@ export function toMapGenSettingsJson(preset: Preset): object {
     starting_area: preset.startingArea,
     peaceful_mode: preset.peacefulMode,
     no_enemies_mode: preset.noEnemiesMode,
+    default_enable_all_autoplace_controls: preset.defaultEnableAllAutoplaceControls,
     autoplace_controls: Object.fromEntries(
       Object.entries(preset.autoplaceControls).map(([name, s]) => [
         name,

@@ -27,6 +27,11 @@ describe("toMapGenSettingsJson", () => {
     ).toBeCloseTo(40, 4);
   });
 
+  it("emits default_enable_all_autoplace_controls true for the Default preset", () => {
+    const j = toMapGenSettingsJson(preset("Default")) as Record<string, unknown>;
+    expect(j["default_enable_all_autoplace_controls"]).toBe(true);
+  });
+
   it("emits peaceful_mode and no_enemies_mode false for the Default preset", () => {
     const j = toMapGenSettingsJson(preset("Default")) as Record<string, unknown>;
     expect(j["peaceful_mode"]).toBe(false);
