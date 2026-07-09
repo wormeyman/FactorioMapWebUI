@@ -13,12 +13,17 @@ import fixtures from "./fixtures/builtin-presets.json";
 const presets = fixtures.presets as Record<string, string>;
 const NAMES = Object.keys(presets);
 
-// The variable-length starting_points fixtures, including the multi-point case.
+// The variable-length starting_points fixtures, including the multi-point case,
+// plus the area_to_generate_at_start negative-control fixtures (large
+// starting_area and a tiny finite map). All must round-trip byte-for-byte
+// through the head + area + rest + starting_points mid-block path.
 const STARTING_POINT_FIXTURES = [
   "test/fixtures/starting-points-1-origin.txt",
   "test/fixtures/starting-points-1-x450.txt",
   "test/fixtures/starting-points-1-y450.txt",
   "test/fixtures/starting-points-2pt.txt",
+  "test/fixtures/starting-area-5.txt",
+  "test/fixtures/map-64x64.txt",
 ];
 
 describe("encodePayload", () => {

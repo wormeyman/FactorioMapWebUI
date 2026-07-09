@@ -11,6 +11,7 @@ import {
   tailToBytes,
 } from "../src/codec/mapExchangeString";
 import fixtures from "./fixtures/builtin-presets.json";
+import mapExchangeParsed from "./fixtures/map-exchange-parsed.default-seed123456.dump.json";
 import nauvisDump from "./fixtures/map-gen-settings.default-nauvis.dump.json";
 import mapDefaults from "./fixtures/map-settings.example.json";
 
@@ -106,12 +107,14 @@ describe("decodeExchangeString", () => {
   });
 
   it.each(NAMES)(
-    "mid block of %s splits into count + defaultEnable + seed + width + height + restA(24) + startingArea + peaceful + noEnemies + startingPoints",
+    "mid block of %s splits into count + defaultEnable + seed + width + height + areaToGenerateAtStart + startingArea + peaceful + noEnemies + startingPoints",
     (name) => {
       const mid = decodeExchangeString(presets[name] as string).mid;
       expect(mid.autoplaceSettingsCount).toBe(0);
       expect(typeof mid.defaultEnableAllAutoplaceControls).toBe("boolean");
-      expect(mid.opaqueRestA.length).toBe(24);
+      expect(mid.areaToGenerateAtStart.leftTop).toEqual({ x: -224, y: -224 });
+      expect(mid.areaToGenerateAtStart.rightBottom).toEqual({ x: 224, y: 224 });
+      expect(mid.areaToGenerateAtStart.trailer.length).toBe(4);
       expect(mid.startingPoints).toEqual([{ x: 0, y: 0 }]);
       expect(mid.width).toBe(2000000);
       expect(typeof mid.seed).toBe("number");
@@ -125,8 +128,28 @@ describe("decodeExchangeString", () => {
     const mid = decodeExchangeString(presets["Default"] as string).mid;
     expect(mid.seed).toBe(34658944); // 0x0210DA80, Default's baked seed
     expect(mid.startingArea).toBeCloseTo(1.0, 6);
-    expect(mid.opaqueRestA.length).toBe(24);
     expect(mid.startingPoints).toEqual([{ x: 0, y: 0 }]);
+  });
+
+  it("types area_to_generate_at_start as the constant (-224,-224)-(+224,+224) box for every sample", () => {
+    // area_to_generate_at_start is a vestigial engine field: it is absent from the
+    // 2.x MapGenSettings Lua type and from helpers.parse_map_exchange_string, and
+    // is byte-identical across the whole corpus and across generated fixtures that
+    // vary starting_area (up to 5.0), map size (down to 64x64) and starting_points.
+    // The two corners use the same 0x7fff-sentinel + absolute-int32 MapPosition
+    // encoding validated against the game for starting_points.
+    const samples = [
+      ...NAMES.map((n) => presets[n] as string),
+      ...startingPointFixtures.map(([, path]) => readFileSync(path, "utf8").trim()),
+      readFileSync("test/fixtures/starting-area-5.txt", "utf8").trim(),
+      readFileSync("test/fixtures/map-64x64.txt", "utf8").trim(),
+    ];
+    for (const s of samples) {
+      const area = decodeExchangeString(s).mid.areaToGenerateAtStart;
+      expect(area.leftTop).toEqual({ x: -224, y: -224 });
+      expect(area.rightBottom).toEqual({ x: 224, y: 224 });
+      expect([...area.trailer]).toEqual([0x00, 0x00, 0x01, 0x80]);
+    }
   });
 
   it("decodes peaceful_mode and no_enemies_mode as false for every builtin", () => {
@@ -204,6 +227,30 @@ describe("decodeExchangeString", () => {
     new DataView(tampered.buffer).setUint32(body.length, crc, true);
     const restrung = `>>>${bytesToBase64(deflateLevel9(tampered))}<<<`;
     expect(() => decodeExchangeString(restrung)).toThrow(/starting_points/);
+  });
+
+  it("agrees field-for-field with the game's own helpers.parse_map_exchange_string", () => {
+    // map-exchange-parsed.default-seed123456.dump.json is the authoritative parse
+    // of starting-points-1-origin.txt (byte-identical to a default seed-123456
+    // Space-Age map) produced in-game by helpers.parse_map_exchange_string. It
+    // validates the whole mid-block decoder against ground truth, and confirms
+    // area_to_generate_at_start is absent from the game's parsed table (it is a
+    // vestigial serialization field with no public MapGenSettings member).
+    const oracle = mapExchangeParsed.map_gen_settings as Record<string, unknown>;
+    const mid = decodeExchangeString(
+      readFileSync("test/fixtures/starting-points-1-origin.txt", "utf8").trim(),
+    ).mid;
+    expect(mid.seed).toBe(oracle["seed"]);
+    expect(mid.width).toBe(oracle["width"]);
+    expect(mid.height).toBe(oracle["height"]);
+    expect(mid.startingArea).toBeCloseTo(oracle["starting_area"] as number, 6);
+    expect(mid.peacefulMode).toBe(oracle["peaceful_mode"]);
+    expect(mid.noEnemiesMode).toBe(oracle["no_enemies_mode"]);
+    expect(mid.defaultEnableAllAutoplaceControls).toBe(
+      oracle["default_enable_all_autoplace_controls"],
+    );
+    expect(mid.startingPoints).toEqual(oracle["starting_points"]);
+    expect("area_to_generate_at_start" in oracle).toBe(false);
   });
 
   it("types map width and height from the mid-block (Ribbon world proves the height offset)", () => {
