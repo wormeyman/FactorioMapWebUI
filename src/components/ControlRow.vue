@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { CONTROL_CATALOG } from "../model/controlCatalog";
+import { PLANET_ICONS, PLANET_LABELS } from "../model/planets";
 import { usePresetsStore } from "../store/presets";
 import FNumberInput from "../ui/FNumberInput.vue";
 import FSlider from "../ui/FSlider.vue";
@@ -15,6 +16,17 @@ const control = computed(() => store.activePreset?.autoplaceControls[props.name]
 <template>
   <tr v-if="entry && control" class="control-row" :data-test="`control-row-${name}`">
     <td class="label">{{ entry.label }}</td>
+    <td class="appears-on">
+      <img
+        data-test="appears-on"
+        class="planet-icon"
+        :src="PLANET_ICONS[entry.planet]"
+        :alt="PLANET_LABELS[entry.planet]"
+        :title="PLANET_LABELS[entry.planet]"
+        width="24"
+        height="24"
+      />
+    </td>
     <td class="cell">
       <FSlider v-model="control.frequency" />
       <FNumberInput v-model="control.frequency" />
@@ -36,6 +48,19 @@ const control = computed(() => store.activePreset?.autoplaceControls[props.name]
 .label {
   font-weight: 700;
   padding: 6px 8px;
+}
+
+.appears-on {
+  padding: 6px 8px;
+  text-align: center;
+  width: 1%;
+  white-space: nowrap;
+}
+
+.planet-icon {
+  display: block;
+  margin: 0 auto;
+  vertical-align: middle;
 }
 
 .cell {

@@ -1,12 +1,11 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { controlsFor, type ControlCategory } from "../model/controlCatalog";
-import type { Planet } from "../model/planets";
+import { controlsForCategory, type ControlCategory } from "../model/controlCatalog";
 import ControlRow from "./ControlRow.vue";
 
-const props = defineProps<{ planet: Planet; category: ControlCategory }>();
+const props = defineProps<{ category: ControlCategory }>();
 
-const names = computed(() => controlsFor(props.planet, props.category));
+const names = computed(() => controlsForCategory(props.category));
 </script>
 
 <template>
@@ -14,6 +13,7 @@ const names = computed(() => controlsFor(props.planet, props.category));
     <thead>
       <tr>
         <th>{{ category === "resource" ? "Resource" : "Setting" }}</th>
+        <th class="appears-on-th">Appears on</th>
         <th>Frequency</th>
         <th>Size</th>
         <th>Richness</th>
@@ -23,7 +23,7 @@ const names = computed(() => controlsFor(props.planet, props.category));
       <ControlRow v-for="name in names" :key="name" :name="name" />
     </tbody>
   </table>
-  <p v-if="names.length === 0" class="empty">No {{ category }} controls on this planet.</p>
+  <p v-if="names.length === 0" class="empty">No {{ category }} controls.</p>
 </template>
 
 <style scoped>
@@ -37,6 +37,10 @@ const names = computed(() => controlsFor(props.planet, props.category));
   padding: 6px 8px;
   color: var(--f-text-dim);
   border-bottom: 1px solid var(--f-edge-dark);
+}
+
+.control-table th.appears-on-th {
+  text-align: center;
 }
 
 .control-table :deep(tr:nth-child(even)) {

@@ -41,19 +41,29 @@ describe("App shell", () => {
     expect((seed.element as HTMLInputElement).disabled).toBe(false);
   });
 
-  it("shows nauvis resource rows by default", () => {
+  it("shows resource controls from every planet at once", () => {
     const w = mountApp();
-    for (const label of ["Coal", "Iron ore", "Copper ore", "Uranium ore"]) {
+    // One label from each planet - all visible in the single unified table.
+    for (const label of [
+      "Iron ore", // nauvis
+      "Tungsten ore", // vulcanus
+      "Scrap", // fulgora
+      "Fluorine vent", // aquilo
+    ]) {
       expect(w.text()).toContain(label);
     }
-    expect(w.text()).not.toContain("Tungsten ore");
   });
 
-  it("switching the preview planet dropdown switches the visible controls", async () => {
+  it('gives each control row an "Appears on" planet icon labelled with its planet', () => {
     const w = mountApp();
-    await w.find('select[data-test="planet-select"]').setValue("vulcanus");
-    expect(w.text()).toContain("Tungsten ore");
-    expect(w.text()).not.toContain("Iron ore");
+    expect(w.text()).toContain("Appears on");
+    const coalIcon = w.find('[data-test="control-row-coal"] img[data-test="appears-on"]');
+    expect(coalIcon.exists()).toBe(true);
+    expect(coalIcon.attributes("alt")).toBe("Nauvis");
+    const tungstenIcon = w.find(
+      '[data-test="control-row-tungsten_ore"] img[data-test="appears-on"]',
+    );
+    expect(tungstenIcon.attributes("alt")).toBe("Vulcanus");
   });
 
   it("editing a frequency number input updates the store", async () => {

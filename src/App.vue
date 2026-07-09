@@ -26,9 +26,9 @@ const showImport = ref(false);
       <div class="editor f-bevel-out">
         <FTabs v-model="activeTab" :tabs="TABS" />
         <div class="tab-content">
-          <ResourcesTab v-if="activeTab === 'Resources'" :planet="selectedPlanet" />
-          <TerrainTab v-else-if="activeTab === 'Terrain'" :planet="selectedPlanet" />
-          <EnemyTab v-else-if="activeTab === 'Enemy'" :planet="selectedPlanet" />
+          <ResourcesTab v-if="activeTab === 'Resources'" />
+          <TerrainTab v-else-if="activeTab === 'Terrain'" />
+          <EnemyTab v-else-if="activeTab === 'Enemy'" />
           <AdvancedTab v-else />
         </div>
       </div>
