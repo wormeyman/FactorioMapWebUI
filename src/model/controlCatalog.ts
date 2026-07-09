@@ -1,4 +1,4 @@
-import type { Planet } from "./planets";
+import { PLANETS, type Planet } from "./planets";
 
 export type ControlCategory = "resource" | "terrain" | "enemy";
 
@@ -62,4 +62,12 @@ export function controlsFor(planet: Planet, category: ControlCategory): string[]
   return Object.entries(CONTROL_CATALOG)
     .filter(([, entry]) => entry.planet === planet && entry.category === category)
     .map(([name]) => name);
+}
+
+/**
+ * Every control of a category across all planets, grouped in planet order
+ * (Nauvis first), matching the game's single "Appears on"-tagged table.
+ */
+export function controlsForCategory(category: ControlCategory): string[] {
+  return PLANETS.flatMap((planet) => controlsFor(planet, category));
 }

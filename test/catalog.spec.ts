@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import { decodeExchangeString } from "../src/codec/mapExchangeString";
-import { CONTROL_CATALOG, controlsFor } from "../src/model/controlCatalog";
+import { CONTROL_CATALOG, controlsFor, controlsForCategory } from "../src/model/controlCatalog";
 import { PLANETS } from "../src/model/planets";
 import fixtures from "./fixtures/builtin-presets.json";
 
@@ -35,6 +35,30 @@ describe("control catalog", () => {
   it("every planet has at least one resource control", () => {
     for (const planet of PLANETS) {
       expect(controlsFor(planet, "resource").length).toBeGreaterThan(0);
+    }
+  });
+
+  it("lists every planet's resource controls together, grouped in planet order", () => {
+    const names = controlsForCategory("resource");
+    // Union across all planets, no duplicates or omissions.
+    expect([...names].sort()).toEqual(
+      Object.entries(CONTROL_CATALOG)
+        .filter(([, e]) => e.category === "resource")
+        .map(([n]) => n)
+        .sort(),
+    );
+    // Ordered by planet: each control's planet index is non-decreasing.
+    const planetIndex = names.map((n) => PLANETS.indexOf(CONTROL_CATALOG[n]!.planet));
+    expect(planetIndex).toEqual([...planetIndex].sort((a, b) => a - b));
+    // Nauvis resources come first, and Vulcanus's tungsten appears after them.
+    expect(names.indexOf("iron-ore")).toBeLessThan(names.indexOf("tungsten_ore"));
+  });
+
+  it("controlsForCategory concatenates the per-planet lists", () => {
+    for (const category of ["resource", "terrain", "enemy"] as const) {
+      const combined = controlsForCategory(category);
+      const perPlanet = PLANETS.flatMap((p) => controlsFor(p, category));
+      expect(combined).toEqual(perPlanet);
     }
   });
 
