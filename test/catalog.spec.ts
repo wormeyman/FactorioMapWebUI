@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vite-plus/test";
 import { decodeExchangeString } from "../src/codec/mapExchangeString";
-import { CONTROL_CATALOG, controlsFor, controlsForCategory } from "../src/model/controlCatalog";
+import {
+  CONTROL_CATALOG,
+  controlsFor,
+  controlsForCategory,
+  controlsForTerrainGroup,
+} from "../src/model/controlCatalog";
 import { PLANETS } from "../src/model/planets";
 import fixtures from "./fixtures/builtin-presets.json";
 
@@ -66,5 +71,41 @@ describe("control catalog", () => {
     for (const [name, entry] of Object.entries(CONTROL_CATALOG)) {
       expect(entry.hasRichness, name).toBe(entry.category === "resource");
     }
+  });
+});
+
+describe("terrain groups", () => {
+  it("tags every terrain control with a group and leaves non-terrain untagged", () => {
+    for (const [name, entry] of Object.entries(CONTROL_CATALOG)) {
+      if (entry.category === "terrain") {
+        expect(["coverage", "cliff"], name).toContain(entry.terrainGroup);
+      } else {
+        expect(entry.terrainGroup, name).toBeUndefined();
+      }
+    }
+  });
+
+  it("classes exactly the three cliff controls as the cliff group", () => {
+    expect(controlsForTerrainGroup("cliff").sort()).toEqual([
+      "fulgora_cliff",
+      "gleba_cliff",
+      "nauvis_cliff",
+    ]);
+  });
+
+  it("puts the remaining terrain controls in the coverage group, including water and excluding cliffs", () => {
+    const coverage = controlsForTerrainGroup("coverage");
+    expect(coverage).toContain("water");
+    expect(coverage).not.toContain("nauvis_cliff");
+    // Coverage plus cliffs partition the full terrain category.
+    expect([...coverage, ...controlsForTerrainGroup("cliff")].sort()).toEqual(
+      [...controlsForCategory("terrain")].sort(),
+    );
+  });
+
+  it("lists a terrain group's controls in planet order", () => {
+    const names = controlsForTerrainGroup("coverage");
+    const planetIndex = names.map((n) => PLANETS.indexOf(CONTROL_CATALOG[n]!.planet));
+    expect(planetIndex).toEqual([...planetIndex].sort((a, b) => a - b));
   });
 });

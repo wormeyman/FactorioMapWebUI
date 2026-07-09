@@ -1,9 +1,19 @@
 <script setup lang="ts">
-withDefaults(defineProps<{ modelValue: number; min?: number; max?: number; step?: number }>(), {
-  min: 0,
-  max: 6,
-  step: 0.05,
-});
+withDefaults(
+  defineProps<{
+    modelValue: number;
+    min?: number;
+    max?: number;
+    step?: number;
+    disabled?: boolean;
+  }>(),
+  {
+    min: 0,
+    max: 6,
+    step: 0.05,
+    disabled: false,
+  },
+);
 const emit = defineEmits<{ "update:modelValue": [value: number] }>();
 
 function onInput(event: Event) {
@@ -19,6 +29,7 @@ function onInput(event: Event) {
     :max="max"
     :step="step"
     :value="modelValue"
+    :disabled="disabled"
     @input="onInput"
   />
 </template>

@@ -1,29 +1,31 @@
 <script setup lang="ts">
-import { computed } from "vue";
-import { controlsForCategory, type ControlCategory } from "../model/controlCatalog";
+import type { ControlColumn } from "../model/controlCatalog";
 import ControlRow from "./ControlRow.vue";
 
-const props = defineProps<{ category: ControlCategory }>();
-
-const names = computed(() => controlsForCategory(props.category));
+defineProps<{
+  /** Wire names of the controls to render, in row order. */
+  names: string[];
+  /** Relabelled autoplace columns, e.g. Scale/Coverage. */
+  columns: ControlColumn[];
+  /** Header for the first (name) column, e.g. "Resource" or "Setting". */
+  leadLabel: string;
+}>();
 </script>
 
 <template>
   <table class="control-table">
     <thead>
       <tr>
-        <th>{{ category === "resource" ? "Resource" : "Setting" }}</th>
+        <th>{{ leadLabel }}</th>
         <th class="appears-on-th">Appears on</th>
-        <th>Frequency</th>
-        <th>Size</th>
-        <th>Richness</th>
+        <th v-for="col in columns" :key="col.key">{{ col.label }}</th>
       </tr>
     </thead>
     <tbody>
-      <ControlRow v-for="name in names" :key="name" :name="name" />
+      <ControlRow v-for="name in names" :key="name" :name="name" :columns="columns" />
     </tbody>
   </table>
-  <p v-if="names.length === 0" class="empty">No {{ category }} controls.</p>
+  <p v-if="names.length === 0" class="empty">No controls.</p>
 </template>
 
 <style scoped>

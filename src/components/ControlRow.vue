@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { CONTROL_CATALOG } from "../model/controlCatalog";
+import { CONTROL_CATALOG, type ControlColumn } from "../model/controlCatalog";
 import { PLANET_ICONS, PLANET_LABELS } from "../model/planets";
 import { usePresetsStore } from "../store/presets";
 import FNumberInput from "../ui/FNumberInput.vue";
 import FSlider from "../ui/FSlider.vue";
 
-const props = defineProps<{ name: string }>();
+const props = defineProps<{ name: string; columns: ControlColumn[] }>();
 const store = usePresetsStore();
 
 const entry = computed(() => CONTROL_CATALOG[props.name]);
@@ -27,19 +27,9 @@ const control = computed(() => store.activePreset?.autoplaceControls[props.name]
         height="24"
       />
     </td>
-    <td class="cell">
-      <FSlider v-model="control.frequency" />
-      <FNumberInput v-model="control.frequency" />
-    </td>
-    <td class="cell">
-      <FSlider v-model="control.size" />
-      <FNumberInput v-model="control.size" />
-    </td>
-    <td class="cell">
-      <template v-if="entry.hasRichness">
-        <FSlider v-model="control.richness" />
-        <FNumberInput v-model="control.richness" />
-      </template>
+    <td v-for="col in columns" :key="col.key" class="cell">
+      <FSlider v-model="control[col.key]" />
+      <FNumberInput v-model="control[col.key]" />
     </td>
   </tr>
 </template>
