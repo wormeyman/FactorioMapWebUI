@@ -13,8 +13,9 @@ export function presetFromDecoded(name: string, decoded: DecodedExchange, builti
   return {
     name,
     builtin,
-    seed: decoded.mid.seed,
-    randomEachMap: true,
+    // Wire 0 is Factorio's "random" sentinel; surface it as null so the
+    // "random each new map" state is a single source of truth.
+    seed: decoded.mid.seed === 0 ? null : decoded.mid.seed,
     autoplaceControls: structuredClone(decoded.autoplaceControls),
     width: decoded.mid.width,
     height: decoded.mid.height,
