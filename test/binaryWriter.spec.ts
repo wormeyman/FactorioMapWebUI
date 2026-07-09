@@ -18,6 +18,16 @@ describe("BinaryWriter", () => {
     expect(r.readFloat64()).toBe(2.25);
   });
 
+  it("writes signed int32 in little-endian, round-tripping negatives through the reader", () => {
+    const w = new BinaryWriter();
+    w.writeInt32(115200);
+    w.writeInt32(-115200);
+    expect([...w.toBytes()]).toEqual([0x00, 0xc2, 0x01, 0x00, 0x00, 0x3e, 0xfe, 0xff]);
+    const r = new BinaryReader(w.toBytes());
+    expect(r.readInt32()).toBe(115200);
+    expect(r.readInt32()).toBe(-115200);
+  });
+
   it("writes uint16 in little-endian byte order", () => {
     const w = new BinaryWriter();
     w.writeUint16(0x1234);

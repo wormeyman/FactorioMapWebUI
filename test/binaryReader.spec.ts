@@ -19,6 +19,13 @@ describe("BinaryReader", () => {
     expect(r.remaining()).toEqual(new Uint8Array(0));
   });
 
+  it("reads signed little-endian int32, including negative values", () => {
+    // 0x0001C200 = 115200 (450*256); 0xFFFE3E00 = -115200
+    const r = new BinaryReader(new Uint8Array([0x00, 0xc2, 0x01, 0x00, 0x00, 0x3e, 0xfe, 0xff]));
+    expect(r.readInt32()).toBe(115200);
+    expect(r.readInt32()).toBe(-115200);
+  });
+
   it("reads a uint8-length-prefixed UTF-8 string", () => {
     const r = new BinaryReader(new Uint8Array([4, 0x63, 0x6f, 0x61, 0x6c, 0xff]));
     expect(r.readString()).toBe("coal");

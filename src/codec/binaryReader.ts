@@ -42,6 +42,10 @@ export class BinaryReader {
     return this.view.getUint32(this.advance(4), true);
   }
 
+  readInt32(): number {
+    return this.view.getInt32(this.advance(4), true);
+  }
+
   readFloat32(): number {
     return this.view.getFloat32(this.advance(4), true);
   }
