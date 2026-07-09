@@ -29,7 +29,15 @@ export interface MidBlock {
   width: number;
   /** Map height in tiles (u32 LE at mid offset 10). */
   height: number;
-  /** 24 opaque bytes between height and starting_area (autoplace_settings flags, starting_points; unmapped). */
+  /**
+   * 24 opaque bytes between height and starting_area. The `ff 7f` / `ff ff`
+   * bytes look like Factorio's delta MapPosition encoding (0x7fff sentinel),
+   * so this is likely a BoundingBox-shaped field - possibly territory_settings
+   * or an internally-serialized region. NOT area_to_generate_at_start: that
+   * name is from a 1.x parser and does not exist in the 2.x MapGenSettings type
+   * (https://lua-api.factorio.com/latest/types/MapGenSettings.html). Byte-
+   * identical across the corpus; unmapped pending a positive fixture.
+   */
   opaqueRestA: Uint8Array;
   /** Starting-area size scale (f32 LE at mid offset 38). */
   startingArea: number;
@@ -37,7 +45,13 @@ export interface MidBlock {
   peacefulMode: boolean;
   /** no_enemies_mode flag (bool at mid offset 43). */
   noEnemiesMode: boolean;
-  /** 11 opaque bytes after no_enemies_mode (starting_points and friends; unmapped). */
+  /**
+   * 11 opaque bytes after no_enemies_mode: `01 ff 7f 00 00 00 00 00 00 00 00`.
+   * Per the 2.x MapGenSettings type this is starting_points (array[MapPosition]):
+   * a `01` count followed by one delta-encoded MapPosition (the `ff 7f` = 0x7fff
+   * sentinel). Byte-identical across the corpus; unmapped pending a fixture with
+   * a moved/extra starting point to verify the layout.
+   */
   opaqueRestB: Uint8Array;
 }
 
@@ -68,8 +82,9 @@ export class ExchangeStringError extends Error {}
 const MIN_PAYLOAD_LENGTH = 70;
 
 // Schema for the 55-byte MapGenSettings block between autoplace and
-// property_expression_names (terrain / water / starting area; varies per preset).
-// Empirical for format 2.1.9.3, verified on all 9 fixtures.
+// property_expression_names. Empirical for format 2.1.9.3, verified on all 9
+// fixtures. Field names/types cross-checked against the 2.x MapGenSettings type
+// (https://lua-api.factorio.com/latest/types/MapGenSettings.html).
 // One ordered schema shared by decode and encode; fixed widths MUST sum to 55: 1 + 1 + 4 + 4 + 4 + 24 + 4 + 1 + 1 + 11.
 // The head is a length-prefixed autoplace_settings dict (empty: one 0x00 count
 // byte) followed by default_enable_all_autoplace_controls (0x01 = true), which
@@ -78,6 +93,9 @@ const MIN_PAYLOAD_LENGTH = 70;
 // peaceful_mode and no_enemies_mode are the two bytes immediately after
 // starting_area, pinned by the single-toggle fixtures defaultgenwithpeaceful.txt
 // and defaultmodenoenemiespeacefulunchecked.txt (both flip exactly their byte).
+// opaqueRestA (BoundingBox-shaped; likely territory_settings) and opaqueRestB
+// (starting_points, array[MapPosition]) stay opaque - byte-identical across the
+// corpus, so cracking them needs a positive fixture (see their field docs).
 export const MID_BLOCK_SCHEMA: Schema = [
   { name: "autoplaceSettingsCount", type: "u8" },
   { name: "defaultEnableAllAutoplaceControls", type: "bool" },
