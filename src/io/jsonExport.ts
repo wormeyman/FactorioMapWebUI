@@ -9,10 +9,10 @@ import type { Preset } from "../model/types";
  * `mapSettings`) plus the raw autoplace/property maps. These two functions are
  * pure key-renames from camelCase to the game's snake_case shape; no bytes.
  *
- * A few mid-block fields are still opaque (starting_points,
- * autoplace_settings). They are emitted here as their corpus-constant
- * defaults so the JSON is a complete, valid game document. peaceful_mode and
- * no_enemies_mode are now decoded and carried through on the Preset.
+ * The autoplace_settings dict is still opaque and is emitted as its
+ * corpus-constant default (empty) so the JSON is a complete, valid game
+ * document. peaceful_mode, no_enemies_mode and starting_points are decoded and
+ * carried through on the Preset.
  */
 
 export function toMapGenSettingsJson(preset: Preset): object {
@@ -39,7 +39,7 @@ export function toMapGenSettingsJson(preset: Preset): object {
       richness: c.richness,
     },
     property_expression_names: { ...preset.propertyExpressionNames },
-    starting_points: [{ x: 0, y: 0 }],
+    starting_points: preset.startingPoints.map((p) => ({ x: p.x, y: p.y })),
     seed: preset.seed,
   };
 }

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vite-plus/test";
 import { bytesToBase64 } from "../src/codec/base64";
 import { deflateLevel9 } from "../src/codec/deflate";
@@ -11,6 +12,14 @@ import fixtures from "./fixtures/builtin-presets.json";
 
 const presets = fixtures.presets as Record<string, string>;
 const NAMES = Object.keys(presets);
+
+// The variable-length starting_points fixtures, including the multi-point case.
+const STARTING_POINT_FIXTURES = [
+  "test/fixtures/starting-points-1-origin.txt",
+  "test/fixtures/starting-points-1-x450.txt",
+  "test/fixtures/starting-points-1-y450.txt",
+  "test/fixtures/starting-points-2pt.txt",
+];
 
 describe("encodePayload", () => {
   it.each(NAMES)("rebuilds the %s payload byte-for-byte (primary round-trip)", (name) => {
@@ -61,6 +70,14 @@ describe("encodeExchangeString", () => {
     const decoded = decodeExchangeString(original);
     expect(encodeExchangeString(decoded)).toBe(original);
   });
+
+  it.each(STARTING_POINT_FIXTURES)(
+    "re-emits the exact %s string byte-for-byte (variable-length mid trailer)",
+    (path) => {
+      const original = readFileSync(path, "utf8").trim();
+      expect(encodeExchangeString(decodeExchangeString(original))).toBe(original);
+    },
+  );
 
   it("produces a single-line >>> ... <<< envelope with no interior whitespace", () => {
     const decoded = decodeExchangeString(presets["Default"] as string);

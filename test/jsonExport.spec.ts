@@ -53,6 +53,28 @@ describe("toMapGenSettingsJson", () => {
     expect(j["no_enemies_mode"]).toBe(true);
     expect(j["peaceful_mode"]).toBe(false);
   });
+
+  it("emits the origin starting_points for the Default preset", () => {
+    const j = toMapGenSettingsJson(preset("Default")) as Record<string, unknown>;
+    expect(j["starting_points"]).toEqual([{ x: 0, y: 0 }]);
+  });
+
+  it("emits the decoded starting_points for the x450 fixture", () => {
+    const j = toMapGenSettingsJson(
+      presetFromFile("test/fixtures/starting-points-1-x450.txt"),
+    ) as Record<string, unknown>;
+    expect(j["starting_points"]).toEqual([{ x: 450, y: 0 }]);
+  });
+
+  it("emits both decoded starting_points for the two-point fixture", () => {
+    const j = toMapGenSettingsJson(
+      presetFromFile("test/fixtures/starting-points-2pt.txt"),
+    ) as Record<string, unknown>;
+    expect(j["starting_points"]).toEqual([
+      { x: 0, y: 0 },
+      { x: 450, y: 0 },
+    ]);
+  });
 });
 
 describe("toMapSettingsJson", () => {

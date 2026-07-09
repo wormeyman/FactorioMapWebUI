@@ -24,7 +24,7 @@ export function presetFromDecoded(name: string, decoded: DecodedExchange, builti
     noEnemiesMode: decoded.mid.noEnemiesMode,
     defaultEnableAllAutoplaceControls: decoded.mid.defaultEnableAllAutoplaceControls,
     opaqueMidRestAB64: bytesToBase64(decoded.mid.opaqueRestA),
-    opaqueMidRestBB64: bytesToBase64(decoded.mid.opaqueRestB),
+    startingPoints: structuredClone(decoded.mid.startingPoints),
     propertyExpressionNames: structuredClone(decoded.propertyExpressionNames),
     opaqueTailB64: bytesToBase64(tailToBytes(decoded.tail)),
     cliffSettings: cliff,
@@ -35,8 +35,8 @@ export function presetFromDecoded(name: string, decoded: DecodedExchange, builti
 
 /**
  * Bridge a Preset back to the encoder's input. The flag byte is a constant 0
- * (never observed otherwise); width/height/seed/startingArea/enable flags are
- * typed fields, the remaining mid-block bytes are carried opaquely, and the
+ * (never observed otherwise); width/height/seed/startingArea/enable flags and
+ * startingPoints are typed fields, opaqueRestA is carried opaquely, and the
  * tail is re-emitted verbatim. autoplaceSettingsCount is always 0 (decode
  * rejects anything else), so it is re-emitted as 0.
  */
@@ -55,7 +55,7 @@ export function presetToEncodable(preset: Preset): EncodableExchange {
       startingArea: preset.startingArea,
       peacefulMode: preset.peacefulMode,
       noEnemiesMode: preset.noEnemiesMode,
-      opaqueRestB: base64ToBytes(preset.opaqueMidRestBB64),
+      startingPoints: preset.startingPoints.map((p) => ({ x: p.x, y: p.y })),
     },
     propertyExpressionNames: preset.propertyExpressionNames,
     tail: bytesToTail(base64ToBytes(preset.opaqueTailB64)),
