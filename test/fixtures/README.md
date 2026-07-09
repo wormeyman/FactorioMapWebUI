@@ -14,6 +14,10 @@ them byte-for-byte as captured.
 | `starting-area-diff.txt` | Default with a non-default `starting_area` (1.333...) | Single-field capture that pins the mid-block `starting_area` (f32) offset |
 | `defaultgenwithpeaceful.txt` | Default with **peaceful mode ON** | Positive fixture that pins `peaceful_mode`; every builtin is peaceful=false with byte-identical mid-blocks, so a positive example was required |
 | `defaultmodenoenemiespeacefulunchecked.txt` | Default with **no-enemies ON**, peaceful off | Positive fixture that pins `no_enemies_mode` and disambiguates it from `peaceful_mode` |
+| `starting-points-1-origin.txt` | Minimal Space-Age map (seed 123456), `starting_points` = `[{x:0,y:0}]` | Baseline for the variable-length `starting_points` mid-block trailer |
+| `starting-points-1-x450.txt` | Same, `starting_points` = `[{x:450,y:0}]` | Pins the x coordinate (int32, 1/256 fixed-point: 450*256 = 115200 = `00 c2 01 00`) |
+| `starting-points-1-y450.txt` | Same, `starting_points` = `[{x:0,y:450}]` | Pins the y coordinate offset independently of x |
+| `starting-points-2pt.txt` | Same, `starting_points` = `[{x:0,y:0},{x:450,y:0}]` | Multi-point capture that proves the count byte + variable length (payload grows by one 10-byte point group) |
 
 Note: the live 2.1.9 MapGenSettings has no top-level `terrain_segmentation` /
 `water` - `water` is an `autoplace_control`, and terrain/moisture scale live in

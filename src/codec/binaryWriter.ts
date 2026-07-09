@@ -29,6 +29,11 @@ export class BinaryWriter {
     this.pushScratch(4);
   }
 
+  writeInt32(value: number): void {
+    this.scratch.setInt32(0, value, true);
+    this.pushScratch(4);
+  }
+
   writeFloat32(value: number): void {
     this.scratch.setFloat32(0, value, true);
     this.pushScratch(4);

@@ -8,6 +8,7 @@ import {
   encodeExchangeString,
   encodePayload,
   ExchangeStringError,
+  tailToBytes,
 } from "../src/codec/mapExchangeString";
 import fixtures from "./fixtures/builtin-presets.json";
 import nauvisDump from "./fixtures/map-gen-settings.default-nauvis.dump.json";
@@ -25,6 +26,23 @@ const noEnemiesFixture = readFileSync(
   "test/fixtures/defaultmodenoenemiespeacefulunchecked.txt",
   "utf8",
 ).trim();
+
+// Ground-truth starting_points fixtures (captured from Factorio 2.1.9, seed
+// 123456): minimal Space-Age maps that differ only in starting_points, which
+// pins the variable-length mid-block trailer.
+const startingPointFixtures: [string, string, { x: number; y: number }[]][] = [
+  ["origin", "test/fixtures/starting-points-1-origin.txt", [{ x: 0, y: 0 }]],
+  ["x450", "test/fixtures/starting-points-1-x450.txt", [{ x: 450, y: 0 }]],
+  ["y450", "test/fixtures/starting-points-1-y450.txt", [{ x: 0, y: 450 }]],
+  [
+    "2pt",
+    "test/fixtures/starting-points-2pt.txt",
+    [
+      { x: 0, y: 0 },
+      { x: 450, y: 0 },
+    ],
+  ],
+];
 
 describe("decodeExchangeString", () => {
   it.each(NAMES)("decodes %s as format 2.1.9.3 with a valid CRC", (name) => {
@@ -88,13 +106,13 @@ describe("decodeExchangeString", () => {
   });
 
   it.each(NAMES)(
-    "mid block of %s splits into count + defaultEnable + seed + width + height + restA(24) + startingArea + peaceful + noEnemies + restB(11)",
+    "mid block of %s splits into count + defaultEnable + seed + width + height + restA(24) + startingArea + peaceful + noEnemies + startingPoints",
     (name) => {
       const mid = decodeExchangeString(presets[name] as string).mid;
       expect(mid.autoplaceSettingsCount).toBe(0);
       expect(typeof mid.defaultEnableAllAutoplaceControls).toBe("boolean");
       expect(mid.opaqueRestA.length).toBe(24);
-      expect(mid.opaqueRestB.length).toBe(11);
+      expect(mid.startingPoints).toEqual([{ x: 0, y: 0 }]);
       expect(mid.width).toBe(2000000);
       expect(typeof mid.seed).toBe("number");
       expect(typeof mid.startingArea).toBe("number");
@@ -108,7 +126,7 @@ describe("decodeExchangeString", () => {
     expect(mid.seed).toBe(34658944); // 0x0210DA80, Default's baked seed
     expect(mid.startingArea).toBeCloseTo(1.0, 6);
     expect(mid.opaqueRestA.length).toBe(24);
-    expect(mid.opaqueRestB.length).toBe(11);
+    expect(mid.startingPoints).toEqual([{ x: 0, y: 0 }]);
   });
 
   it("decodes peaceful_mode and no_enemies_mode as false for every builtin", () => {
@@ -155,6 +173,37 @@ describe("decodeExchangeString", () => {
   ])("round-trips the %s fixture byte-for-byte", (_label, get) => {
     const decoded = decodeExchangeString(get());
     expect(encodeExchangeString(decoded)).toBe(get());
+  });
+
+  it.each(startingPointFixtures)(
+    "decodes starting_points from the %s fixture",
+    (_label, path, expected) => {
+      const mid = decodeExchangeString(readFileSync(path, "utf8").trim()).mid;
+      expect(mid.startingPoints).toEqual(expected);
+    },
+  );
+
+  it("decodes starting_points as the single origin point for every builtin", () => {
+    for (const name of NAMES) {
+      const mid = decodeExchangeString(presets[name] as string).mid;
+      expect(mid.startingPoints).toEqual([{ x: 0, y: 0 }]);
+    }
+  });
+
+  it("rejects a starting point whose sentinel is not 0x7fff (delta-encoded positions unsupported)", () => {
+    // The origin fixture's one starting point is exactly 11 bytes (count + 2-byte
+    // sentinel + int32 x + int32 y) sitting just before the empty
+    // property_expression_names count and the tail. Corrupt the sentinel there.
+    const decoded = decodeExchangeString(readFileSync(startingPointFixtures[0][1], "utf8").trim());
+    const body = decoded.payload.slice(0, -4);
+    const spBlockStart = body.length - tailToBytes(decoded.tail).length - 1 - 11;
+    body[spBlockStart + 1] = 0x00; // sentinel low byte: 0x7fff -> 0x7f00
+    const crc = crc32(body);
+    const tampered = new Uint8Array(body.length + 4);
+    tampered.set(body, 0);
+    new DataView(tampered.buffer).setUint32(body.length, crc, true);
+    const restrung = `>>>${bytesToBase64(deflateLevel9(tampered))}<<<`;
+    expect(() => decodeExchangeString(restrung)).toThrow(/starting_points/);
   });
 
   it("types map width and height from the mid-block (Ribbon world proves the height offset)", () => {
