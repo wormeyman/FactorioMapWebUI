@@ -26,9 +26,9 @@ export interface Preset {
   noEnemiesMode: boolean;
   /** default_enable_all_autoplace_controls (bool at mid offset 1; typed from the mid-block). */
   defaultEnableAllAutoplaceControls: boolean;
-  /** Base64 of the 24 opaque mid-block bytes between height and starting_area (unmapped). */
+  /** Base64 of the 24 opaque mid-block bytes between height and starting_area (BoundingBox-shaped; likely territory_settings, not the 1.x-era area_to_generate_at_start; unmapped). */
   opaqueMidRestAB64: string;
-  /** Base64 of the 11 opaque mid-block bytes after no_enemies_mode (unmapped). */
+  /** Base64 of the 11 opaque mid-block bytes after no_enemies_mode (starting_points, array[MapPosition]; unmapped pending a fixture). */
   opaqueMidRestBB64: string;
   propertyExpressionNames: Record<string, string>;
   /**
