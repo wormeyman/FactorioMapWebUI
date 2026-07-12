@@ -1,0 +1,9 @@
+{
+  "name": "@fmw/preview-container",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/render.test.mjs",
+    "test:integration": "node --test test/image.integration.test.mjs"
+  }
+}
