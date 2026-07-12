@@ -5,21 +5,19 @@ import { getBuiltinPreset } from "../src/model/builtins";
 afterEach(() => vi.restoreAllMocks());
 
 describe("buildPreviewRequest", () => {
-  it("injects a concrete seed into mapGenSettings when the preset seed is null", () => {
+  it("reconciles the given seed into the request and mgs body", () => {
     const preset = getBuiltinPreset("Default");
-    preset.seed = null;
-    const req = buildPreviewRequest(preset, "vulcanus");
+    const req = buildPreviewRequest(preset, "vulcanus", 123456);
     expect(req.planet).toBe("vulcanus");
     expect(req.size).toBe(1024);
-    expect(Number.isInteger(req.seed)).toBe(true);
-    expect(req.seed).toBeGreaterThanOrEqual(0);
-    expect((req.mapGenSettings as { seed: number }).seed).toBe(req.seed);
+    expect(req.seed).toBe(123456);
+    expect((req.mapGenSettings as { seed: number }).seed).toBe(123456);
   });
 
-  it("uses the preset seed when set", () => {
+  it("uses the passed seed regardless of the preset's own seed", () => {
     const preset = getBuiltinPreset("Default");
     preset.seed = 999;
-    expect(buildPreviewRequest(preset, "nauvis").seed).toBe(999);
+    expect(buildPreviewRequest(preset, "nauvis", 7).seed).toBe(7);
   });
 });
 
@@ -31,7 +29,7 @@ describe("postPreview", () => {
       vi.fn(async () => new Response(blob, { status: 200 })),
     );
     const preset = getBuiltinPreset("Default");
-    const out = await postPreview(buildPreviewRequest(preset, "nauvis"));
+    const out = await postPreview(buildPreviewRequest(preset, "nauvis", 1));
     expect(out).toBeInstanceOf(Blob);
   });
 
@@ -41,7 +39,7 @@ describe("postPreview", () => {
       vi.fn(async () => new Response("nope", { status: 503 })),
     );
     const preset = getBuiltinPreset("Default");
-    await expect(postPreview(buildPreviewRequest(preset, "nauvis"))).rejects.toMatchObject({
+    await expect(postPreview(buildPreviewRequest(preset, "nauvis", 1))).rejects.toMatchObject({
       name: "PreviewError",
       status: 503,
     });

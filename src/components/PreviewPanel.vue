@@ -3,6 +3,7 @@ import { ref } from "vue";
 import { PLANET_LABELS, PLANETS, type Planet } from "../model/planets";
 import { usePresetsStore } from "../store/presets";
 import { buildPreviewRequest, postPreview, PreviewError } from "../io/previewClient";
+import { randomU32 } from "../util/seed";
 import FButton from "../ui/FButton.vue";
 import FDropdown from "../ui/FDropdown.vue";
 
@@ -17,13 +18,24 @@ const seed = ref<number | null>(null);
 const loading = ref(false);
 const error = ref<string | null>(null);
 
-async function generate() {
+// A concrete random seed for presets whose seed is null ("random each new map").
+// Picked once and reused so repeated Generate clicks show the same map; only the
+// re-roll control changes it.
+const rolledSeed = ref<number | null>(null);
+
+async function generate(reroll = false) {
   const preset = store.activePreset;
   if (!preset || loading.value) return;
+  // Resolve a stable, concrete seed. An explicit preset seed always wins; for a
+  // null-seed preset, pick a random seed once (or a fresh one on re-roll).
+  if (reroll || (preset.seed === null && rolledSeed.value === null)) {
+    rolledSeed.value = randomU32();
+  }
+  const useSeed = preset.seed ?? (rolledSeed.value as number);
   loading.value = true;
   error.value = null;
   try {
-    const req = buildPreviewRequest(preset, props.planet);
+    const req = buildPreviewRequest(preset, props.planet, useSeed);
     seed.value = req.seed;
     const blob = await postPreview(req);
     if (imageUrl.value) URL.revokeObjectURL(imageUrl.value);
@@ -50,6 +62,16 @@ async function generate() {
       />
       <span class="spacer" />
       <span v-if="seed !== null" class="seed" data-test="preview-seed">Seed: {{ seed }}</span>
+      <FButton
+        v-if="store.activePreset && store.activePreset.seed === null"
+        data-test="reroll"
+        variant="tool"
+        :disabled="loading"
+        title="Render a new random seed"
+        @click="generate(true)"
+      >
+        Re-roll
+      </FButton>
       <FButton data-test="generate" variant="confirm" :disabled="loading" @click="generate()">
         {{ loading ? "Generating..." : "Generate preview" }}
       </FButton>

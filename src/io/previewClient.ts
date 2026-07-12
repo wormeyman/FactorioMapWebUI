@@ -1,7 +1,6 @@
 import { toMapGenSettingsJson } from "./jsonExport";
 import type { Preset } from "../model/types";
 import type { Planet } from "../model/planets";
-import { randomU32 } from "../util/seed";
 import { PREVIEW_SERVICE_URL } from "../config";
 
 export interface PreviewRequest {
@@ -20,10 +19,15 @@ export class PreviewError extends Error {
   }
 }
 
-export function buildPreviewRequest(preset: Preset, planet: Planet): PreviewRequest {
-  const seed = preset.seed ?? randomU32();
+/**
+ * Build a preview request for `preset` on `planet` at a concrete `seed`. The
+ * caller owns seed selection (the preset seed, or a sticky random one for a
+ * null-seed preset) so repeated renders stay stable; this function just
+ * reconciles the chosen seed into the mgs body to match `--map-gen-seed`.
+ */
+export function buildPreviewRequest(preset: Preset, planet: Planet, seed: number): PreviewRequest {
   const mapGenSettings = toMapGenSettingsJson(preset) as Record<string, unknown>;
-  mapGenSettings.seed = seed; // reconcile: concrete seed in body matches --map-gen-seed
+  mapGenSettings.seed = seed;
   return { mapGenSettings, planet, seed, size: 1024 };
 }
 
