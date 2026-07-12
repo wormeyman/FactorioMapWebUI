@@ -3,8 +3,7 @@ import { computed } from "vue";
 import { CONTROL_CATALOG, type ControlColumn } from "../model/controlCatalog";
 import { PLANET_ICONS, PLANET_LABELS } from "../model/planets";
 import { usePresetsStore } from "../store/presets";
-import FNumberInput from "../ui/FNumberInput.vue";
-import FSlider from "../ui/FSlider.vue";
+import FPercentSlider from "../ui/FPercentSlider.vue";
 
 const props = defineProps<{ name: string; columns: ControlColumn[] }>();
 const store = usePresetsStore();
@@ -28,8 +27,7 @@ const control = computed(() => store.activePreset?.autoplaceControls[props.name]
       />
     </td>
     <td v-for="col in columns" :key="col.key" class="cell">
-      <FSlider v-model="control[col.key]" />
-      <FNumberInput v-model="control[col.key]" />
+      <FPercentSlider v-model="control[col.key]" />
     </td>
   </tr>
 </template>
@@ -55,11 +53,5 @@ const control = computed(() => store.activePreset?.autoplaceControls[props.name]
 
 .cell {
   padding: 6px 8px;
-}
-
-.cell:deep(.f-slider) {
-  width: 90px;
-  vertical-align: middle;
-  margin-right: 6px;
 }
 </style>

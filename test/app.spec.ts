@@ -66,10 +66,11 @@ describe("App shell", () => {
     expect(tungstenIcon.attributes("alt")).toBe("Vulcanus");
   });
 
-  it("editing a frequency number input updates the store", async () => {
+  it("editing a frequency percentage slider updates the store", async () => {
     const w = mountApp();
     const coalRow = w.find('[data-test="control-row-coal"]');
-    await coalRow.find('input[type="number"]').setValue("3");
+    // First range input in the row is the Frequency column; index 9 = 300% = 3.
+    await coalRow.find('input[type="range"]').setValue("9");
     const stored = JSON.parse(JSON.stringify(w.vm.$pinia.state.value)) as {
       presets: { userPresets: { autoplaceControls: Record<string, { frequency: number }> }[] };
     };
