@@ -450,7 +450,7 @@ test("image builds and renders a valid PNG for Nauvis and a non-Nauvis planet", 
 ```
 Note: if `--generate-map-preview /dev/stdout` does not stream cleanly, write to a mounted output dir and read the file instead (as proven manually). This test also serves as the peak-RSS check point: run `docker stats` alongside, or add `--memory=4g` to the `docker run` to confirm the render succeeds within the `standard-1` budget before committing to that instance size.
 
-- [ ] **Step 4: Fill the digest and run the integration test** (HAND-OFF: needs Docker + the amd64 Factorio 2.1.9 image)
+- [x] **Step 4: Fill the digest and run the integration test** (DONE 2026-07-12: pinned index digest sha256:ff1c21dd...; test renders to a mounted file since /dev/stdout carries factorio logs; Nauvis + Vulcanus PNGs verified)
 
 Run:
 ```bash
