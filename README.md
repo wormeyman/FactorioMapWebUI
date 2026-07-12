@@ -1,7 +1,10 @@
 # Factorio Map WebUI
 
-A pure static SPA for authoring and exchanging Factorio 2.1.9 (experimental)
-map generation presets. No backend - everything runs in the browser.
+A static SPA for authoring and exchanging Factorio 2.1.9 (experimental) map
+generation presets. The core editor has no backend - everything runs in the
+browser. An optional, opt-in map preview service (the app's only outbound call)
+renders real Factorio previews via Cloudflare; the editor stays fully functional
+offline without it. See [Map preview service](#map-preview-service).
 
 ## Status
 
@@ -26,6 +29,12 @@ presets, exchange-string import, and export of `map-gen-settings.json` +
 `map-settings.json` as a downloadable ZIP. `seed` is a single source of truth
 for "random each new map" (`null` = random, which encodes to wire 0).
 
+The **map preview service** (`preview-service/`) is code-complete and validated
+end to end locally: clicking "Generate preview" POSTs the active preset's
+`map-gen-settings` to a Cloudflare Worker, which serves a cached PNG from R2 or
+renders one with the real Factorio 2.1.9 headless engine in a container. Only
+the live Cloudflare deploy remains as a hand-off.
+
 Design and phase history live in `docs/superpowers/specs/` and
 `docs/superpowers/plans/` (point-in-time records, not living docs).
 
@@ -40,6 +49,53 @@ project pins pnpm via `devEngines`, so run `vp` through pnpm (a bare `vp` or
 - `pnpm vp check --fix` - lint + format
 - `pnpm vp test` - test suite (fixture-driven codec tests and UI tests)
 - `pnpm vp build` - production build
+
+## Map preview service
+
+`preview-service/` is a pnpm workspace holding the two backend pieces:
+
+- `worker/` - a Cloudflare Worker: validates the request, computes a cache key,
+  serves a cached PNG from R2 on a hit, and on a miss enforces a monthly render
+  budget (Durable Object) before calling the container. Returns the PNG through
+  the Worker so it stays same-origin with the app.
+- `container/` - a digest-pinned `factoriotools/factorio:2.1.9` image plus a thin
+  Node HTTP server that shells out to `factorio --generate-map-preview` and
+  returns the PNG bytes.
+
+### Run the whole stack locally (needs Docker)
+
+`wrangler dev` builds and runs the container through your local Docker daemon and
+simulates the R2 and Durable Object bindings, so no Cloudflare deploy is needed
+to develop or test the feature:
+
+- `pnpm preview:dev` - runs the Worker (on `:8787`) and the app (on `:5173`)
+  together; Ctrl-C tears down both. Wires `ALLOWED_ORIGIN` and
+  `VITE_PREVIEW_SERVICE_URL` so the local CORS and service URL match.
+- `pnpm preview:worker` - just the Worker + container (`wrangler dev`)
+- `pnpm preview:app` - just the app, pointed at the local Worker
+- `pnpm preview:test` - Worker + container unit tests
+- `pnpm preview:deploy` - `wrangler deploy` the Worker
+
+The container image build and render are also covered by a Docker integration
+test: `pnpm --filter @fmw/preview-container test:integration`.
+
+### Deploy (hand-off)
+
+Deploying to Cloudflare is the one step not yet done. It needs a Cloudflare
+account and Workers Paid ($5/mo, required for Containers):
+
+```
+pnpm --filter @fmw/preview-worker exec wrangler r2 bucket create fmw-preview-cache
+# fill REPLACE_WITH_APP_ORIGIN in preview-service/worker/wrangler.jsonc, then:
+pnpm --filter @fmw/preview-worker exec wrangler types
+pnpm preview:deploy
+# set VITE_PREVIEW_SERVICE_URL and fill REPLACE_WITH_WORKER_ORIGIN in public/_headers
+pnpm vp build
+```
+
+Design and the task-by-task plan:
+`docs/superpowers/specs/2026-07-10-map-preview-service-design.md` and
+`docs/superpowers/plans/2026-07-10-map-preview-service.md`.
 
 ## Design
 
