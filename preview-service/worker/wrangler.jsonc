@@ -1,0 +1,27 @@
+{
+  "name": "fmw-preview",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "FACTORIO_VERSION": "2.1.9",
+    "MONTHLY_RENDER_BUDGET": "5000",
+    "ALLOWED_ORIGIN": "https://REPLACE_WITH_APP_ORIGIN",
+  },
+  "containers": [
+    {
+      "class_name": "PreviewContainer",
+      "image": "../container/Dockerfile",
+      "instance_type": "standard-1",
+      "max_instances": 3,
+    },
+  ],
+  "durable_objects": {
+    "bindings": [
+      { "class_name": "PreviewContainer", "name": "PREVIEW_CONTAINER" },
+      { "class_name": "RenderBudget", "name": "RENDER_BUDGET" },
+    ],
+  },
+  "r2_buckets": [{ "binding": "PREVIEW_CACHE", "bucket_name": "fmw-preview-cache" }],
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["PreviewContainer", "RenderBudget"] }],
+}

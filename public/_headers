@@ -1,0 +1,11 @@
+# Content-Security-Policy for the static deploy (Cloudflare Pages _headers).
+#
+# - script-src needs 'unsafe-eval': the map-exchange codec uses zlib-asm, an
+#   asm.js module whose loader calls direct eval() at runtime. A bare
+#   script-src 'self' would break encode/decode.
+# - img-src needs blob:: the preview PNG is shown via URL.createObjectURL(blob).
+# - connect-src must include the preview Worker origin (the app's only outbound
+#   call). Replace the placeholder with the deployed Worker origin.
+# - style-src 'unsafe-inline' covers runtime-injected component styles.
+/*
+  Content-Security-Policy: default-src 'self'; img-src 'self' data: blob:; connect-src 'self' https://REPLACE_WITH_WORKER_ORIGIN; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-eval'

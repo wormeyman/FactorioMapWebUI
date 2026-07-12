@@ -1,0 +1,7 @@
+packages:
+  - "."
+  - "preview-service/*"
+allowBuilds:
+  esbuild: true
+  sharp: true
+  workerd: true
