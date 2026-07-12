@@ -14,11 +14,16 @@ test("buildPreviewArgs assembles the factorio CLI", () => {
     size: 1024,
   });
   assert.deepEqual(args, [
-    "--generate-map-preview", "/out/p.png",
-    "--map-gen-settings", "/in/mgs.json",
-    "--map-preview-planet", "vulcanus",
-    "--map-gen-seed", "123456",
-    "--map-preview-size", "1024",
+    "--generate-map-preview",
+    "/out/p.png",
+    "--map-gen-settings",
+    "/in/mgs.json",
+    "--map-preview-planet",
+    "vulcanus",
+    "--map-gen-seed",
+    "123456",
+    "--map-preview-size",
+    "1024",
   ]);
 });
 
@@ -51,10 +56,11 @@ test("renderPreview throws RenderError with stderr tail on nonzero exit", async 
     },
   });
   await assert.rejects(
-    () => renderPreview(
-      { mapGenSettings: {}, planet: "nauvis", seed: 1, size: 1024 },
-      { spawnFn: fakeSpawn, tmpDir: tmp, factorioBin: "/x" },
-    ),
+    () =>
+      renderPreview(
+        { mapGenSettings: {}, planet: "nauvis", seed: 1, size: 1024 },
+        { spawnFn: fakeSpawn, tmpDir: tmp, factorioBin: "/x" },
+      ),
     (err) => err instanceof RenderError && /bad settings/.test(err.stderrTail),
   );
 });

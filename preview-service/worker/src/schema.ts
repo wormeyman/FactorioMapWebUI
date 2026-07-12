@@ -13,9 +13,14 @@ const U32_MAX = 0xffffffff;
 export function parsePreviewRequest(
   body: unknown,
 ): { ok: true; value: PreviewRequest } | { ok: false; error: string } {
-  if (typeof body !== "object" || body === null) return { ok: false, error: "body must be an object" };
+  if (typeof body !== "object" || body === null)
+    return { ok: false, error: "body must be an object" };
   const b = body as Record<string, unknown>;
-  if (typeof b.mapGenSettings !== "object" || b.mapGenSettings === null || Array.isArray(b.mapGenSettings)) {
+  if (
+    typeof b.mapGenSettings !== "object" ||
+    b.mapGenSettings === null ||
+    Array.isArray(b.mapGenSettings)
+  ) {
     return { ok: false, error: "mapGenSettings must be an object" };
   }
   if (!PLANETS.includes(b.planet as Planet)) return { ok: false, error: "unknown planet" };

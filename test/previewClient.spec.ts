@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vite-plus/test";
-import { buildPreviewRequest, postPreview, PreviewError } from "../src/io/previewClient";
+import { buildPreviewRequest, postPreview } from "../src/io/previewClient";
 import { getBuiltinPreset } from "../src/model/builtins";
 
 afterEach(() => vi.restoreAllMocks());
@@ -26,14 +26,20 @@ describe("buildPreviewRequest", () => {
 describe("postPreview", () => {
   it("returns a Blob on 200", async () => {
     const blob = new Blob([new Uint8Array([0x89])], { type: "image/png" });
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(blob, { status: 200 })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(blob, { status: 200 })),
+    );
     const preset = getBuiltinPreset("Default");
     const out = await postPreview(buildPreviewRequest(preset, "nauvis"));
     expect(out).toBeInstanceOf(Blob);
   });
 
   it("throws PreviewError with status on failure", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response("nope", { status: 503 })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("nope", { status: 503 })),
+    );
     const preset = getBuiltinPreset("Default");
     await expect(postPreview(buildPreviewRequest(preset, "nauvis"))).rejects.toMatchObject({
       name: "PreviewError",

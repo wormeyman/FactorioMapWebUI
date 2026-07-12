@@ -14,7 +14,11 @@ function readJson(req) {
       if (body.length > 262144) reject(new Error("body too large"));
     });
     req.on("end", () => {
-      try { resolve(JSON.parse(body)); } catch (e) { reject(e); }
+      try {
+        resolve(JSON.parse(body));
+      } catch (e) {
+        reject(e);
+      }
     });
   });
 }
@@ -32,7 +36,12 @@ const server = createServer(async (req, res) => {
         return;
       }
       const png = await renderPreview(
-        { mapGenSettings: body.mapGenSettings, planet: body.planet, seed: body.seed, size: body.size ?? 1024 },
+        {
+          mapGenSettings: body.mapGenSettings,
+          planet: body.planet,
+          seed: body.seed,
+          size: body.size ?? 1024,
+        },
         { tmpDir: tmpdir(), factorioBin: FACTORIO_BIN },
       );
       res.writeHead(200, { "content-type": "image/png" }).end(png);

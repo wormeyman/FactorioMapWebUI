@@ -11,11 +11,16 @@ export class RenderError extends Error {
 
 export function buildPreviewArgs({ outPath, mgsPath, planet, seed, size }) {
   return [
-    "--generate-map-preview", outPath,
-    "--map-gen-settings", mgsPath,
-    "--map-preview-planet", planet,
-    "--map-gen-seed", String(seed),
-    "--map-preview-size", String(size),
+    "--generate-map-preview",
+    outPath,
+    "--map-gen-settings",
+    mgsPath,
+    "--map-preview-planet",
+    planet,
+    "--map-gen-seed",
+    String(seed),
+    "--map-preview-size",
+    String(size),
   ];
 }
 
@@ -27,7 +32,9 @@ export function nodeSpawn(bin, args) {
       return await new Promise((resolve) => {
         const child = spawn(bin, args, { stdio: ["ignore", "ignore", "pipe"] });
         let stderr = "";
-        child.stderr.on("data", (d) => { stderr += d.toString(); });
+        child.stderr.on("data", (d) => {
+          stderr += d.toString();
+        });
         child.on("close", (code) => resolve({ code: code ?? -1, stderr }));
         child.on("error", (e) => resolve({ code: -1, stderr: String(e) }));
       });
@@ -42,7 +49,11 @@ export async function renderPreview(req, { spawnFn = nodeSpawn, tmpDir, factorio
   try {
     await writeFile(mgsPath, JSON.stringify(req.mapGenSettings));
     const args = buildPreviewArgs({
-      outPath, mgsPath, planet: req.planet, seed: req.seed, size: req.size,
+      outPath,
+      mgsPath,
+      planet: req.planet,
+      seed: req.seed,
+      size: req.size,
     });
     const { code, stderr } = await spawnFn(factorioBin, args).done();
     if (code !== 0) {

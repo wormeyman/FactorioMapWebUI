@@ -11,7 +11,10 @@ function currentMonth(): string {
 
 export class RenderBudget extends DurableObject {
   async consume(cap: number): Promise<{ allowed: boolean; used: number }> {
-    const stored = (await this.ctx.storage.get<BudgetState>("state")) ?? { month: currentMonth(), used: 0 };
+    const stored = (await this.ctx.storage.get<BudgetState>("state")) ?? {
+      month: currentMonth(),
+      used: 0,
+    };
     const month = currentMonth();
     const used = stored.month === month ? stored.used : 0;
     if (used >= cap) return { allowed: false, used };

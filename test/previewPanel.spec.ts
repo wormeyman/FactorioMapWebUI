@@ -13,7 +13,10 @@ function mountPanel() {
 describe("PreviewPanel", () => {
   it("renders the preview image after clicking Generate", async () => {
     const blob = new Blob([new Uint8Array([0x89])], { type: "image/png" });
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(blob, { status: 200 })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(blob, { status: 200 })),
+    );
     vi.stubGlobal("URL", { ...URL, createObjectURL: () => "blob:x", revokeObjectURL: () => {} });
 
     const wrapper = mountPanel();
@@ -26,7 +29,10 @@ describe("PreviewPanel", () => {
   });
 
   it("shows an error when the render fails", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response("nope", { status: 503 })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("nope", { status: 503 })),
+    );
     const wrapper = mountPanel();
     await wrapper.find('[data-test="generate"]').trigger("click");
     await flushPromises();
@@ -35,7 +41,15 @@ describe("PreviewPanel", () => {
 
   it("disables Generate while a render is in flight", async () => {
     let resolve!: (r: Response) => void;
-    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>((r) => { resolve = r; })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        () =>
+          new Promise<Response>((r) => {
+            resolve = r;
+          }),
+      ),
+    );
     const wrapper = mountPanel();
     await wrapper.find('[data-test="generate"]').trigger("click");
     expect(wrapper.find('[data-test="generate"]').attributes("disabled")).toBeDefined();
