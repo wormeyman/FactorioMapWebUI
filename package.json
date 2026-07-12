@@ -22,8 +22,8 @@
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.7",
-    "concurrently": "^10.0.3",
     "@vue/test-utils": "^2.4.11",
+    "concurrently": "^10.0.3",
     "happy-dom": "^20.10.6",
     "typescript": "^6.0.3",
     "vite-plus": "^0.2.1"
