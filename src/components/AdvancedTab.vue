@@ -17,10 +17,6 @@ const expressions = computed(() =>
     <div v-if="preset" class="size-row">
       <label>Width <FNumberInput v-model="preset.width" data-test="map-width" /></label>
       <label>Height <FNumberInput v-model="preset.height" data-test="map-height" /></label>
-      <label>
-        Starting area
-        <FNumberInput v-model="preset.startingArea" data-test="starting-area" />
-      </label>
     </div>
     <h3>Enemies</h3>
     <div v-if="preset" class="enemy-row">

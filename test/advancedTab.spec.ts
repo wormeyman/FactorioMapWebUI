@@ -26,17 +26,6 @@ describe("AdvancedTab", () => {
     expect(store.activePreset?.height).toBe(128);
   });
 
-  it("shows and edits the active preset's starting area", async () => {
-    setActivePinia(createPinia());
-    const store = usePresetsStore();
-    const wrapper = mount(AdvancedTab);
-    const input = wrapper.find('[data-test="starting-area"]');
-    expect((input.element as HTMLInputElement).value).toBe("1");
-    (input.element as HTMLInputElement).value = "2";
-    await input.trigger("change");
-    expect(store.activePreset?.startingArea).toBe(2);
-  });
-
   it("shows peaceful_mode unchecked for the Default preset and writes it back on toggle", async () => {
     setActivePinia(createPinia());
     const store = usePresetsStore();
