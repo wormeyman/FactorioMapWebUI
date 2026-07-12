@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vite-plus/test";
-import { PERCENT_STEPS, stepValue, nearestStepIndex, formatPercent } from "../src/model/controlScale";
+import {
+  PERCENT_STEPS,
+  stepValue,
+  nearestStepIndex,
+  formatPercent,
+} from "../src/model/controlScale";
 
 describe("PERCENT_STEPS", () => {
   it("has the twelve Factorio percentages in order", () => {

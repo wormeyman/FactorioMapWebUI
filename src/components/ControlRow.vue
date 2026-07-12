@@ -54,5 +54,4 @@ const control = computed(() => store.activePreset?.autoplaceControls[props.name]
 .cell {
   padding: 6px 8px;
 }
-
 </style>
