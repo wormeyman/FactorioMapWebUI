@@ -2,7 +2,7 @@
 #   docker pull --platform linux/amd64 factoriotools/factorio:2.1.9
 #   docker inspect --format='{{index .RepoDigests 0}}' factoriotools/factorio:2.1.9
 # then paste it below.
-FROM factoriotools/factorio@sha256:REPLACE_WITH_2_1_9_DIGEST
+FROM factoriotools/factorio@sha256:ff1c21dda4d1ab52bcc53fc5ad9508cfcc102c966a0a655051acefbf49bd6bcb
 
 # Node for the HTTP wrapper (base image is Debian-based).
 USER root
