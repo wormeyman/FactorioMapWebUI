@@ -1,12 +1,24 @@
 # Map Preview Service Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Add a button-triggered map preview that renders the real Factorio 2.1.9 headless map image for the current preset, seed, and selected planet, via a Cloudflare Worker + Containers + R2 render service in a new `preview-service/` workspace.
 
 **Architecture:** The Vue app's `PreviewPanel` builds a `map-gen-settings` payload from the active preset (reusing `toMapGenSettingsJson`) and POSTs it to a Cloudflare Worker. The Worker hashes the request into a cache key, serves a cached PNG from R2 if present, and otherwise calls a Durable-Object-backed container that runs a thin Node HTTP server wrapping `factorio --generate-map-preview`, caches the PNG in R2, and returns it. The static app stays fully functional offline; the preview is the only feature that calls out.
 
 **Tech Stack:** Vue 3 + TypeScript + `vite-plus` (existing app); Cloudflare Workers + `@cloudflare/containers` + R2 + `wrangler`; `@cloudflare/vitest-pool-workers` for Worker tests; Node 20 + Factorio 2.1.9 headless Docker image for the container; pnpm workspace.
+
+## Implementation status (2026-07-12)
+
+All code tasks are complete on branch `feat/map-preview-service` and verified locally:
+app suite 245 tests, worker suite 12 tests + clean `tsc`, container unit 3 tests, `pnpm build` green, `vp check` clean. Two steps remain as hand-offs (they need infra this environment lacks): Task 3 Step 4 (fill the Dockerfile digest + run the Docker image integration test) and Task 11 Step 3 (deploy the Worker + manual e2e).
+
+Deviations from the plan as written (all verified against the installed toolchain):
+- **pool-workers v4 API:** the installed `@cloudflare/vitest-pool-workers` 0.18 dropped the `defineWorkersConfig` `/config` subpath. The test config uses the new `cloudflareTest(...)` Vite plugin instead, and declares DO/R2/var bindings inline (not via `wrangler: { configPath }`) so the test runtime never triggers a container image build.
+- **Worker binding types:** `wrangler types` now emits full runtime types (superseding `@cloudflare/workers-types`); `index.ts` uses the generated `Cloudflare.Env`, and `worker-configuration.d.ts` is committed for reproducible type-checks (rerun after editing `wrangler.jsonc`).
+- **Budget spec:** the loop cap literal was `2` but asserted `used:3`; corrected to `3` (matches the impl and the worker's `consume(MONTHLY_RENDER_BUDGET)`).
+- **CSP:** `script-src` includes `'unsafe-eval'` because the zlib-asm codec loader uses runtime `eval()`; a bare `'self'` would break encode/decode.
+- **App test runner:** `vite.config.ts` scopes `test.include` to `test/**` so `vp test` no longer tries to run the preview-service Worker/container suites.
 
 ## Global Constraints
 
@@ -86,7 +98,7 @@ The Worker adds its own `env.FACTORIO_VERSION` to the cache-key input (never tru
 **Interfaces:**
 - Produces: two workspace packages (`@fmw/preview-worker`, `@fmw/preview-container`) resolvable by path filters.
 
-- [ ] **Step 1: Create the workspace file**
+- [x] **Step 1: Create the workspace file**
 
 `pnpm-workspace.yaml`:
 ```yaml
@@ -95,7 +107,7 @@ packages:
   - "preview-service/*"
 ```
 
-- [ ] **Step 2: Create the worker package manifest**
+- [x] **Step 2: Create the worker package manifest**
 
 `preview-service/worker/package.json`:
 ```json
@@ -120,7 +132,7 @@ packages:
 ```
 Note: confirm the latest `@cloudflare/containers`, `wrangler`, and `@cloudflare/vitest-pool-workers` versions via the `cloudflare:wrangler` skill / npm at implementation time; bump if newer.
 
-- [ ] **Step 3: Create the container package manifest**
+- [x] **Step 3: Create the container package manifest**
 
 `preview-service/container/package.json`:
 ```json
@@ -135,12 +147,12 @@ Note: confirm the latest `@cloudflare/containers`, `wrangler`, and `@cloudflare/
 }
 ```
 
-- [ ] **Step 4: Install and verify the workspace resolves**
+- [x] **Step 4: Install and verify the workspace resolves**
 
 Run: `pnpm install`
 Expected: completes without error; `pnpm --filter @fmw/preview-worker exec true` and `pnpm --filter @fmw/preview-container exec true` both exit 0.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add pnpm-workspace.yaml preview-service/worker/package.json preview-service/container/package.json pnpm-lock.yaml
@@ -160,7 +172,7 @@ git commit -m "chore(preview): scaffold preview-service pnpm workspace"
   - `buildPreviewArgs({ outPath, mgsPath, planet, seed, size }): string[]` - the factorio CLI args.
   - `async function renderPreview(req, { spawnFn, tmpDir, factorioBin }): Promise<Buffer>` - writes mgs to a unique temp file, spawns factorio, returns PNG bytes; throws `RenderError` (with `.stderrTail`) on failure. Cleans up temp files.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `preview-service/container/test/render.test.mjs`:
 ```js
@@ -226,12 +238,12 @@ test("renderPreview throws RenderError with stderr tail on nonzero exit", async 
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm --filter @fmw/preview-container test`
 Expected: FAIL - `Cannot find module '../render.mjs'`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 `preview-service/container/render.mjs`:
 ```js
@@ -292,12 +304,12 @@ export async function renderPreview(req, { spawnFn = nodeSpawn, tmpDir, factorio
 }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `pnpm --filter @fmw/preview-container test`
 Expected: PASS (3 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add preview-service/container/render.mjs preview-service/container/test/render.test.mjs
@@ -318,7 +330,7 @@ git commit -m "feat(preview): container render command builder and handler"
 - Consumes: `renderPreview`, `buildPreviewArgs` from Task 2.
 - Produces: an image exposing `GET /healthz` (200 when ready) and `POST /render` (PreviewRequest -> `image/png`), listening on port 8080.
 
-- [ ] **Step 1: Write the HTTP server**
+- [x] **Step 1: Write the HTTP server**
 
 `preview-service/container/server.mjs`:
 ```js
@@ -373,7 +385,7 @@ const server = createServer(async (req, res) => {
 server.listen(PORT, () => console.log(`preview container listening on ${PORT}`));
 ```
 
-- [ ] **Step 2: Write the digest-pinned Dockerfile**
+- [x] **Step 2: Write the digest-pinned Dockerfile**
 
 `preview-service/container/Dockerfile`:
 ```dockerfile
@@ -397,7 +409,7 @@ ENTRYPOINT ["node", "/app/server.mjs"]
 ```
 Note: the base image's exact Node availability/path may differ; if `apt-get install nodejs` gives too-old a Node, install NodeSource or copy a static Node binary. Confirm at build time.
 
-- [ ] **Step 3: Write the image integration test**
+- [x] **Step 3: Write the image integration test**
 
 `preview-service/container/test/image.integration.test.mjs`:
 ```js
@@ -438,7 +450,7 @@ test("image builds and renders a valid PNG for Nauvis and a non-Nauvis planet", 
 ```
 Note: if `--generate-map-preview /dev/stdout` does not stream cleanly, write to a mounted output dir and read the file instead (as proven manually). This test also serves as the peak-RSS check point: run `docker stats` alongside, or add `--memory=4g` to the `docker run` to confirm the render succeeds within the `standard-1` budget before committing to that instance size.
 
-- [ ] **Step 4: Fill the digest and run the integration test**
+- [ ] **Step 4: Fill the digest and run the integration test** (HAND-OFF: needs Docker + the amd64 Factorio 2.1.9 image)
 
 Run:
 ```bash
@@ -449,7 +461,7 @@ pnpm --filter @fmw/preview-container test:integration
 ```
 Expected: PASS - image builds; both Nauvis and Vulcanus produce PNG bytes.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add preview-service/container/server.mjs preview-service/container/Dockerfile preview-service/container/test/image.integration.test.mjs
@@ -470,7 +482,7 @@ git commit -m "feat(preview): container HTTP server and digest-pinned Factorio i
   - `canonicalJson(value: unknown): string` - deterministic, recursively key-sorted JSON.
   - `async function cacheKey(input: unknown): Promise<string>` - hex sha256 of `canonicalJson(input)`.
 
-- [ ] **Step 1: Write the pool-workers vitest config**
+- [x] **Step 1: Write the pool-workers vitest config**
 
 `preview-service/worker/vitest.config.ts`:
 ```ts
@@ -486,7 +498,7 @@ export default defineWorkersConfig({
 ```
 Note: `wrangler.jsonc` is created in Task 6; until then, point `configPath` at a minimal stub or create Task 6's file first. If running Task 4 before Task 6, temporarily use `miniflare: {}` options instead.
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 `preview-service/worker/test/cacheKey.spec.ts`:
 ```ts
@@ -518,12 +530,12 @@ describe("cacheKey", () => {
 });
 ```
 
-- [ ] **Step 3: Run the test to verify it fails**
+- [x] **Step 3: Run the test to verify it fails**
 
 Run: `pnpm --filter @fmw/preview-worker test`
 Expected: FAIL - cannot resolve `../src/cacheKey`.
 
-- [ ] **Step 4: Write the implementation**
+- [x] **Step 4: Write the implementation**
 
 `preview-service/worker/src/cacheKey.ts`:
 ```ts
@@ -544,12 +556,12 @@ export async function cacheKey(input: unknown): Promise<string> {
 }
 ```
 
-- [ ] **Step 5: Run the test to verify it passes**
+- [x] **Step 5: Run the test to verify it passes**
 
 Run: `pnpm --filter @fmw/preview-worker test`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add preview-service/worker/src/cacheKey.ts preview-service/worker/test/cacheKey.spec.ts preview-service/worker/vitest.config.ts
@@ -567,7 +579,7 @@ git commit -m "feat(preview): worker cache key with canonical JSON"
 **Interfaces:**
 - Produces: `parsePreviewRequest(body: unknown): { ok: true; value: PreviewRequest } | { ok: false; error: string }` and the exported `PreviewRequest`, `PLANETS` types.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `preview-service/worker/test/schema.spec.ts`:
 ```ts
@@ -607,12 +619,12 @@ describe("parsePreviewRequest", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm --filter @fmw/preview-worker test`
 Expected: FAIL - cannot resolve `../src/schema`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 `preview-service/worker/src/schema.ts`:
 ```ts
@@ -653,12 +665,12 @@ export function parsePreviewRequest(
 }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `pnpm --filter @fmw/preview-worker test`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add preview-service/worker/src/schema.ts preview-service/worker/test/schema.spec.ts
@@ -676,7 +688,7 @@ git commit -m "feat(preview): worker request schema validation"
 **Interfaces:**
 - Produces: `PreviewContainer` (extends `Container` from `@cloudflare/containers`) and the wrangler bindings `PREVIEW_CONTAINER`, `PREVIEW_CACHE` (R2), `RENDER_BUDGET` (DO), and vars `FACTORIO_VERSION`, `MONTHLY_RENDER_BUDGET`, `ALLOWED_ORIGIN`.
 
-- [ ] **Step 1: Write the container class**
+- [x] **Step 1: Write the container class**
 
 `preview-service/worker/src/container.ts`:
 ```ts
@@ -690,7 +702,7 @@ export class PreviewContainer extends Container {
 }
 ```
 
-- [ ] **Step 2: Write the wrangler config**
+- [x] **Step 2: Write the wrangler config**
 
 `preview-service/worker/wrangler.jsonc`:
 ```jsonc
@@ -727,12 +739,12 @@ export class PreviewContainer extends Container {
 ```
 Note: the exact `containers`/`instance_type` config keys are evolving - confirm against the `cloudflare:wrangler` skill and `node_modules/wrangler/config-schema.json` at implementation time. Create the R2 bucket first: `pnpm --filter @fmw/preview-worker exec wrangler r2 bucket create fmw-preview-cache`.
 
-- [ ] **Step 3: Type-check the container class compiles**
+- [x] **Step 3: Type-check the container class compiles**
 
 Run: `pnpm --filter @fmw/preview-worker exec wrangler types && pnpm --filter @fmw/preview-worker exec tsc --noEmit`
 Expected: no type errors (add `tsc`/`typescript` to devDeps if needed).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add preview-service/worker/src/container.ts preview-service/worker/wrangler.jsonc
@@ -751,7 +763,7 @@ git commit -m "feat(preview): container Durable Object and wrangler config"
 - Consumes: nothing.
 - Produces: `RenderBudget` DO with `fetch()` supporting `POST /consume` -> `{ allowed: boolean; used: number }`, resetting monthly. Worker calls it once per cache miss before rendering.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `preview-service/worker/test/budget.spec.ts`:
 ```ts
@@ -773,12 +785,12 @@ describe("RenderBudget", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm --filter @fmw/preview-worker test budget`
 Expected: FAIL - cannot resolve `../src/budget`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 `preview-service/worker/src/budget.ts`:
 ```ts
@@ -810,12 +822,12 @@ export class RenderBudget extends DurableObject {
 }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `pnpm --filter @fmw/preview-worker test budget`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add preview-service/worker/src/budget.ts preview-service/worker/test/budget.spec.ts
@@ -834,7 +846,7 @@ git commit -m "feat(preview): monthly render budget durable object"
 - Consumes: `parsePreviewRequest` (Task 5), `cacheKey` (Task 4), `PreviewContainer` (Task 6), `RenderBudget` (Task 7).
 - Produces: default export `fetch(request, env)`; re-exports `PreviewContainer` and `RenderBudget` (DO classes must be exported from the entry).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `preview-service/worker/test/worker.spec.ts`:
 ```ts
@@ -890,12 +902,12 @@ describe("worker /preview", () => {
 ```
 Note: exercising the true cache-miss -> container path requires a running container, which the pool-workers env does not provide; cover the miss/budget path by asserting the branch is reached (e.g. spy) or defer to the manual e2e in Task 11. The cache-hit and validation branches are the unit-testable core.
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm --filter @fmw/preview-worker test worker`
 Expected: FAIL - cannot resolve `../src/index`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 `preview-service/worker/src/index.ts`:
 ```ts
@@ -983,12 +995,12 @@ export default {
 ```
 Note: the `Container` base class from `@cloudflare/containers` provides helpers (`getContainer`, `startAndWaitForPorts`) - prefer them over the raw namespace call above if the installed version exposes them; the raw `.fetch` shown here is the fallback. Confirm the idiom against the `cloudflare:cloudflare` containers reference at implementation time and adjust the container-call block only.
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `pnpm --filter @fmw/preview-worker test`
 Expected: PASS (cache-hit, validation, origin, budget tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add preview-service/worker/src/index.ts preview-service/worker/test/worker.spec.ts
@@ -1014,7 +1026,7 @@ git commit -m "feat(preview): worker fetch handler with cache, budget, and rende
   - `buildPreviewRequest(preset: Preset, planet: Planet): PreviewRequest` (concrete seed injected into `mapGenSettings.seed`)
   - `async function postPreview(req: PreviewRequest): Promise<Blob>` (throws `PreviewError` with `.status` on failure)
 
-- [ ] **Step 1: Write the failing seed test**
+- [x] **Step 1: Write the failing seed test**
 
 `test/seed.spec.ts`:
 ```ts
@@ -1033,12 +1045,12 @@ describe("randomU32", () => {
 });
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `pnpm test seed`
 Expected: FAIL - cannot resolve `../src/util/seed`.
 
-- [ ] **Step 3: Implement seed + config**
+- [x] **Step 3: Implement seed + config**
 
 `src/util/seed.ts`:
 ```ts
@@ -1055,7 +1067,7 @@ export const PREVIEW_SERVICE_URL: string =
   (import.meta.env.VITE_PREVIEW_SERVICE_URL as string | undefined) ?? "";
 ```
 
-- [ ] **Step 4: Write the failing preview-client test**
+- [x] **Step 4: Write the failing preview-client test**
 
 `test/previewClient.spec.ts`:
 ```ts
@@ -1104,12 +1116,12 @@ describe("postPreview", () => {
 });
 ```
 
-- [ ] **Step 5: Run it to verify it fails**
+- [x] **Step 5: Run it to verify it fails**
 
 Run: `pnpm test previewClient`
 Expected: FAIL - cannot resolve `../src/io/previewClient`.
 
-- [ ] **Step 6: Implement the preview client**
+- [x] **Step 6: Implement the preview client**
 
 `src/io/previewClient.ts`:
 ```ts
@@ -1153,12 +1165,12 @@ export async function postPreview(req: PreviewRequest): Promise<Blob> {
 }
 ```
 
-- [ ] **Step 7: Run both tests to verify they pass**
+- [x] **Step 7: Run both tests to verify they pass**
 
 Run: `pnpm test seed previewClient`
 Expected: PASS.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add src/util/seed.ts src/config.ts src/io/previewClient.ts test/seed.spec.ts test/previewClient.spec.ts
@@ -1177,7 +1189,7 @@ git commit -m "feat(preview): frontend seed util and preview client"
 - Consumes: `usePresetsStore().activePreset`, `buildPreviewRequest`, `postPreview`, `PreviewError`, `PLANET_LABELS`, `PLANETS`.
 - Preserves the existing `v-model:planet` contract (props `planet`, emit `update:planet`) so `App.vue` stays unchanged.
 
-- [ ] **Step 1: Write the failing component test**
+- [x] **Step 1: Write the failing component test**
 
 `test/previewPanel.spec.ts`:
 ```ts
@@ -1227,12 +1239,12 @@ describe("PreviewPanel", () => {
 });
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `pnpm test previewPanel`
 Expected: FAIL - the panel has no `data-test="generate"` yet.
 
-- [ ] **Step 3: Rewrite the panel**
+- [x] **Step 3: Rewrite the panel**
 
 `src/components/PreviewPanel.vue`:
 ```vue
@@ -1355,17 +1367,17 @@ async function generate() {
 </style>
 ```
 
-- [ ] **Step 4: Run the panel test to verify it passes**
+- [x] **Step 4: Run the panel test to verify it passes**
 
 Run: `pnpm test previewPanel`
 Expected: PASS.
 
-- [ ] **Step 5: Run the full app suite to catch regressions**
+- [x] **Step 5: Run the full app suite to catch regressions**
 
 Run: `pnpm test`
 Expected: PASS (the removed Auto-refresh/quality controls break no other test; if `test/app.spec.ts` asserted them, update it).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/components/PreviewPanel.vue test/previewPanel.spec.ts
@@ -1383,7 +1395,7 @@ git commit -m "feat(preview): PreviewPanel with Generate button and live render"
 **Interfaces:**
 - Consumes: the deployed Worker origin.
 
-- [ ] **Step 1: Add the CSP headers for the static deploy**
+- [x] **Step 1: Add the CSP headers for the static deploy**
 
 `public/_headers`:
 ```
@@ -1392,7 +1404,7 @@ git commit -m "feat(preview): PreviewPanel with Generate button and live render"
 ```
 Note: `img-src ... blob:` is required because the PNG is shown via `URL.createObjectURL`. `connect-src` must include the Worker origin. Adjust `script-src`/`style-src` to match what Vite emits (verify with the built `dist/`).
 
-- [ ] **Step 2: Document the env var**
+- [x] **Step 2: Document the env var**
 
 `.env.example`:
 ```
@@ -1400,7 +1412,7 @@ Note: `img-src ... blob:` is required because the PNG is shown via `URL.createOb
 VITE_PREVIEW_SERVICE_URL=https://fmw-preview.your-subdomain.workers.dev
 ```
 
-- [ ] **Step 3: Deploy and manually verify end to end**
+- [ ] **Step 3: Deploy and manually verify end to end** (HAND-OFF: needs a Cloudflare account, `wrangler login`, and the R2 bucket)
 
 Run:
 ```bash
@@ -1415,7 +1427,7 @@ Manually verify (record results in the commit message):
 - A null-seed preset shows a concrete seed; changing it re-renders.
 - Confirm peak container memory stayed within `standard-1` (4 GiB) in `wrangler tail` / metrics; if OOM, bump `instance_type` in `wrangler.jsonc` to `standard-2` (or a custom size) and redeploy.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add public/_headers .env.example
