@@ -7,6 +7,9 @@ dist/
 dist-ssr/
 *.local
 
+# Wrangler local dev state (preview-service worker)
+.wrangler/
+
 # Vite / Vite+ caches
 .vite/
 .vite-plus/
