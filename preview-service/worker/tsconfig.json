@@ -4,7 +4,9 @@
     "module": "esnext",
     "moduleResolution": "bundler",
     "lib": ["esnext"],
-    "types": ["@cloudflare/workers-types"],
+    // Runtime + binding types come from the generated worker-configuration.d.ts
+    // (via `wrangler types`), which supersedes @cloudflare/workers-types.
+    "types": [],
     "strict": true,
     "skipLibCheck": true,
     "noEmit": true,
