@@ -32,6 +32,11 @@ const COLUMNS: ControlColumn[] = [
   padding: 8px;
 }
 
+/* Keep the standalone slider a sensible width rather than filling the panel. */
+.starting-area :deep(.f-percent) {
+  max-width: 180px;
+}
+
 .sa-label {
   font-weight: 700;
 }
