@@ -5,6 +5,7 @@ import { isEnabled, setEnabled } from "../model/autoplaceEnabled";
 import { PLANET_ICONS, PLANET_LABELS } from "../model/planets";
 import { RESOURCE_ICONS } from "../model/resourceIcons";
 import { usePresetsStore } from "../store/presets";
+import FInfo from "../ui/FInfo.vue";
 import FPercentSlider from "../ui/FPercentSlider.vue";
 
 const props = defineProps<{ name: string; columns: ControlColumn[] }>();
@@ -48,6 +49,7 @@ function onToggle(event: Event) {
         height="22"
       />
       {{ entry.label }}
+      <FInfo v-if="entry.info" :text="entry.info" />
     </td>
     <td class="appears-on">
       <img

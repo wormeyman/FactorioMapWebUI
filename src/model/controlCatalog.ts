@@ -23,6 +23,8 @@ export interface ControlEntry {
   canBeDisabled: boolean;
   /** Set only for terrain controls, to split them into their two tables. */
   terrainGroup?: TerrainGroup;
+  /** Optional native-title help text shown as an info glyph after the label. */
+  info?: string;
 }
 
 function resource(planet: Planet, label: string): ControlEntry {
@@ -56,7 +58,7 @@ export const CONTROL_CATALOG: Record<string, ControlEntry> = {
   "crude-oil": resource("nauvis", "Crude oil"),
   "uranium-ore": resource("nauvis", "Uranium ore"),
   "enemy-base": enemy("nauvis", "Enemy bases"),
-  water: terrain("nauvis", "Water", true),
+  water: { ...terrain("nauvis", "Water", true), info: "If disabled: only in starting area" },
   trees: terrain("nauvis", "Trees", true),
   rocks: terrain("nauvis", "Rocks", true),
   nauvis_cliff: cliff("nauvis", "Cliffs"),

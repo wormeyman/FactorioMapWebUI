@@ -15,6 +15,7 @@ import { MAP_TYPES, readMapType, writeMapType } from "../model/mapType";
 import { PLANET_ICONS, PLANET_LABELS } from "../model/planets";
 import { usePresetsStore } from "../store/presets";
 import FDropdown from "../ui/FDropdown.vue";
+import FInfo from "../ui/FInfo.vue";
 import FPercentSlider from "../ui/FPercentSlider.vue";
 import ControlTable from "./ControlTable.vue";
 
@@ -123,7 +124,11 @@ const auxBias = biasModel(TERRAIN_TYPE);
       </thead>
       <tbody>
         <tr data-test="terrain-noise-moisture">
-          <td class="label"><span class="control-enable" />Moisture</td>
+          <td class="label">
+            <span class="control-enable" />Moisture<FInfo
+              text="Controls the distribution of grass versus desert. A higher bias generates more grass"
+            />
+          </td>
           <td class="appears-on">
             <img
               data-test="appears-on"
@@ -139,7 +144,11 @@ const auxBias = biasModel(TERRAIN_TYPE);
           <td class="cell"><FPercentSlider v-model="moistureBias" :scale="BIAS_SCALE" /></td>
         </tr>
         <tr data-test="terrain-noise-terrain-type">
-          <td class="label"><span class="control-enable" />Terrain type</td>
+          <td class="label">
+            <span class="control-enable" />Terrain type<FInfo
+              text="Controls the distribution of red desert versus sand. A higher bias generates more red desert."
+            />
+          </td>
           <td class="appears-on">
             <img
               data-test="appears-on"

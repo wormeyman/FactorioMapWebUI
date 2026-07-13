@@ -178,6 +178,37 @@ describe("TerrainTab", () => {
     expect(volcanism.find(".control-enable").exists()).toBe(true);
   });
 
+  it("shows an info glyph on the Water row with the starting-area title", () => {
+    const wrapper = mountTab();
+    const info = wrapper.find('[data-test="control-row-water"] [data-test="info"]');
+    expect(info.exists()).toBe(true);
+    expect(info.attributes("title")).toBe("If disabled: only in starting area");
+  });
+
+  it("shows no info glyph on a control without info (trees)", () => {
+    const wrapper = mountTab();
+    const info = wrapper.find('[data-test="control-row-trees"] [data-test="info"]');
+    expect(info.exists()).toBe(false);
+  });
+
+  it("shows an info glyph on the Moisture row with the grass-versus-desert title", () => {
+    const wrapper = mountTab();
+    const info = wrapper.find('[data-test="terrain-noise-moisture"] [data-test="info"]');
+    expect(info.exists()).toBe(true);
+    expect(info.attributes("title")).toBe(
+      "Controls the distribution of grass versus desert. A higher bias generates more grass",
+    );
+  });
+
+  it("shows an info glyph on the Terrain type row with the red-desert-versus-sand title", () => {
+    const wrapper = mountTab();
+    const info = wrapper.find('[data-test="terrain-noise-terrain-type"] [data-test="info"]');
+    expect(info.exists()).toBe(true);
+    expect(info.attributes("title")).toBe(
+      "Controls the distribution of red desert versus sand. A higher bias generates more red desert.",
+    );
+  });
+
   it("unchecking Cliffs drives nauvis_cliff.size to 0 in the exchange string, re-checking restores it", async () => {
     setActivePinia(createPinia());
     localStorage.clear();
