@@ -46,11 +46,11 @@ function enemy(planet: Planet, label: string): ControlEntry {
 /** All 28 autoplace controls of Factorio 2.1.9 Space Age, keyed by wire name. */
 export const CONTROL_CATALOG: Record<string, ControlEntry> = {
   // Nauvis (unprefixed names)
-  coal: resource("nauvis", "Coal"),
-  "copper-ore": resource("nauvis", "Copper ore"),
-  "crude-oil": resource("nauvis", "Crude oil"),
   "iron-ore": resource("nauvis", "Iron ore"),
+  "copper-ore": resource("nauvis", "Copper ore"),
   stone: resource("nauvis", "Stone"),
+  coal: resource("nauvis", "Coal"),
+  "crude-oil": resource("nauvis", "Crude oil"),
   "uranium-ore": resource("nauvis", "Uranium ore"),
   "enemy-base": enemy("nauvis", "Enemy bases"),
   water: terrain("nauvis", "Water"),
@@ -72,11 +72,11 @@ export const CONTROL_CATALOG: Record<string, ControlEntry> = {
   gleba_enemy_base: enemy("gleba", "Enemy bases"),
   // Fulgora
   scrap: resource("fulgora", "Scrap"),
-  lithium_brine: resource("fulgora", "Lithium brine"),
   fulgora_cliff: cliff("fulgora", "Fulgora cliffs"),
   fulgora_islands: terrain("fulgora", "Fulgora islands"),
   // Aquilo
   aquilo_crude_oil: resource("aquilo", "Crude oil"),
+  lithium_brine: resource("aquilo", "Lithium brine"),
   fluorine_vent: resource("aquilo", "Fluorine vent"),
 };
 
