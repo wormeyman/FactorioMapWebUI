@@ -22,7 +22,7 @@ const icon = computed(() => RESOURCE_ICONS[props.name]);
         data-test="resource-icon"
         class="resource-icon"
         :src="icon"
-        :alt="entry.label"
+        alt=""
         width="22"
         height="22"
       />
