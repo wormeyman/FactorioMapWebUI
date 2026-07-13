@@ -351,6 +351,19 @@ In `test/terrainTab.spec.ts`, replace the existing test (lines 56-62, "renders a
     pen = decodeExchangeString(store.activeExchangeString as string).propertyExpressionNames;
     expect("elevation" in pen).toBe(false);
   });
+
+  it("surfaces an unknown imported elevation value as an extra, selected option", () => {
+    setActivePinia(createPinia());
+    localStorage.clear();
+    const store = usePresetsStore();
+    // Simulate an imported preset carrying a modded/unknown elevation expression.
+    store.activePreset!.propertyExpressionNames["elevation"] = "elevation_modded_x";
+    const wrapper = mount(TerrainTab);
+    const select = wrapper.find('[data-test="map-type"]');
+    const values = select.findAll("option").map((o) => (o.element as HTMLOptionElement).value);
+    expect(values).toEqual(["nauvis", "lakes", "island", "elevation_modded_x"]);
+    expect((select.element as HTMLSelectElement).value).toBe("elevation_modded_x");
+  });
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -429,7 +442,10 @@ Expected: PASS (the four new/updated cases plus the untouched ones).
 - [ ] **Step 6: Run the full suite**
 
 Run: `pnpm vp test`
-Expected: PASS - no regressions (the codec/fixture round-trip tests must stay green, proving no byte-exactness regression).
+Expected: PASS - no regressions. Note: the feature-level byte-exactness guard is
+the "resetting Map type back to Nauvis removes the elevation key" test in Step 1,
+not the codec fixture round-trip (those never exercise the elevation write path);
+the full suite here just confirms nothing else broke.
 
 - [ ] **Step 7: Lint**
 
@@ -472,6 +488,7 @@ Record pass/fail in the branch notes. If any check fails, treat it as a real fin
 
 ## Self-Review (completed by plan author)
 
-- **Spec coverage:** model module (Task 2), UI wiring (Task 3), oracle capture/fixtures (Task 1), testing incl. byte-exactness via full-suite fixture round-trip (Task 3 Step 6), unknown-value preservation (Task 2 + Task 3 option list), default-omission (Task 2 + Task 3), in-app verification (Task 4). The spec's `readAliases` question is resolved: Nauvis carries `readAliases: ["elevation"]`; all three options are concrete.
+- **Spec coverage:** model module (Task 2), UI wiring (Task 3), oracle capture (Task 1), testing incl. feature-level byte-exactness via the Nauvis-reset test (Task 3 Step 1) and unknown-value preservation at both model (Task 2) and component (Task 3) levels, default-omission (Task 2 + Task 3), in-app verification (Task 4). The spec's `readAliases` question is resolved: Nauvis carries `readAliases: ["elevation"]`; all three options are concrete.
+- **Deliberate deviation from the spec:** the spec's Testing/Oracle sections call for one captured map-exchange string per option under `docs/mapexchangestrings/` plus a decode->re-encode test on them. Those are omitted as redundant: `test/fixtures/builtin-presets.json` already round-trips `elevation_island` (Island) and `elevation_lakes` (Lakes/Ribbon) through the codec byte-exactly, and this feature adds no codec code, so per-option capture fixtures would prove nothing new. Only the oracle dump + notes are committed (Task 1).
 - **Placeholder scan:** none - every code and command step is complete.
 - **Type consistency:** `MapType`/`MAP_TYPES`/`matchMapType`/`readMapType`/`writeMapType` names and signatures are identical across Tasks 2 and 3; the FDropdown `{ value, label }` contract and the `id` binding are consistent with `src/ui/FDropdown.vue`.
