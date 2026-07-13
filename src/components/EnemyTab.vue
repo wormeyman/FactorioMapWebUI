@@ -10,10 +10,29 @@ import FPercentSlider from "../ui/FPercentSlider.vue";
 const store = usePresetsStore();
 const preset = computed(() => store.activePreset);
 const evolution = computed(() => preset.value?.mapSettings.enemyEvolution);
+const expansion = computed(() => preset.value?.mapSettings.enemyExpansion);
 const COLUMNS: ControlColumn[] = [
   { key: "frequency", label: "Frequency" },
   { key: "size", label: "Size" },
 ];
+
+const TICKS_PER_MINUTE = 3600;
+
+// Cooldowns are stored as ticks (u32) but shown in minutes. An untouched value
+// survives byte-exact (minutes is display-only); only an edit applies the
+// round, so a non-whole-minute import shows as a fraction.
+const minCooldownMinutes = computed({
+  get: () => (expansion.value ? expansion.value.minExpansionCooldown / TICKS_PER_MINUTE : 0),
+  set: (v: number) => {
+    if (expansion.value) expansion.value.minExpansionCooldown = Math.round(v * TICKS_PER_MINUTE);
+  },
+});
+const maxCooldownMinutes = computed({
+  get: () => (expansion.value ? expansion.value.maxExpansionCooldown / TICKS_PER_MINUTE : 0),
+  set: (v: number) => {
+    if (expansion.value) expansion.value.maxExpansionCooldown = Math.round(v * TICKS_PER_MINUTE);
+  },
+});
 </script>
 
 <template>
@@ -61,9 +80,63 @@ const COLUMNS: ControlColumn[] = [
       </tbody>
     </table>
   </section>
-  <p class="note">
-    Expansion settings live in the MapSettings payload region and unlock in Phase 1.
-  </p>
+  <section v-if="expansion" data-test="enemy-expansion" class="enemy-section">
+    <FCheckbox
+      v-model="expansion.enabled"
+      label="Enemy expansion"
+      data-test="enemy-expansion-enable"
+    />
+    <table class="control-table">
+      <tbody>
+        <!-- Placeholder ranges; the number box is the source of truth. -->
+        <EnemyValueRow
+          data-test="enemy-exp-min-dist"
+          label="Minimum expansion distance"
+          v-model="expansion.minExpansionDistance"
+          :min="0"
+          :max="20"
+          :step="1"
+          :disabled="!expansion.enabled"
+        />
+        <EnemyValueRow
+          data-test="enemy-exp-max-dist"
+          label="Maximum expansion distance"
+          v-model="expansion.maxExpansionDistance"
+          :min="0"
+          :max="20"
+          :step="1"
+          :disabled="!expansion.enabled"
+        />
+        <EnemyValueRow
+          data-test="enemy-exp-group-size"
+          label="Evolution group size factor"
+          v-model="expansion.evolutionGroupSizeFactor"
+          :min="0"
+          :max="10"
+          :step="0.1"
+          :disabled="!expansion.enabled"
+        />
+        <EnemyValueRow
+          data-test="enemy-exp-min-cooldown"
+          label="Minimum cooldown (minutes)"
+          v-model="minCooldownMinutes"
+          :min="0"
+          :max="120"
+          :step="1"
+          :disabled="!expansion.enabled"
+        />
+        <EnemyValueRow
+          data-test="enemy-exp-max-cooldown"
+          label="Maximum cooldown (minutes)"
+          v-model="maxCooldownMinutes"
+          :min="0"
+          :max="120"
+          :step="1"
+          :disabled="!expansion.enabled"
+        />
+      </tbody>
+    </table>
+  </section>
 </template>
 
 <style scoped>
@@ -87,11 +160,6 @@ const COLUMNS: ControlColumn[] = [
 
 .sa-label {
   font-weight: 700;
-}
-
-.note {
-  color: var(--f-text-dim);
-  padding: 0 8px;
 }
 
 .enemy-section {
