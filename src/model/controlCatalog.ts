@@ -74,7 +74,7 @@ export const CONTROL_CATALOG: Record<string, ControlEntry> = {
   gleba_water: terrain("gleba", "Gleba water", false),
   gleba_plants: terrain("gleba", "Gleba plants", false),
   gleba_cliff: cliff("gleba", "Gleba cliffs"),
-  gleba_enemy_base: enemy("gleba", "Enemy bases"),
+  gleba_enemy_base: enemy("gleba", "Gleba enemy bases"),
   // Fulgora
   scrap: resource("fulgora", "Scrap"),
   fulgora_cliff: cliff("fulgora", "Fulgora cliffs"),
