@@ -1,7 +1,20 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import { type ControlColumn, controlsForTerrainGroup } from "../model/controlCatalog";
+import {
+  type ClimateControl,
+  MOISTURE,
+  TERRAIN_TYPE,
+  readBias,
+  readScale,
+  writeBias,
+  writeScale,
+} from "../model/climateControls";
+import { BIAS_SCALE } from "../model/controlScale";
+import { PLANET_ICONS, PLANET_LABELS } from "../model/planets";
+import { usePresetsStore } from "../store/presets";
 import FDropdown from "../ui/FDropdown.vue";
-import FSlider from "../ui/FSlider.vue";
+import FPercentSlider from "../ui/FPercentSlider.vue";
 import ControlTable from "./ControlTable.vue";
 
 const COVERAGE_COLUMNS: ControlColumn[] = [
@@ -17,11 +30,41 @@ const CLIFF_COLUMNS: ControlColumn[] = [
 // Map type is a fixed placeholder until elevation presets are decoded.
 const MAP_TYPE_OPTIONS = [{ value: "nauvis", label: "Nauvis elevation (Default)" }];
 
-// Group 3 noise expressions are not autoplace controls; shown inert for now.
-const NOISE_ROWS = [
-  { test: "terrain-noise-moisture", label: "Moisture" },
-  { test: "terrain-noise-terrain-type", label: "Terrain type" },
-];
+const store = usePresetsStore();
+
+// Scale/Bias sliders bind through the climate accessor to the active preset's
+// property_expression_names. Mutating that dict in place flows into
+// activeExchangeString via the same reactive path as autoplace ControlRows.
+function scaleModel(c: ClimateControl) {
+  return computed({
+    get: () => {
+      const pen = store.activePreset?.propertyExpressionNames;
+      return pen ? readScale(pen, c) : 1;
+    },
+    set: (v: number) => {
+      const pen = store.activePreset?.propertyExpressionNames;
+      if (pen) writeScale(pen, c, v);
+    },
+  });
+}
+
+function biasModel(c: ClimateControl) {
+  return computed({
+    get: () => {
+      const pen = store.activePreset?.propertyExpressionNames;
+      return pen ? readBias(pen, c) : 0;
+    },
+    set: (v: number) => {
+      const pen = store.activePreset?.propertyExpressionNames;
+      if (pen) writeBias(pen, c, v);
+    },
+  });
+}
+
+const moistureScale = scaleModel(MOISTURE);
+const moistureBias = biasModel(MOISTURE);
+const auxScale = scaleModel(TERRAIN_TYPE);
+const auxBias = biasModel(TERRAIN_TYPE);
 </script>
 
 <template>
@@ -51,19 +94,46 @@ const NOISE_ROWS = [
       <thead>
         <tr>
           <th>Setting</th>
+          <th class="appears-on-th">Appears on</th>
           <th>Scale</th>
           <th>Bias</th>
         </tr>
       </thead>
       <tbody>
-        <tr v-for="row in NOISE_ROWS" :key="row.test" :data-test="row.test">
-          <td class="label">{{ row.label }}</td>
-          <td class="cell"><FSlider :model-value="1" disabled /></td>
-          <td class="cell"><FSlider :model-value="0" :min="-1" :max="1" disabled /></td>
+        <tr data-test="terrain-noise-moisture">
+          <td class="label">Moisture</td>
+          <td class="appears-on">
+            <img
+              data-test="appears-on"
+              class="planet-icon"
+              :src="PLANET_ICONS.nauvis"
+              :alt="PLANET_LABELS.nauvis"
+              :title="PLANET_LABELS.nauvis"
+              width="24"
+              height="24"
+            />
+          </td>
+          <td class="cell"><FPercentSlider v-model="moistureScale" /></td>
+          <td class="cell"><FPercentSlider v-model="moistureBias" :scale="BIAS_SCALE" /></td>
+        </tr>
+        <tr data-test="terrain-noise-terrain-type">
+          <td class="label">Terrain type</td>
+          <td class="appears-on">
+            <img
+              data-test="appears-on"
+              class="planet-icon"
+              :src="PLANET_ICONS.nauvis"
+              :alt="PLANET_LABELS.nauvis"
+              :title="PLANET_LABELS.nauvis"
+              width="24"
+              height="24"
+            />
+          </td>
+          <td class="cell"><FPercentSlider v-model="auxScale" /></td>
+          <td class="cell"><FPercentSlider v-model="auxBias" :scale="BIAS_SCALE" /></td>
         </tr>
       </tbody>
     </table>
-    <p class="note">Moisture and terrain-type noise are not yet editable.</p>
   </section>
 </template>
 
@@ -105,12 +175,20 @@ const NOISE_ROWS = [
   padding: 6px 8px;
 }
 
-.cell :deep(.f-slider) {
-  width: 90px;
+.control-table th.appears-on-th {
+  text-align: center;
 }
 
-.note {
-  color: var(--f-text-dim);
-  padding: 0 8px;
+.appears-on {
+  padding: 6px 8px;
+  text-align: center;
+  width: 1%;
+  white-space: nowrap;
+}
+
+.planet-icon {
+  display: block;
+  margin: 0 auto;
+  vertical-align: middle;
 }
 </style>
