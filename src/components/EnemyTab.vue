@@ -3,6 +3,7 @@ import { computed } from "vue";
 import { type ControlColumn, controlsForCategory } from "../model/controlCatalog";
 import { usePresetsStore } from "../store/presets";
 import ControlTable from "./ControlTable.vue";
+import FCheckbox from "../ui/FCheckbox.vue";
 import FPercentSlider from "../ui/FPercentSlider.vue";
 
 const store = usePresetsStore();
@@ -15,6 +16,10 @@ const COLUMNS: ControlColumn[] = [
 
 <template>
   <ControlTable :names="controlsForCategory('enemy')" :columns="COLUMNS" leadLabel="Setting" />
+  <div v-if="preset" class="enemy-modes">
+    <FCheckbox v-model="preset.noEnemiesMode" label="No enemies" data-test="no-enemies-mode" />
+    <FCheckbox v-model="preset.peacefulMode" label="Peaceful mode" data-test="peaceful-mode" />
+  </div>
   <div v-if="preset" class="starting-area">
     <span class="sa-label">Starting area size</span>
     <FPercentSlider v-model="preset.startingArea" data-test="starting-area" />
@@ -25,6 +30,12 @@ const COLUMNS: ControlColumn[] = [
 </template>
 
 <style scoped>
+.enemy-modes {
+  display: flex;
+  gap: 16px;
+  padding: 8px;
+}
+
 .starting-area {
   display: flex;
   align-items: center;
