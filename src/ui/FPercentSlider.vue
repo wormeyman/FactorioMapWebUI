@@ -1,17 +1,18 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { PERCENT_STEPS, formatPercent, nearestStepIndex, stepValue } from "../model/controlScale";
+import { PERCENT_SCALE, type StepScale } from "../model/controlScale";
 
-const props = withDefaults(defineProps<{ modelValue: number; disabled?: boolean }>(), {
-  disabled: false,
-});
+const props = withDefaults(
+  defineProps<{ modelValue: number; disabled?: boolean; scale?: StepScale }>(),
+  { disabled: false, scale: () => PERCENT_SCALE },
+);
 const emit = defineEmits<{ "update:modelValue": [value: number] }>();
 
-const index = computed(() => nearestStepIndex(props.modelValue));
-const label = computed(() => formatPercent(props.modelValue));
+const index = computed(() => props.scale.nearestIndex(props.modelValue));
+const label = computed(() => props.scale.format(props.modelValue));
 
 function onInput(event: Event) {
-  emit("update:modelValue", stepValue(Number((event.target as HTMLInputElement).value)));
+  emit("update:modelValue", props.scale.valueAt(Number((event.target as HTMLInputElement).value)));
 }
 </script>
 
@@ -21,12 +22,12 @@ function onInput(event: Event) {
       class="f-percent-slider"
       type="range"
       min="0"
-      :max="PERCENT_STEPS.length - 1"
+      :max="props.scale.count - 1"
       step="1"
       :value="index"
       :disabled="disabled"
       :aria-valuetext="label"
-      aria-label="Percentage"
+      :aria-label="props.scale.ariaLabel"
       @input="onInput"
     />
     <span class="f-percent-label">{{ label }}</span>
@@ -68,7 +69,7 @@ function onInput(event: Event) {
 }
 
 .f-percent-label {
-  min-width: 34px;
+  min-width: 40px;
   font-size: 12px;
   color: var(--f-text);
 }
