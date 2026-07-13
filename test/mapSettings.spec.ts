@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import { decodeExchangeString } from "../src/codec/mapExchangeString";
-import { tailToNested } from "../src/model/mapSettings";
+import { tailToNested, writeEnemyToTail } from "../src/model/mapSettings";
 import fixtures from "./fixtures/builtin-presets.json";
 import mapDefaults from "./fixtures/map-settings.example.json";
 
@@ -225,5 +225,35 @@ describe("tailToNested", () => {
 
     // top-level
     expect(m.maxFailedBehaviorCount).toBe(mapDefaults.max_failed_behavior_count);
+  });
+});
+
+describe("writeEnemyToTail", () => {
+  it("is the inverse of tailToNested's enemy reads (round-trips edited values)", () => {
+    const tail = decodeExchangeString(presets["Default"] as string).tail;
+    const { mapSettings } = tailToNested(tail);
+    const evolution = { ...mapSettings.enemyEvolution, enabled: false, timeFactor: 0.5 };
+    const expansion = { ...mapSettings.enemyExpansion, maxExpansionDistance: 99 };
+
+    writeEnemyToTail(tail, evolution, expansion);
+    const after = tailToNested(tail).mapSettings;
+
+    expect(after.enemyEvolution.enabled).toBe(false);
+    expect(after.enemyEvolution.timeFactor).toBe(0.5);
+    expect(after.enemyExpansion.maxExpansionDistance).toBe(99);
+  });
+
+  it("skips a field whose value is undefined (preserves the original)", () => {
+    const tail = decodeExchangeString(presets["Default"] as string).tail;
+    const original = tail["enemyEvolution.timeFactor"];
+    const { mapSettings } = tailToNested(tail);
+    const evolution = {
+      ...mapSettings.enemyEvolution,
+      timeFactor: undefined as unknown as number,
+    };
+
+    writeEnemyToTail(tail, evolution, mapSettings.enemyExpansion);
+
+    expect(tail["enemyEvolution.timeFactor"]).toBe(original);
   });
 });

@@ -282,3 +282,49 @@ export function tailToNested(tail: TailBlock): { cliff: CliffSettings; mapSettin
 
   return { cliff, mapSettings };
 }
+
+/**
+ * Overlay the two editable enemy sections back onto a flat `TailBlock` - the
+ * exact inverse of the `enemyEvolution.*` / `enemyExpansion.*` reads in
+ * `tailToNested`. Writes ONLY enemy dotted keys (never the sibling
+ * pollution/unitGroup/pathFinder/difficulty/asteroids keys, which stay
+ * carried opaquely), and copies a field only when `value !== undefined` so a
+ * field that decoded genuinely absent is not spuriously added. A `false` /
+ * `0` edit IS written (that is the point of the undefined-check rather than a
+ * truthiness check). Used by `presetToEncodable` to make these sections
+ * round-trip-editable while every other tail byte round-trips from
+ * `opaqueTailB64`.
+ */
+export function writeEnemyToTail(
+  tail: TailBlock,
+  evolution: EnemyEvolutionSettings,
+  expansion: EnemyExpansionSettings,
+): void {
+  const put = (key: string, value: number | boolean | undefined) => {
+    if (value !== undefined) tail[key] = value;
+  };
+
+  put("enemyEvolution.enabled", evolution.enabled);
+  put("enemyEvolution.timeFactor", evolution.timeFactor);
+  put("enemyEvolution.destroyFactor", evolution.destroyFactor);
+  put("enemyEvolution.pollutionFactor", evolution.pollutionFactor);
+
+  put("enemyExpansion.enabled", expansion.enabled);
+  put("enemyExpansion.maxExpansionDistance", expansion.maxExpansionDistance);
+  put("enemyExpansion.minExpansionDistance", expansion.minExpansionDistance);
+  put("enemyExpansion.friendlyBaseInfluenceRadius", expansion.friendlyBaseInfluenceRadius);
+  put("enemyExpansion.enemyBuildingInfluenceRadius", expansion.enemyBuildingInfluenceRadius);
+  put("enemyExpansion.buildingCoefficient", expansion.buildingCoefficient);
+  put("enemyExpansion.otherBaseCoefficient", expansion.otherBaseCoefficient);
+  put("enemyExpansion.neighbouringChunkCoefficient", expansion.neighbouringChunkCoefficient);
+  put(
+    "enemyExpansion.neighbouringBaseChunkCoefficient",
+    expansion.neighbouringBaseChunkCoefficient,
+  );
+  put("enemyExpansion.maxCollidingTilesCoefficient", expansion.maxCollidingTilesCoefficient);
+  put("enemyExpansion.settlerGroupMinSize", expansion.settlerGroupMinSize);
+  put("enemyExpansion.settlerGroupMaxSize", expansion.settlerGroupMaxSize);
+  put("enemyExpansion.evolutionGroupSizeFactor", expansion.evolutionGroupSizeFactor);
+  put("enemyExpansion.minExpansionCooldown", expansion.minExpansionCooldown);
+  put("enemyExpansion.maxExpansionCooldown", expansion.maxExpansionCooldown);
+}
