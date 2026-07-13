@@ -59,7 +59,13 @@ controls and have no checkbox - unchanged.
   size slider never collide.
 - **Re-enable → `size = 1` (100%).** The wire loses the pre-disable size (it is
   `0`), so re-checking always restores `size` to the default `1`. No remembered
-  value, matching the game's own behavior on import.
+  value, matching the game's own behavior on import. This is asymmetric with
+  `frequency`/`richness` (which survive a disable) - a known, accepted UX
+  tradeoff, unavoidable without a new persisted field (out of scope).
+- **The toggle does not self-persist.** Like the existing sliders, `setEnabled`
+  mutates reactive state and flows to `activeExchangeString`, but does not call
+  `saveToStorage()`; it persists to `localStorage` on the next preset action,
+  consistent with slider edits (not a new behavior).
 
 ## Architecture
 
@@ -87,17 +93,28 @@ than scattering `=== 0` across components.
 
 ### `src/components/ControlRow.vue`: the checkbox
 
-- For a control whose catalog entry `canBeDisabled` is true, render a checkbox at
-  the left of the label cell (matching the game), bound to `isEnabled(control)`.
-  Toggling calls `setEnabled`.
-- When disabled (`size === 0`), the row's sliders (`FPercentSlider` for
-  frequency / size / richness) are shown but `disabled` (grayed), matching the
-  game. Frequency and richness keep their values; the size slider is grayed and
-  its value is `0`.
-- Controls that cannot be disabled render no checkbox but **reserve the checkbox
-  gutter** so their labels stay aligned with checkbox rows (matching the game,
-  where "Vulcanus volcanism" lines up under "Water"). Their sliders are always
-  active.
+- **Gutter (concrete).** The label cell starts with a fixed-width checkbox
+  gutter (a `span.control-enable` of a set width). For a control whose catalog
+  entry `canBeDisabled` is true, the gutter holds a checkbox bound to
+  `isEnabled(control)`; toggling calls `setEnabled`. For always-on controls the
+  gutter renders an **empty spacer of the same width**, so labels stay aligned
+  (matching the game, where "Vulcanus volcanism" lines up under "Water"). This is
+  the only table where it matters - the Terrain **coverage** table is the sole
+  mixed table (its `gleba_water` / `gleba_plants` / `vulcanus_volcanism` /
+  `fulgora_islands` rows are always-on while `water` / `trees` / `rocks` /
+  `starting_area_moisture` are disable-able); Resources are all disable-able,
+  Enemy all always-on, cliffs all disable-able.
+- **Graying is gated on `canBeDisabled`.** Only a `canBeDisabled` control consults
+  `isEnabled` for graying. When such a control is disabled (`size === 0`), the
+  row's sliders (`FPercentSlider` for whichever columns the table shows) are
+  rendered but `disabled` (grayed); `frequency` and `richness` keep their values,
+  the size slider is grayed with value `0`. Always-on controls never gray (an
+  always-on control has no checkbox, so a stray `size: 0` must not disable its
+  otherwise-unrecoverable sliders).
+- **Grayed size slider display.** `FPercentSlider` with `modelValue: 0` shows
+  `"0%"` with the thumb at the index-0 (17%) slot, since `nearestStepIndex(0)`
+  clamps to 0. Grayed out this is an accepted cosmetic (the label reads `0%`,
+  which reads as "off"); it is a deliberate decision, not a bug.
 - The edit flows through the same reactive path as the existing sliders
   (mutating `store.activePreset.autoplaceControls[name].size`), so
   `activeExchangeString` updates identically.
@@ -127,8 +144,12 @@ controls are all always-on) gets the behavior in one place.
 - **`autoplaceEnabled` unit tests.** `isEnabled` (size 0 vs non-zero);
   `setEnabled` toggling to 0 and back to 1; frequency/richness untouched.
 - **`ControlRow` component tests.** A disable-able control renders a checkbox;
-  an always-on control does not; unchecking sets `size = 0` and disables the
-  row's sliders; re-checking restores `size = 1` and re-enables them.
+  an always-on control renders no checkbox but still reserves the gutter (the
+  label stays aligned); unchecking sets `size = 0` and disables the row's
+  sliders; re-checking restores `size = 1` and re-enables them.
+- **Disable→enable preserves frequency/richness (through `ControlRow`).** With a
+  control whose `frequency`/`richness` are non-default, toggle off then on and
+  assert only `size` changed (1 → 0 → 1); `frequency`/`richness` untouched.
 - **App test.** On the Terrain tab, uncheck Cliffs and assert
   `activeExchangeString`'s decoded `nauvis_cliff.size === 0` (and re-check
   restores it).
