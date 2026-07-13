@@ -11,9 +11,9 @@ const emit = defineEmits<{ "update:modelValue": [value: number] }>();
 const index = computed(() => props.scale.nearestIndex(props.modelValue));
 const label = computed(() => props.scale.format(props.modelValue));
 
-// Fraction (0..1) of the thumb along the track, used to position the value
-// bubble under the thumb - matching the game's map-generator sliders, which
-// show the value in a tooltip below the handle only while it's being used.
+// Fraction (0..1) of the thumb along the track. Drives both the orange fill
+// (left edge to the thumb) and the value bubble under the thumb - matching the
+// game's map-generator sliders.
 const fraction = computed(() => {
   const max = props.scale.count - 1;
   return max > 0 ? index.value / max : 0;
@@ -34,13 +34,16 @@ function onInput(event: Event) {
 
 <template>
   <span class="f-percent" :style="{ '--frac': fraction }">
-    <span class="f-percent-track" aria-hidden="true">
+    <span class="f-percent-ticks" aria-hidden="true">
       <span
         v-for="(f, i) in tickFractions"
         :key="i"
         class="f-percent-tick"
         :style="{ left: `calc(7px + ${f} * (100% - 14px))` }"
       />
+    </span>
+    <span class="f-percent-track" aria-hidden="true">
+      <span class="f-percent-fill" />
     </span>
     <input
       class="f-percent-slider"
@@ -63,11 +66,30 @@ function onInput(event: Event) {
   position: relative;
   display: block;
   width: 100%;
-  height: 14px;
+  height: 16px;
 }
 
-/* The visible track + notch ticks, drawn behind the transparent-track input so
-   the thumb still sits on top of them. */
+/* Notch ticks sit just above the track. */
+.f-percent-ticks {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  pointer-events: none;
+}
+
+.f-percent-tick {
+  position: absolute;
+  bottom: 0;
+  width: 1px;
+  height: 4px;
+  transform: translateX(-50%);
+  background: var(--f-edge-light);
+}
+
+/* The track holds the orange value fill; it sits behind the transparent-track
+   input so the thumb rides on top. */
 .f-percent-track {
   position: absolute;
   top: 50%;
@@ -79,25 +101,28 @@ function onInput(event: Event) {
   box-shadow:
     inset 1px 1px 0 var(--f-edge-dark),
     inset -1px -1px 0 var(--f-edge-light);
+  overflow: hidden;
   pointer-events: none;
 }
 
-.f-percent-tick {
+.f-percent-fill {
   position: absolute;
-  top: 50%;
-  width: 1px;
-  height: 10px;
-  transform: translate(-50%, -50%);
-  background: var(--f-edge-light);
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: calc(7px + var(--frac, 0) * (100% - 14px));
+  background: var(--f-orange);
 }
 
 .f-percent-slider {
   appearance: none;
-  position: relative;
-  display: block;
+  position: absolute;
+  top: 50%;
+  left: 0;
   width: 100%;
   height: 14px;
   margin: 0;
+  transform: translateY(-50%);
   background: transparent;
 }
 
@@ -106,7 +131,7 @@ function onInput(event: Event) {
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: var(--f-orange);
+  background: var(--f-orange-bright);
   border: 1px solid #6b4a12;
 }
 
@@ -114,7 +139,7 @@ function onInput(event: Event) {
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: var(--f-orange);
+  background: var(--f-orange-bright);
   border: 1px solid #6b4a12;
 }
 
