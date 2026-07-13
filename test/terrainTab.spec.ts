@@ -1,7 +1,9 @@
 import { mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
-import { describe, expect, it } from "vite-plus/test";
+import { beforeEach, describe, expect, it } from "vite-plus/test";
 import TerrainTab from "../src/components/TerrainTab.vue";
+import { usePresetsStore } from "../src/store/presets";
+import { decodeExchangeString } from "../src/codec/mapExchangeString";
 
 function mountTab() {
   setActivePinia(createPinia());
@@ -16,6 +18,10 @@ function headers(wrapper: ReturnType<typeof mount>, tableTest: string): string[]
 }
 
 describe("TerrainTab", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
   it("renders the coverage table with Scale/Coverage columns and no Richness", () => {
     const wrapper = mountTab();
     const cols = headers(wrapper, "terrain-coverage-table");
@@ -55,12 +61,43 @@ describe("TerrainTab", () => {
     expect(select.text()).toContain("Nauvis elevation");
   });
 
-  it("renders inert Moisture and Terrain type noise rows with disabled sliders", () => {
+  it("renders live Moisture and Terrain type rows with enabled Scale and Bias sliders", () => {
     const wrapper = mountTab();
     for (const row of ["terrain-noise-moisture", "terrain-noise-terrain-type"]) {
       const el = wrapper.find(`[data-test="${row}"]`);
       expect(el.exists(), row).toBe(true);
-      expect(el.find("input[disabled]").exists(), row).toBe(true);
+      const sliders = el.findAll('input[type="range"]');
+      expect(sliders.length, row).toBe(2);
+      expect(
+        sliders.every((s) => !(s.element as HTMLInputElement).disabled),
+        row,
+      ).toBe(true);
     }
+  });
+
+  it('gives each climate row an "Appears on" Nauvis icon', () => {
+    const wrapper = mountTab();
+    const cols = headers(wrapper, "terrain-noise-table");
+    expect(cols).toContain("Appears on");
+    for (const row of ["terrain-noise-moisture", "terrain-noise-terrain-type"]) {
+      const icon = wrapper.find(`[data-test="${row}"] img[data-test="appears-on"]`);
+      expect(icon.exists(), row).toBe(true);
+      expect(icon.attributes("alt"), row).toBe("Nauvis");
+    }
+  });
+
+  it("drives Moisture Scale 150% + Bias +0.05 into the exchange string byte-exact", async () => {
+    setActivePinia(createPinia());
+    localStorage.clear();
+    const store = usePresetsStore();
+    const wrapper = mount(TerrainTab);
+    const row = wrapper.find('[data-test="terrain-noise-moisture"]');
+    const sliders = row.findAll('input[type="range"]');
+    await sliders[0]?.setValue("7"); // Scale notch 7 = 150%
+    await sliders[1]?.setValue("11"); // Bias notch 11 = +0.05
+
+    const pen = decodeExchangeString(store.activeExchangeString as string).propertyExpressionNames;
+    expect(pen["control:moisture:frequency"]).toBe("0.666667");
+    expect(pen["control:moisture:bias"]).toBe("0.050000");
   });
 });
