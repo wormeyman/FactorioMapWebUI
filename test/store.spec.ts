@@ -50,6 +50,45 @@ describe("presets store", () => {
     expect(store.activePreset?.seed).toBeNull();
   });
 
+  it("applies a builtin's values onto the active preset, keeping its name", () => {
+    const store = usePresetsStore();
+    const originalName = store.activeName;
+    store.applyBuiltinToActive("Rich Resources");
+    // Same preset stays active; only its values change.
+    expect(store.activeName).toBe(originalName);
+    expect(store.activePreset?.name).toBe("My preset");
+    expect(store.activePreset?.autoplaceControls["coal"]?.richness).toBe(2);
+    expect(store.activePreset?.builtin).toBe(false);
+    // Follows the create-from-builtin convention: random each new map.
+    expect(store.activePreset?.seed).toBeNull();
+    // Persisted immediately.
+    expect(localStorage.getItem(STORAGE_KEY)).toContain("My preset");
+  });
+
+  it("applyBuiltinToActive replaces the whole control set, not just overlapping keys", () => {
+    const store = usePresetsStore();
+    store.applyBuiltinToActive("Death world");
+    expect(store.activePreset?.autoplaceControls["enemy-base"]?.frequency).toBe(2);
+    store.applyBuiltinToActive("Default");
+    expect(store.activePreset?.autoplaceControls["enemy-base"]?.frequency).toBe(1);
+  });
+
+  it("applies a private copy: editing the active preset never mutates the builtin cache", () => {
+    const store = usePresetsStore();
+    store.applyBuiltinToActive("Death world");
+    store.activePreset!.autoplaceControls["enemy-base"]!.frequency = 99;
+    // Re-applying the same builtin must restore the real value, proving no shared reference.
+    store.applyBuiltinToActive("Death world");
+    expect(store.activePreset?.autoplaceControls["enemy-base"]?.frequency).toBe(2);
+  });
+
+  it("applyBuiltinToActive is a no-op when nothing is active", () => {
+    const store = usePresetsStore();
+    store.activeName = null;
+    expect(() => store.applyBuiltinToActive("Default")).not.toThrow();
+    expect(store.activePreset).toBeUndefined();
+  });
+
   it("keeps the concrete seed when importing a string that carries one", () => {
     const store = usePresetsStore();
     store.importExchangeString("pinned", withSeed("Default", 123456789));

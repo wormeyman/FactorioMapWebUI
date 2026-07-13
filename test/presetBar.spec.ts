@@ -70,3 +70,19 @@ describe("PresetBar seed reroll", () => {
     expect(seed).toBeLessThanOrEqual(0xffffffff);
   });
 });
+
+describe("PresetBar builtin dropdown", () => {
+  it("loads the picked builtin's values into the active preset", async () => {
+    setActivePinia(createPinia());
+    const store = usePresetsStore();
+    const wrapper = mount(PresetBar);
+    // First-launch active preset is a Default clone (coal richness 1).
+    expect(store.activePreset?.autoplaceControls["coal"]?.richness).toBe(1);
+
+    await wrapper.find('select[data-test="builtin-select"]').setValue("Rich Resources");
+
+    // The same preset stays active; its slider-backing values now match the builtin.
+    expect(store.activePreset?.name).toBe("My preset");
+    expect(store.activePreset?.autoplaceControls["coal"]?.richness).toBe(2);
+  });
+});

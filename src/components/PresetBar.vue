@@ -31,6 +31,13 @@ function create() {
   newName.value = "";
 }
 
+// Picking a built-in loads its values into the active preset, so all sliders
+// update to match (the dropdown still seeds what "Create" clones).
+function onBuiltinChange(name: string) {
+  builtinChoice.value = name;
+  store.applyBuiltinToActive(name);
+}
+
 function onSeedChange(event: Event) {
   const raw = (event.target as HTMLInputElement).value;
   if (store.activePreset) {
@@ -64,7 +71,12 @@ function rerollSeed() {
       placeholder="New preset name"
       @keyup.enter="create"
     />
-    <FDropdown v-model="builtinChoice" data-test="builtin-select" :options="builtinOptions" />
+    <FDropdown
+      :model-value="builtinChoice"
+      data-test="builtin-select"
+      :options="builtinOptions"
+      @update:model-value="onBuiltinChange"
+    />
     <FButton data-test="create-preset" variant="tool" @click="create">Create</FButton>
 
     <span class="spacer" />
