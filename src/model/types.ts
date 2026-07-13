@@ -44,9 +44,16 @@ export interface Preset {
    * fields are individually mapped. Replaced by typed fields in Phase 1.
    */
   opaqueTailB64: string;
-  /** Nested, typed view of the cliff section of the tail, derived from `opaqueTailB64` for JSON export/display. Read-only this phase; not the round-trip source of truth. */
+  /** Nested, typed view of the cliff section of the tail, derived from `opaqueTailB64` for JSON export/display. Read-only; not the round-trip source of truth. */
   cliffSettings: CliffSettings;
-  /** Nested, typed view of the MapSettings sections of the tail, derived from `opaqueTailB64` for JSON export/display. Read-only this phase; not the round-trip source of truth. */
+  /**
+   * Nested, typed view of the MapSettings sections of the tail. `enemyEvolution`
+   * and `enemyExpansion` are round-trip EDITABLE: `presetToEncodable` overlays
+   * them back onto the tail (see `writeEnemyToTail`). The sibling sections
+   * (pollution, unitGroup, pathFinder, difficulty, asteroids) remain read-only
+   * derived views for JSON export/display only and are ignored by the encoder -
+   * wiring one to a control requires extending the overlay first.
+   */
   mapSettings: MapSettings;
   formatVersion: FormatVersion;
 }

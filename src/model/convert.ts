@@ -5,7 +5,7 @@ import {
   type DecodedExchange,
   type EncodableExchange,
 } from "../codec/mapExchangeString";
-import { tailToNested } from "./mapSettings";
+import { tailToNested, writeEnemyToTail } from "./mapSettings";
 import type { Preset } from "./types";
 
 export function presetFromDecoded(name: string, decoded: DecodedExchange, builtin = false): Preset {
@@ -43,6 +43,11 @@ export function presetFromDecoded(name: string, decoded: DecodedExchange, builti
  */
 export function presetToEncodable(preset: Preset): EncodableExchange {
   const area = preset.areaToGenerateAtStart;
+  // opaqueTailB64 carries every tail byte; overlay only the editable enemy
+  // sections back onto it (byte-exact for unedited presets, since the overlaid
+  // values equal the decoded ones).
+  const tail = bytesToTail(base64ToBytes(preset.opaqueTailB64));
+  writeEnemyToTail(tail, preset.mapSettings.enemyEvolution, preset.mapSettings.enemyExpansion);
   return {
     version: preset.formatVersion,
     flagByte: 0,
@@ -64,6 +69,6 @@ export function presetToEncodable(preset: Preset): EncodableExchange {
       startingPoints: preset.startingPoints.map((p) => ({ x: p.x, y: p.y })),
     },
     propertyExpressionNames: preset.propertyExpressionNames,
-    tail: bytesToTail(base64ToBytes(preset.opaqueTailB64)),
+    tail,
   };
 }
