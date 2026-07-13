@@ -1,5 +1,5 @@
 <script setup lang="ts">
-defineProps<{ modelValue: number }>();
+defineProps<{ modelValue: number; disabled?: boolean }>();
 const emit = defineEmits<{ "update:modelValue": [value: number] }>();
 
 function onChange(event: Event) {
@@ -12,7 +12,13 @@ function onChange(event: Event) {
 </script>
 
 <template>
-  <input class="f-number" type="number" :value="modelValue" @change="onChange" />
+  <input
+    class="f-number"
+    type="number"
+    :value="modelValue"
+    :disabled="disabled"
+    @change="onChange"
+  />
 </template>
 
 <style scoped>
