@@ -147,6 +147,11 @@ Replace the inert noise table (the `NOISE_ROWS` block and its disabled `FSlider`
 plus the "not yet editable" note) with two live rows, Moisture and Terrain type.
 Each row:
 
+- **Appears on** cell: the Nauvis planet icon (`PLANET_ICONS.nauvis`), matching
+  the coverage and cliff tables above it. Both climate controls are Nauvis-only,
+  so the noise table gains an "Appears on" column header and each row shows the
+  Nauvis icon - the whole Terrain tab now reads consistently (every row has an
+  "Appears on" cell), the same way the game shows it.
 - **Scale** cell: `FPercentSlider` bound through the climate accessor
   (read/writeScale on the active preset), default `PERCENT_SCALE`.
 - **Bias** cell: `FPercentSlider` with `:scale="BIAS_SCALE"`, bound through
@@ -183,7 +188,8 @@ edits flow into `activeExchangeString` through the same reactive path as
   off-notch import.
 - **App test.** On the Terrain tab, drive the Moisture Scale slider to 150% and
   the Bias slider to +0.05, then assert `activeExchangeString`'s decoded
-  `propertyExpressionNames` equals the corresponding capture's.
+  `propertyExpressionNames` equals the corresponding capture's. Also assert both
+  climate rows render the "Appears on" Nauvis icon.
 
 ## Out of scope
 
