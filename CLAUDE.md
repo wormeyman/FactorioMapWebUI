@@ -11,6 +11,7 @@ It is the authoritative source for how the map generator, noise expressions, and
 map-gen settings work.
 
 Useful entry points:
+
 - `factorioLuaAPI/auxiliary/noise-expressions.html` - named noise expressions and
   the `control:<name>:frequency|size|richness|bias` constants (e.g.
   `control:moisture:frequency`, `control:aux:bias`, `control:temperature:*` - the
@@ -29,7 +30,7 @@ https://wiki.factorio.com/Command_line_parameters (the game's own binary; this
 is a wiki page, not in the `factorioLuaAPI/` mirror). Relevant here:
 
 - **Map-gen testing / validation:** `factorio --create <save> --map-gen-settings
-  <json> --map-gen-seed <n> --mod-directory <dir>` runs headless and exits
+<json> --map-gen-seed <n> --mod-directory <dir>` runs headless and exits
   cleanly even alongside a running game if you point an isolated `--config` INI's
   `write-data` at a temp dir. This is how the codec is cross-validated against the
   game's own parse (a dumper mod calls `helpers.parse_map_exchange_string` and
