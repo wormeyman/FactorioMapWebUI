@@ -19,6 +19,14 @@ const fraction = computed(() => {
   return max > 0 ? index.value / max : 0;
 });
 
+// One tick per notch, at its fraction along the track, so the marks line up
+// with where the thumb can stop (like the game's notched sliders).
+const tickFractions = computed(() => {
+  const n = props.scale.count;
+  if (n <= 1) return [0];
+  return Array.from({ length: n }, (_, i) => i / (n - 1));
+});
+
 function onInput(event: Event) {
   emit("update:modelValue", props.scale.valueAt(Number((event.target as HTMLInputElement).value)));
 }
@@ -26,6 +34,14 @@ function onInput(event: Event) {
 
 <template>
   <span class="f-percent" :style="{ '--frac': fraction }">
+    <span class="f-percent-track" aria-hidden="true">
+      <span
+        v-for="(f, i) in tickFractions"
+        :key="i"
+        class="f-percent-tick"
+        :style="{ left: `calc(7px + ${f} * (100% - 14px))` }"
+      />
+    </span>
     <input
       class="f-percent-slider"
       type="range"
@@ -47,17 +63,42 @@ function onInput(event: Event) {
   position: relative;
   display: block;
   width: 100%;
+  height: 14px;
 }
 
-.f-percent-slider {
-  appearance: none;
-  display: block;
-  width: 100%;
+/* The visible track + notch ticks, drawn behind the transparent-track input so
+   the thumb still sits on top of them. */
+.f-percent-track {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
   height: 6px;
+  transform: translateY(-50%);
   background: var(--f-inset);
   box-shadow:
     inset 1px 1px 0 var(--f-edge-dark),
     inset -1px -1px 0 var(--f-edge-light);
+  pointer-events: none;
+}
+
+.f-percent-tick {
+  position: absolute;
+  top: 50%;
+  width: 1px;
+  height: 10px;
+  transform: translate(-50%, -50%);
+  background: var(--f-edge-light);
+}
+
+.f-percent-slider {
+  appearance: none;
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 14px;
+  margin: 0;
+  background: transparent;
 }
 
 .f-percent-slider::-webkit-slider-thumb {
