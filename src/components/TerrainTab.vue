@@ -175,10 +175,6 @@ const auxBias = biasModel(TERRAIN_TYPE);
   padding: 6px 8px;
 }
 
-.cell :deep(.f-slider) {
-  width: 90px;
-}
-
 .control-table th.appears-on-th {
   text-align: center;
 }

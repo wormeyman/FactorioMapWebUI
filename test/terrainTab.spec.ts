@@ -100,4 +100,27 @@ describe("TerrainTab", () => {
     expect(pen["control:moisture:frequency"]).toBe("0.666667");
     expect(pen["control:moisture:bias"]).toBe("0.050000");
   });
+
+  it("removes the moisture keys from the exchange string when reset to default notches", async () => {
+    setActivePinia(createPinia());
+    localStorage.clear();
+    const store = usePresetsStore();
+    const wrapper = mount(TerrainTab);
+    const row = wrapper.find('[data-test="terrain-noise-moisture"]');
+    const sliders = row.findAll('input[type="range"]');
+
+    // First move both off default so the keys are present...
+    await sliders[0]?.setValue("7"); // Scale 150%
+    await sliders[1]?.setValue("11"); // Bias +0.05
+    let pen = decodeExchangeString(store.activeExchangeString as string).propertyExpressionNames;
+    expect(pen["control:moisture:frequency"]).toBe("0.666667");
+    expect(pen["control:moisture:bias"]).toBe("0.050000");
+
+    // ...then reset both to their default notch (Scale 100% = index 5, Bias 0 = index 10).
+    await sliders[0]?.setValue("5");
+    await sliders[1]?.setValue("10");
+    pen = decodeExchangeString(store.activeExchangeString as string).propertyExpressionNames;
+    expect("control:moisture:frequency" in pen).toBe(false);
+    expect("control:moisture:bias" in pen).toBe(false);
+  });
 });

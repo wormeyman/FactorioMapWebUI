@@ -7,6 +7,7 @@ import {
   writeBias,
   writeScale,
 } from "../src/model/climateControls";
+import { PERCENT_STEPS } from "../src/model/controlScale";
 
 describe("readScale / writeScale", () => {
   it("defaults to multiplier 1 when the freq key is absent", () => {
@@ -35,6 +36,36 @@ describe("readScale / writeScale", () => {
     writeScale(pen, MOISTURE, 1);
     expect("control:moisture:frequency" in pen).toBe(false);
   });
+
+  const SCALE_NOTCH_TABLE: Array<{ percent: number; wire: string | undefined }> = [
+    { percent: 17, wire: "6.000000" },
+    { percent: 25, wire: "4.000000" },
+    { percent: 33, wire: "3.000000" },
+    { percent: 50, wire: "2.000000" },
+    { percent: 75, wire: "1.333333" },
+    { percent: 100, wire: undefined },
+    { percent: 133, wire: "0.750000" },
+    { percent: 150, wire: "0.666667" },
+    { percent: 200, wire: "0.500000" },
+    { percent: 300, wire: "0.333333" },
+    { percent: 400, wire: "0.250000" },
+    { percent: 600, wire: "0.166667" },
+  ];
+
+  it.each(SCALE_NOTCH_TABLE)(
+    "writes the $percent% notch as $wire on the wire",
+    ({ percent, wire }) => {
+      const step = PERCENT_STEPS.find((s) => s.percent === percent);
+      expect(step, `no PERCENT_STEPS entry for ${percent}%`).toBeDefined();
+      const pen: Record<string, string> = {};
+      writeScale(pen, MOISTURE, step!.value);
+      if (wire === undefined) {
+        expect("control:moisture:frequency" in pen).toBe(false);
+      } else {
+        expect(pen["control:moisture:frequency"]).toBe(wire);
+      }
+    },
+  );
 
   it("uses the aux keys for terrain type", () => {
     const pen: Record<string, string> = {};
