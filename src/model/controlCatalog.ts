@@ -19,28 +19,31 @@ export interface ControlEntry {
   category: ControlCategory;
   label: string;
   hasRichness: boolean;
+  /** True iff the game exposes an enable/disable checkbox for this control (its `can_be_disabled` flag). */
+  canBeDisabled: boolean;
   /** Set only for terrain controls, to split them into their two tables. */
   terrainGroup?: TerrainGroup;
 }
 
 function resource(planet: Planet, label: string): ControlEntry {
-  return { planet, category: "resource", label, hasRichness: true };
+  return { planet, category: "resource", label, hasRichness: true, canBeDisabled: true };
 }
 
 function terrain(
   planet: Planet,
   label: string,
+  canBeDisabled: boolean,
   terrainGroup: TerrainGroup = "coverage",
 ): ControlEntry {
-  return { planet, category: "terrain", label, hasRichness: false, terrainGroup };
+  return { planet, category: "terrain", label, hasRichness: false, canBeDisabled, terrainGroup };
 }
 
 function cliff(planet: Planet, label: string): ControlEntry {
-  return terrain(planet, label, "cliff");
+  return terrain(planet, label, true, "cliff");
 }
 
 function enemy(planet: Planet, label: string): ControlEntry {
-  return { planet, category: "enemy", label, hasRichness: false };
+  return { planet, category: "enemy", label, hasRichness: false, canBeDisabled: false };
 }
 
 /** All 28 autoplace controls of Factorio 2.1.9 Space Age, keyed by wire name. */
@@ -53,27 +56,27 @@ export const CONTROL_CATALOG: Record<string, ControlEntry> = {
   "crude-oil": resource("nauvis", "Crude oil"),
   "uranium-ore": resource("nauvis", "Uranium ore"),
   "enemy-base": enemy("nauvis", "Enemy bases"),
-  water: terrain("nauvis", "Water"),
-  trees: terrain("nauvis", "Trees"),
-   rocks: terrain("nauvis", "Rocks"),
+  water: terrain("nauvis", "Water", true),
+  trees: terrain("nauvis", "Trees", true),
+  rocks: terrain("nauvis", "Rocks", true),
   nauvis_cliff: cliff("nauvis", "Cliffs"),
-  starting_area_moisture: terrain("nauvis", "Starting area moisture"),
+  starting_area_moisture: terrain("nauvis", "Starting area moisture", true),
   // Vulcanus
   vulcanus_coal: resource("vulcanus", "Coal"),
   calcite: resource("vulcanus", "Calcite"),
   sulfuric_acid_geyser: resource("vulcanus", "Sulfuric acid geyser"),
   tungsten_ore: resource("vulcanus", "Tungsten ore"),
-  vulcanus_volcanism: terrain("vulcanus", "Vulcanus volcanism"),
+  vulcanus_volcanism: terrain("vulcanus", "Vulcanus volcanism", false),
   // Gleba
   gleba_stone: resource("gleba", "Stone"),
-  gleba_water: terrain("gleba", "Gleba water"),
-  gleba_plants: terrain("gleba", "Gleba plants"),
+  gleba_water: terrain("gleba", "Gleba water", false),
+  gleba_plants: terrain("gleba", "Gleba plants", false),
   gleba_cliff: cliff("gleba", "Gleba cliffs"),
   gleba_enemy_base: enemy("gleba", "Enemy bases"),
   // Fulgora
   scrap: resource("fulgora", "Scrap"),
   fulgora_cliff: cliff("fulgora", "Fulgora cliffs"),
-  fulgora_islands: terrain("fulgora", "Fulgora islands"),
+  fulgora_islands: terrain("fulgora", "Fulgora islands", false),
   // Aquilo
   aquilo_crude_oil: resource("aquilo", "Crude oil"),
   lithium_brine: resource("aquilo", "Lithium brine"),
