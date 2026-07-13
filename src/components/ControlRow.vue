@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { CONTROL_CATALOG, type ControlColumn } from "../model/controlCatalog";
+import { isEnabled, setEnabled } from "../model/autoplaceEnabled";
 import { PLANET_ICONS, PLANET_LABELS } from "../model/planets";
 import { RESOURCE_ICONS } from "../model/resourceIcons";
 import { usePresetsStore } from "../store/presets";
@@ -12,11 +13,31 @@ const store = usePresetsStore();
 const entry = computed(() => CONTROL_CATALOG[props.name]);
 const control = computed(() => store.activePreset?.autoplaceControls[props.name]);
 const icon = computed(() => RESOURCE_ICONS[props.name]);
+
+// Only a disable-able control consults its enabled state; always-on controls
+// are always treated as enabled (and never gray) regardless of a stray size.
+const enabled = computed(() =>
+  entry.value?.canBeDisabled && control.value ? isEnabled(control.value) : true,
+);
+
+function onToggle(event: Event) {
+  if (control.value) setEnabled(control.value, (event.target as HTMLInputElement).checked);
+}
 </script>
 
 <template>
   <tr v-if="entry && control" class="control-row" :data-test="`control-row-${name}`">
     <td class="label">
+      <span class="control-enable">
+        <input
+          v-if="entry.canBeDisabled"
+          type="checkbox"
+          data-test="control-enable"
+          :checked="enabled"
+          :aria-label="`Enable ${entry.label}`"
+          @change="onToggle"
+        />
+      </span>
       <img
         v-if="icon"
         data-test="resource-icon"
@@ -40,7 +61,7 @@ const icon = computed(() => RESOURCE_ICONS[props.name]);
       />
     </td>
     <td v-for="col in columns" :key="col.key" class="cell">
-      <FPercentSlider v-model="control[col.key]" />
+      <FPercentSlider v-model="control[col.key]" :disabled="entry.canBeDisabled && !enabled" />
     </td>
   </tr>
 </template>
@@ -55,6 +76,21 @@ const icon = computed(() => RESOURCE_ICONS[props.name]);
   vertical-align: middle;
   margin-right: 6px;
   image-rendering: pixelated;
+}
+
+.control-enable {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  vertical-align: middle;
+}
+
+.control-enable input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--f-orange);
+  cursor: pointer;
 }
 
 .appears-on {
