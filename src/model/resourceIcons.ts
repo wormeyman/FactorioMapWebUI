@@ -33,8 +33,8 @@ export const RESOURCE_ICONS: Record<string, string> = {
   gleba_stone: stone,
   // Fulgora
   scrap,
-  lithium_brine: lithiumBrine,
   // Aquilo
   aquilo_crude_oil: crudeOil,
+  lithium_brine: lithiumBrine,
   fluorine_vent: fluorineVent,
 };
