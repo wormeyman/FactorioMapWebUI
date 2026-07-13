@@ -80,6 +80,24 @@ export const usePresetsStore = defineStore("presets", {
       this.saveToStorage();
     },
 
+    /**
+     * Overwrite the active preset's values with a built-in's, keeping its name
+     * and active status, so every tab's sliders update to match. Follows the
+     * same conventions as `createFromBuiltin` (user-owned, random-each-map
+     * seed). `getBuiltinPreset` returns a deep clone, so the active preset never
+     * shares references with the built-in cache.
+     */
+    applyBuiltinToActive(builtinName: string) {
+      const active = this.activePreset;
+      if (!active) return;
+      const source = getBuiltinPreset(builtinName);
+      source.name = active.name;
+      source.builtin = false;
+      source.seed = null;
+      Object.assign(active, source);
+      this.saveToStorage();
+    },
+
     importExchangeString(name: string, exchangeString: string) {
       const decoded = decodeExchangeString(exchangeString);
       const preset = presetFromDecoded(this.uniqueName(name), decoded);
