@@ -8,6 +8,7 @@ import {
 } from "../src/model/controlCatalog";
 import { PLANETS } from "../src/model/planets";
 import fixtures from "./fixtures/builtin-presets.json";
+import canBeDisabledDump from "./fixtures/autoplace-can-be-disabled.dump.json";
 
 const presets = fixtures.presets as Record<string, string>;
 
@@ -107,5 +108,22 @@ describe("terrain groups", () => {
     const names = controlsForTerrainGroup("coverage");
     const planetIndex = names.map((n) => PLANETS.indexOf(CONTROL_CATALOG[n]!.planet));
     expect(planetIndex).toEqual([...planetIndex].sort((a, b) => a - b));
+  });
+});
+
+describe("canBeDisabled flag", () => {
+  const dump = canBeDisabledDump as Record<string, { can_be_disabled: boolean }>;
+
+  it("matches the game's can_be_disabled dump for all 28 controls", () => {
+    expect(Object.keys(CONTROL_CATALOG).sort()).toEqual(Object.keys(dump).sort());
+    for (const [name, entry] of Object.entries(CONTROL_CATALOG)) {
+      expect(entry.canBeDisabled, name).toBe(dump[name]!.can_be_disabled);
+    }
+  });
+
+  it("marks 22 controls disable-able and 6 always-on", () => {
+    const vals = Object.values(CONTROL_CATALOG);
+    expect(vals.filter((e) => e.canBeDisabled).length).toBe(22);
+    expect(vals.filter((e) => !e.canBeDisabled).length).toBe(6);
   });
 });

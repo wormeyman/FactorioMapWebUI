@@ -123,4 +123,32 @@ describe("TerrainTab", () => {
     expect("control:moisture:frequency" in pen).toBe(false);
     expect("control:moisture:bias" in pen).toBe(false);
   });
+
+  it("shows an enable checkbox on disable-able coverage rows but not always-on ones", () => {
+    const wrapper = mountTab();
+    const water = wrapper.find('[data-test="control-row-water"]');
+    const volcanism = wrapper.find('[data-test="control-row-vulcanus_volcanism"]');
+    expect(water.find('input[type="checkbox"]').exists()).toBe(true);
+    expect(volcanism.find('input[type="checkbox"]').exists()).toBe(false);
+    expect(volcanism.find(".control-enable").exists()).toBe(true);
+  });
+
+  it("unchecking Cliffs drives nauvis_cliff.size to 0 in the exchange string, re-checking restores it", async () => {
+    setActivePinia(createPinia());
+    localStorage.clear();
+    const store = usePresetsStore();
+    const wrapper = mount(TerrainTab);
+    const cb = wrapper.find(
+      '[data-test="control-row-nauvis_cliff"] input[type="checkbox"][data-test="control-enable"]',
+    );
+    expect(cb.exists()).toBe(true);
+
+    await cb.setValue(false);
+    let decoded = decodeExchangeString(store.activeExchangeString as string);
+    expect(decoded.autoplaceControls["nauvis_cliff"]?.size).toBe(0);
+
+    await cb.setValue(true);
+    decoded = decodeExchangeString(store.activeExchangeString as string);
+    expect(decoded.autoplaceControls["nauvis_cliff"]?.size).toBe(1);
+  });
 });
