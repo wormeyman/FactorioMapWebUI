@@ -2,6 +2,7 @@
 import { computed } from "vue";
 import { CONTROL_CATALOG, type ControlColumn } from "../model/controlCatalog";
 import { PLANET_ICONS, PLANET_LABELS } from "../model/planets";
+import { RESOURCE_ICONS } from "../model/resourceIcons";
 import { usePresetsStore } from "../store/presets";
 import FPercentSlider from "../ui/FPercentSlider.vue";
 
@@ -10,11 +11,23 @@ const store = usePresetsStore();
 
 const entry = computed(() => CONTROL_CATALOG[props.name]);
 const control = computed(() => store.activePreset?.autoplaceControls[props.name]);
+const icon = computed(() => RESOURCE_ICONS[props.name]);
 </script>
 
 <template>
   <tr v-if="entry && control" class="control-row" :data-test="`control-row-${name}`">
-    <td class="label">{{ entry.label }}</td>
+    <td class="label">
+      <img
+        v-if="icon"
+        data-test="resource-icon"
+        class="resource-icon"
+        :src="icon"
+        alt=""
+        width="22"
+        height="22"
+      />
+      {{ entry.label }}
+    </td>
     <td class="appears-on">
       <img
         data-test="appears-on"
@@ -36,6 +49,12 @@ const control = computed(() => store.activePreset?.autoplaceControls[props.name]
 .label {
   font-weight: 700;
   padding: 6px 8px;
+}
+
+.resource-icon {
+  vertical-align: middle;
+  margin-right: 6px;
+  image-rendering: pixelated;
 }
 
 .appears-on {
