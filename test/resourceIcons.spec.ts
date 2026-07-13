@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vite-plus/test";
+import { mount } from "@vue/test-utils";
+import { createPinia, setActivePinia } from "pinia";
 import { CONTROL_CATALOG, controlsForCategory } from "../src/model/controlCatalog";
 import { RESOURCE_ICONS } from "../src/model/resourceIcons";
+import ResourcesTab from "../src/components/ResourcesTab.vue";
+import TerrainTab from "../src/components/TerrainTab.vue";
 
 describe("resource icons", () => {
   it("maps every resource control to an icon asset URL", () => {
@@ -13,5 +17,23 @@ describe("resource icons", () => {
     for (const name of Object.keys(RESOURCE_ICONS)) {
       expect(CONTROL_CATALOG[name]?.category, name).toBe("resource");
     }
+  });
+});
+
+describe("resource icons in rows", () => {
+  it("renders an item icon with a src on every resource row", () => {
+    setActivePinia(createPinia());
+    const wrapper = mount(ResourcesTab);
+    const icons = wrapper.findAll('[data-test="resource-icon"]');
+    expect(icons.length).toBe(15); // 15 resource controls across all planets
+    for (const img of icons) {
+      expect(img.attributes("src")).toBeTruthy();
+    }
+  });
+
+  it("renders no item icons on the Terrain tab", () => {
+    setActivePinia(createPinia());
+    const wrapper = mount(TerrainTab);
+    expect(wrapper.findAll('[data-test="resource-icon"]').length).toBe(0);
   });
 });
