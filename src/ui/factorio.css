@@ -41,3 +41,44 @@ body {
     inset 1px 1px 0 var(--f-edge-dark),
     inset -1px -1px 0 var(--f-edge-light);
 }
+
+/*
+ * Fixed-width gutter at the start of a control's label cell, reserving room for
+ * the enable/disable checkbox. Rendered empty on always-on rows, climate rows,
+ * and headers so every label stays indented to the same column.
+ */
+.control-enable {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  vertical-align: middle;
+}
+
+/*
+ * Shared fixed column grid for every control table (Resources, Enemy, and the
+ * Terrain tab's coverage / cliff / noise tables). Without it each <table>
+ * auto-sizes its own columns, so a tab that stacks several tables sees their
+ * Appears-on and value columns drift out of vertical alignment. Pinning the
+ * label and Appears-on widths makes the value columns land at the same x in
+ * every table; the lead-header indent lines the column title up over the
+ * checkbox-gutter-indented row labels. Selectors include thead/tbody so they
+ * outrank the components' scoped `.control-table th` / `.label` rules.
+ */
+.control-table {
+  table-layout: fixed;
+}
+
+.control-table thead th:first-child,
+.control-table tbody td.label {
+  width: 210px;
+}
+
+.control-table thead th:first-child {
+  padding-left: 30px;
+}
+
+.control-table thead th.appears-on-th,
+.control-table tbody td.appears-on {
+  width: 92px;
+}

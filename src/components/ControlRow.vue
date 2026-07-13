@@ -78,14 +78,6 @@ function onToggle(event: Event) {
   image-rendering: pixelated;
 }
 
-.control-enable {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  vertical-align: middle;
-}
-
 .control-enable input {
   width: 16px;
   height: 16px;
@@ -96,7 +88,6 @@ function onToggle(event: Event) {
 .appears-on {
   padding: 6px 8px;
   text-align: center;
-  width: 1%;
   white-space: nowrap;
 }
 

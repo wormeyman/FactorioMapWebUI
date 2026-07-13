@@ -101,7 +101,7 @@ const auxBias = biasModel(TERRAIN_TYPE);
       </thead>
       <tbody>
         <tr data-test="terrain-noise-moisture">
-          <td class="label">Moisture</td>
+          <td class="label"><span class="control-enable" />Moisture</td>
           <td class="appears-on">
             <img
               data-test="appears-on"
@@ -117,7 +117,7 @@ const auxBias = biasModel(TERRAIN_TYPE);
           <td class="cell"><FPercentSlider v-model="moistureBias" :scale="BIAS_SCALE" /></td>
         </tr>
         <tr data-test="terrain-noise-terrain-type">
-          <td class="label">Terrain type</td>
+          <td class="label"><span class="control-enable" />Terrain type</td>
           <td class="appears-on">
             <img
               data-test="appears-on"
@@ -182,7 +182,6 @@ const auxBias = biasModel(TERRAIN_TYPE);
 .appears-on {
   padding: 6px 8px;
   text-align: center;
-  width: 1%;
   white-space: nowrap;
 }
 
