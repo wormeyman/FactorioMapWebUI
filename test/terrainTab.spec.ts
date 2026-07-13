@@ -53,12 +53,57 @@ describe("TerrainTab", () => {
     }
   });
 
-  it("renders a disabled Map type dropdown defaulting to Nauvis elevation", () => {
+  it("renders a live Map type dropdown listing Nauvis, Lakes, Island", () => {
     const wrapper = mountTab();
     const select = wrapper.find('[data-test="map-type"]');
     expect(select.exists()).toBe(true);
-    expect((select.element as HTMLSelectElement).disabled).toBe(true);
-    expect(select.text()).toContain("Nauvis elevation");
+    expect((select.element as HTMLSelectElement).disabled).toBe(false);
+    const labels = select.findAll("option").map((o) => o.text());
+    expect(labels).toEqual(["Nauvis elevation", "Lakes elevation", "Island elevation"]);
+  });
+
+  it("defaults the Map type to Nauvis for a preset with no elevation override", () => {
+    const wrapper = mountTab();
+    const select = wrapper.find('[data-test="map-type"]');
+    expect((select.element as HTMLSelectElement).value).toBe("nauvis");
+  });
+
+  it("selecting Island drives elevation=elevation_island into the exchange string", async () => {
+    setActivePinia(createPinia());
+    localStorage.clear();
+    const store = usePresetsStore();
+    const wrapper = mount(TerrainTab);
+    const select = wrapper.find('[data-test="map-type"]');
+    await select.setValue("island");
+    const pen = decodeExchangeString(store.activeExchangeString as string).propertyExpressionNames;
+    expect(pen["elevation"]).toBe("elevation_island");
+  });
+
+  it("resetting Map type back to Nauvis removes the elevation key", async () => {
+    setActivePinia(createPinia());
+    localStorage.clear();
+    const store = usePresetsStore();
+    const wrapper = mount(TerrainTab);
+    const select = wrapper.find('[data-test="map-type"]');
+    await select.setValue("island");
+    let pen = decodeExchangeString(store.activeExchangeString as string).propertyExpressionNames;
+    expect(pen["elevation"]).toBe("elevation_island");
+    await select.setValue("nauvis");
+    pen = decodeExchangeString(store.activeExchangeString as string).propertyExpressionNames;
+    expect("elevation" in pen).toBe(false);
+  });
+
+  it("surfaces an unknown imported elevation value as an extra, selected option", () => {
+    setActivePinia(createPinia());
+    localStorage.clear();
+    const store = usePresetsStore();
+    // Simulate an imported preset carrying a modded/unknown elevation expression.
+    store.activePreset!.propertyExpressionNames["elevation"] = "elevation_modded_x";
+    const wrapper = mount(TerrainTab);
+    const select = wrapper.find('[data-test="map-type"]');
+    const values = select.findAll("option").map((o) => (o.element as HTMLOptionElement).value);
+    expect(values).toEqual(["nauvis", "lakes", "island", "elevation_modded_x"]);
+    expect((select.element as HTMLSelectElement).value).toBe("elevation_modded_x");
   });
 
   it("renders live Moisture and Terrain type rows with enabled Scale and Bias sliders", () => {

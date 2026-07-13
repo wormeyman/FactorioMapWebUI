@@ -11,6 +11,7 @@ import {
   writeScale,
 } from "../model/climateControls";
 import { BIAS_SCALE } from "../model/controlScale";
+import { MAP_TYPES, readMapType, writeMapType } from "../model/mapType";
 import { PLANET_ICONS, PLANET_LABELS } from "../model/planets";
 import { usePresetsStore } from "../store/presets";
 import FDropdown from "../ui/FDropdown.vue";
@@ -27,10 +28,31 @@ const CLIFF_COLUMNS: ControlColumn[] = [
   { key: "size", label: "Continuity" },
 ];
 
-// Map type is a fixed placeholder until elevation presets are decoded.
-const MAP_TYPE_OPTIONS = [{ value: "nauvis", label: "Nauvis elevation (Default)" }];
-
 const store = usePresetsStore();
+
+// The Map type dropdown selects the elevation noise expression, stored in the
+// active preset's property_expression_names. Options bind by MapType.id; an
+// imported preset carrying an unknown elevation value is surfaced as an extra,
+// preserved option so nothing is silently dropped.
+const mapTypeOptions = computed(() => {
+  const current = store.activePreset
+    ? readMapType(store.activePreset.propertyExpressionNames)
+    : MAP_TYPES[0];
+  const known = MAP_TYPES.map((m) => ({ value: m.id, label: m.label }));
+  const isKnown = MAP_TYPES.some((m) => m.id === current.id);
+  return isKnown ? known : [...known, { value: current.id, label: current.label }];
+});
+
+const mapType = computed({
+  get: () => {
+    const pen = store.activePreset?.propertyExpressionNames;
+    return pen ? readMapType(pen).id : "nauvis";
+  },
+  set: (id: string) => {
+    const pen = store.activePreset?.propertyExpressionNames;
+    if (pen) writeMapType(pen, id);
+  },
+});
 
 // Scale/Bias sliders bind through the climate accessor to the active preset's
 // property_expression_names. Mutating that dict in place flows into
@@ -70,7 +92,7 @@ const auxBias = biasModel(TERRAIN_TYPE);
 <template>
   <div class="map-type">
     <label class="map-type-label">Map type</label>
-    <FDropdown data-test="map-type" model-value="nauvis" :options="MAP_TYPE_OPTIONS" disabled />
+    <FDropdown data-test="map-type" v-model="mapType" :options="mapTypeOptions" />
   </div>
 
   <section data-test="terrain-coverage-table">
