@@ -4,6 +4,9 @@ import {
   stepValue,
   nearestStepIndex,
   formatPercent,
+  PERCENT_SCALE,
+  BIAS_SCALE,
+  formatWire6,
 } from "../src/model/controlScale";
 
 describe("PERCENT_STEPS", () => {
@@ -52,5 +55,58 @@ describe("formatPercent", () => {
     expect(formatPercent(1)).toBe("100%");
     expect(formatPercent(Math.fround(1 / 6))).toBe("17%");
     expect(formatPercent(5)).toBe("500%");
+  });
+});
+
+describe("formatWire6", () => {
+  it("formats with fixed six decimals and a leading minus for negatives", () => {
+    expect(formatWire6(0.5)).toBe("0.500000");
+    expect(formatWire6(6)).toBe("6.000000");
+    expect(formatWire6(-0.5)).toBe("-0.500000");
+    expect(formatWire6(2 / 3)).toBe("0.666667");
+  });
+});
+
+describe("PERCENT_SCALE", () => {
+  it("has parity with the direct percentage helpers", () => {
+    expect(PERCENT_SCALE.count).toBe(PERCENT_STEPS.length);
+    expect(PERCENT_SCALE.ariaLabel).toBe("Percentage");
+    for (const s of PERCENT_STEPS) {
+      const idx = PERCENT_SCALE.nearestIndex(s.value);
+      expect(idx).toBe(nearestStepIndex(s.value));
+      expect(PERCENT_SCALE.valueAt(idx)).toBe(stepValue(idx));
+      expect(PERCENT_SCALE.format(s.value)).toBe(formatPercent(s.value));
+    }
+  });
+});
+
+describe("BIAS_SCALE", () => {
+  it("has 21 uniform notches from -0.5 to +0.5", () => {
+    expect(BIAS_SCALE.count).toBe(21);
+    expect(BIAS_SCALE.ariaLabel).toBe("Bias");
+    expect(BIAS_SCALE.valueAt(0)).toBeCloseTo(-0.5, 10);
+    expect(BIAS_SCALE.valueAt(10)).toBe(0);
+    expect(BIAS_SCALE.valueAt(11)).toBeCloseTo(0.05, 10);
+    expect(BIAS_SCALE.valueAt(20)).toBeCloseTo(0.5, 10);
+  });
+
+  it("clamps out-of-range indices", () => {
+    expect(BIAS_SCALE.valueAt(-3)).toBe(BIAS_SCALE.valueAt(0));
+    expect(BIAS_SCALE.valueAt(99)).toBe(BIAS_SCALE.valueAt(20));
+  });
+
+  it("finds the nearest notch by linear distance and clamps", () => {
+    expect(BIAS_SCALE.nearestIndex(0)).toBe(10);
+    expect(BIAS_SCALE.nearestIndex(0.05)).toBe(11);
+    expect(BIAS_SCALE.nearestIndex(-0.5)).toBe(0);
+    expect(BIAS_SCALE.nearestIndex(0.07)).toBe(11);
+    expect(BIAS_SCALE.nearestIndex(2)).toBe(20);
+  });
+
+  it("formats signed two-decimal labels", () => {
+    expect(BIAS_SCALE.format(0)).toBe("0.00");
+    expect(BIAS_SCALE.format(0.05)).toBe("+0.05");
+    expect(BIAS_SCALE.format(-0.5)).toBe("-0.50");
+    expect(BIAS_SCALE.format(0.45)).toBe("+0.45");
   });
 });
