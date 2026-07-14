@@ -16,6 +16,43 @@ const COLUMNS: ControlColumn[] = [
   { key: "size", label: "Size" },
 ];
 
+// Min/max expansion distance are linked: the maximum must always stay greater
+// than the minimum. Editing one drags the other so max > min holds, both
+// clamped to [1, 20]. Clamping happens only on set, so an untouched import
+// keeps its raw stored value (byte-exact) until the user actually edits.
+const DIST_MIN = 1;
+const DIST_MAX = 20;
+const minExpansionDistance = computed({
+  get: () => expansion.value?.minExpansionDistance ?? DIST_MIN,
+  set: (v: number) => {
+    const e = expansion.value;
+    if (!e) return;
+    const m = Math.min(Math.max(Math.round(v), DIST_MIN), DIST_MAX);
+    e.minExpansionDistance = m;
+    if (e.maxExpansionDistance <= m) {
+      const newMax = Math.min(m + 1, DIST_MAX);
+      e.maxExpansionDistance = newMax;
+      // m was already at the cap, so pull the minimum back below it.
+      if (newMax <= m) e.minExpansionDistance = newMax - 1;
+    }
+  },
+});
+const maxExpansionDistance = computed({
+  get: () => expansion.value?.maxExpansionDistance ?? DIST_MIN + 1,
+  set: (v: number) => {
+    const e = expansion.value;
+    if (!e) return;
+    const m = Math.min(Math.max(Math.round(v), DIST_MIN), DIST_MAX);
+    e.maxExpansionDistance = m;
+    if (e.minExpansionDistance >= m) {
+      const newMin = Math.max(m - 1, DIST_MIN);
+      e.minExpansionDistance = newMin;
+      // m was already at the floor, so push the maximum back above it.
+      if (newMin >= m) e.maxExpansionDistance = newMin + 1;
+    }
+  },
+});
+
 const TICKS_PER_MINUTE = 3600;
 
 // Cooldowns are stored as ticks (u32) but shown in minutes. An untouched value
@@ -52,12 +89,11 @@ const maxCooldownMinutes = computed({
         label="Enemy expansion"
         data-test="enemy-expansion-enable"
       />
-      <!-- Placeholder ranges; the number box is the source of truth. -->
       <EnemyValueRow
         data-test="enemy-exp-min-dist"
         label="Minimum expansion distance"
-        v-model="expansion.minExpansionDistance"
-        :min="0"
+        v-model="minExpansionDistance"
+        :min="1"
         :max="20"
         :step="1"
         :disabled="!expansion.enabled"
@@ -65,8 +101,8 @@ const maxCooldownMinutes = computed({
       <EnemyValueRow
         data-test="enemy-exp-max-dist"
         label="Maximum expansion distance"
-        v-model="expansion.maxExpansionDistance"
-        :min="0"
+        v-model="maxExpansionDistance"
+        :min="1"
         :max="20"
         :step="1"
         :disabled="!expansion.enabled"
@@ -75,17 +111,17 @@ const maxCooldownMinutes = computed({
         data-test="enemy-exp-group-size"
         label="Evolution group size factor"
         v-model="expansion.evolutionGroupSizeFactor"
-        :min="0"
-        :max="10"
-        :step="0.1"
+        :min="1"
+        :max="20"
+        :step="1"
         :disabled="!expansion.enabled"
       />
       <EnemyValueRow
         data-test="enemy-exp-min-cooldown"
         label="Minimum cooldown (minutes)"
         v-model="minCooldownMinutes"
-        :min="0"
-        :max="120"
+        :min="1"
+        :max="60"
         :step="1"
         :disabled="!expansion.enabled"
       />
@@ -93,8 +129,8 @@ const maxCooldownMinutes = computed({
         data-test="enemy-exp-max-cooldown"
         label="Maximum cooldown (minutes)"
         v-model="maxCooldownMinutes"
-        :min="0"
-        :max="120"
+        :min="5"
+        :max="180"
         :step="1"
         :disabled="!expansion.enabled"
       />
@@ -149,11 +185,10 @@ const maxCooldownMinutes = computed({
   padding: 8px;
 }
 
-/* Same three-column grid as EnemyValueRow, so this lone slider lines up with
-   the value-row sliders (the empty box column keeps the right edges matched). */
+/* Starting area size sits on its own line: label then slider packed to the
+   left, not in the right-hand value columns. */
 .starting-area {
-  display: grid;
-  grid-template-columns: 1fr var(--col-slider) var(--col-box);
+  display: flex;
   align-items: center;
   gap: 8px;
   padding: 8px;
@@ -161,6 +196,10 @@ const maxCooldownMinutes = computed({
 
 .starting-area .label {
   font-weight: 700;
+}
+
+.starting-area :deep(.f-percent) {
+  flex: 0 0 var(--col-slider);
 }
 
 .enemy-section {

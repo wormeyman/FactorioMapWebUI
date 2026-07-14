@@ -132,6 +132,46 @@ describe("EnemyTab Enemy expansion section", () => {
     }
   });
 
+  it("raising the minimum distance above the maximum pushes the maximum to min+1", async () => {
+    setActivePinia(createPinia());
+    localStorage.clear();
+    const store = usePresetsStore();
+    const wrapper = mount(EnemyTab);
+    // Defaults are min 3 / max 5; raise the minimum well past the maximum.
+    const min = wrapper.find('[data-test="enemy-exp-min-dist"] input[type="number"]');
+    await min.setValue("10");
+    await min.trigger("change");
+    const tail = decodeExchangeString(store.activeExchangeString as string).tail;
+    expect(tail["enemyExpansion.minExpansionDistance"]).toBe(10);
+    expect(tail["enemyExpansion.maxExpansionDistance"]).toBe(11);
+  });
+
+  it("lowering the maximum distance below the minimum pulls the minimum to max-1", async () => {
+    setActivePinia(createPinia());
+    localStorage.clear();
+    const store = usePresetsStore();
+    const wrapper = mount(EnemyTab);
+    const max = wrapper.find('[data-test="enemy-exp-max-dist"] input[type="number"]');
+    await max.setValue("2");
+    await max.trigger("change");
+    const tail = decodeExchangeString(store.activeExchangeString as string).tail;
+    expect(tail["enemyExpansion.maxExpansionDistance"]).toBe(2);
+    expect(tail["enemyExpansion.minExpansionDistance"]).toBe(1);
+  });
+
+  it("clamps the minimum distance to 19 so the maximum can still exceed it at the 20 cap", async () => {
+    setActivePinia(createPinia());
+    localStorage.clear();
+    const store = usePresetsStore();
+    const wrapper = mount(EnemyTab);
+    const min = wrapper.find('[data-test="enemy-exp-min-dist"] input[type="number"]');
+    await min.setValue("20");
+    await min.trigger("change");
+    const tail = decodeExchangeString(store.activeExchangeString as string).tail;
+    expect(tail["enemyExpansion.minExpansionDistance"]).toBe(19);
+    expect(tail["enemyExpansion.maxExpansionDistance"]).toBe(20);
+  });
+
   it("flows an edited Maximum expansion distance into the exchange string", async () => {
     setActivePinia(createPinia());
     localStorage.clear();
