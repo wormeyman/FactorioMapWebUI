@@ -94,6 +94,21 @@ describe("EnemyTab Evolution section", () => {
     const tail = decodeExchangeString(store.activeExchangeString as string).tail;
     expect(tail["enemyEvolution.timeFactor"]).toBeCloseTo(0.25, 12);
   });
+
+  it("keeps an edited factor value in the exchange string after Evolution is disabled", async () => {
+    setActivePinia(createPinia());
+    localStorage.clear();
+    const store = usePresetsStore();
+    const wrapper = mount(EnemyTab);
+    const number = wrapper.find('[data-test="enemy-evo-time"] input[type="number"]');
+    await number.setValue("0.3");
+    await number.trigger("change");
+    const cb = wrapper.find('[data-test="enemy-evolution-enable"] input[type="checkbox"]');
+    await cb.setValue(false);
+    const tail = decodeExchangeString(store.activeExchangeString as string).tail;
+    expect(tail["enemyEvolution.timeFactor"]).toBeCloseTo(0.3, 12);
+    expect(tail["enemyEvolution.enabled"]).toBe(false);
+  });
 });
 
 describe("EnemyTab Enemy expansion section", () => {
@@ -147,5 +162,25 @@ describe("EnemyTab Enemy expansion section", () => {
     const number = wrapper.find('[data-test="enemy-exp-min-cooldown"] input[type="number"]');
     // Default minExpansionCooldown decodes to 36000 ticks = 10 minutes.
     expect((number.element as HTMLInputElement).value).toBe("10");
+  });
+
+  it("converts a maximum cooldown entered in minutes to ticks in the exchange string", async () => {
+    setActivePinia(createPinia());
+    localStorage.clear();
+    const store = usePresetsStore();
+    const wrapper = mount(EnemyTab);
+    // 30 minutes -> 30 * 3600 = 108000 ticks
+    const number = wrapper.find('[data-test="enemy-exp-max-cooldown"] input[type="number"]');
+    await number.setValue("30");
+    await number.trigger("change");
+    const tail = decodeExchangeString(store.activeExchangeString as string).tail;
+    expect(tail["enemyExpansion.maxExpansionCooldown"]).toBe(108000);
+  });
+
+  it("shows the default maximum cooldown as 60 minutes", () => {
+    const wrapper = mountTab();
+    const number = wrapper.find('[data-test="enemy-exp-max-cooldown"] input[type="number"]');
+    // Default maxExpansionCooldown decodes to 216000 ticks = 60 minutes.
+    expect((number.element as HTMLInputElement).value).toBe("60");
   });
 });
