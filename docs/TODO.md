@@ -5,14 +5,7 @@ this file is the lightweight "what's next" list.)
 
 ## Open
 
-- **Enemy tab: accurate slider ranges/steps.** The Evolution and Enemy
-  expansion sliders currently use placeholder `min`/`max`/`step` values in
-  `src/components/EnemyTab.vue` (the number box is the source of truth, so
-  values are correct - only the slider feel is provisional). Get the real
-  in-game ranges/steps for: evolution time / destroy / pollution factor;
-  expansion minimum/maximum distance; evolution group size factor; and
-  minimum/maximum cooldown (displayed in minutes, stored as ticks). See
-  `docs/superpowers/specs/2026-07-13-enemy-tab-design.md`.
+_No open items._
 
 ## Shipped
 
@@ -21,3 +14,11 @@ _The elevation / "Map type" dropdown shipped 2026-07-13 (see
 info tooltips (Water, Moisture, Terrain type) shipped 2026-07-13. Enemy-tab
 build-out (editable evolution/expansion + moved No-enemies/Peaceful) shipped
 2026-07-13 on `feat/enemy-tab`._
+
+_Enemy-tab layout + accurate ranges shipped 2026-07-14 on `feat/enemy-tab`:
+Enemy expansion above Evolution; No-enemies/Peaceful + Starting area size moved
+into the enemy-bases table (Starting area's slider aligns with the Size column);
+real slider ranges - expansion min/max distance and evolution group size factor
+1-20 step 1 (min/max distance linked so max > min), min cooldown 1-60 / max
+cooldown 5-180 minutes, and evolution factors in the game's scaled display units
+(time & pollution wire x1e7, destroy x1e5, verified against the game)._
