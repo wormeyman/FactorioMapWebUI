@@ -74,15 +74,36 @@ const maxCooldownMinutes = computed({
 
 <template>
   <div class="enemy-tab">
-    <ControlTable :names="controlsForCategory('enemy')" :columns="COLUMNS" leadLabel="Setting" />
-    <div v-if="preset" class="enemy-modes">
-      <FCheckbox v-model="preset.noEnemiesMode" label="No enemies" data-test="no-enemies-mode" />
-      <FCheckbox v-model="preset.peacefulMode" label="Peaceful mode" data-test="peaceful-mode" />
-    </div>
-    <div v-if="preset" class="starting-area">
-      <span class="label">Starting area size</span>
-      <FPercentSlider v-model="preset.startingArea" data-test="starting-area" />
-    </div>
+    <ControlTable :names="controlsForCategory('enemy')" :columns="COLUMNS" leadLabel="Setting">
+      <template #footer-rows>
+        <tr v-if="preset" class="mode-row">
+          <td colspan="4">
+            <FCheckbox
+              v-model="preset.noEnemiesMode"
+              label="No enemies"
+              data-test="no-enemies-mode"
+            />
+          </td>
+        </tr>
+        <tr v-if="preset" class="mode-row">
+          <td colspan="4">
+            <FCheckbox
+              v-model="preset.peacefulMode"
+              label="Peaceful mode"
+              data-test="peaceful-mode"
+            />
+          </td>
+        </tr>
+        <tr v-if="preset" class="starting-area-row">
+          <!-- Label spans Setting + Appears on + Frequency; the slider lands in
+               the Size column so it aligns with the Size sliders above. -->
+          <td colspan="3" class="sa-label">Starting area size</td>
+          <td class="sa-cell">
+            <FPercentSlider v-model="preset.startingArea" data-test="starting-area" />
+          </td>
+        </tr>
+      </template>
+    </ControlTable>
     <section v-if="expansion" data-test="enemy-expansion" class="enemy-section">
       <FCheckbox
         v-model="expansion.enabled"
@@ -178,28 +199,20 @@ const maxCooldownMinutes = computed({
   --col-box: 68px;
 }
 
-.enemy-modes {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 8px;
+/* Mode checkboxes + Starting area size ride inside the enemy-bases table (via
+   ControlTable's footer-rows slot) so they share its column widths. Match the
+   table cells' 6px 8px padding. */
+.mode-row td {
+  padding: 6px 8px;
 }
 
-/* Starting area size sits on its own line: label then slider packed to the
-   left, not in the right-hand value columns. */
-.starting-area {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px;
-}
-
-.starting-area .label {
+.sa-label {
   font-weight: 700;
+  padding: 6px 8px;
 }
 
-.starting-area :deep(.f-percent) {
-  flex: 0 0 var(--col-slider);
+.sa-cell {
+  padding: 6px 8px;
 }
 
 .enemy-section {

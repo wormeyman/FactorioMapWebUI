@@ -23,6 +23,10 @@ defineProps<{
     </thead>
     <tbody>
       <ControlRow v-for="name in names" :key="name" :name="name" :columns="columns" />
+      <!-- Extra rows that share this table's column widths (e.g. the Enemy tab's
+           mode checkboxes + Starting area size, so their slider aligns with the
+           Size column above). -->
+      <slot name="footer-rows" />
     </tbody>
   </table>
   <p v-if="names.length === 0" class="empty">No controls.</p>
