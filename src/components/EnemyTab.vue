@@ -36,138 +36,134 @@ const maxCooldownMinutes = computed({
 </script>
 
 <template>
-  <ControlTable :names="controlsForCategory('enemy')" :columns="COLUMNS" leadLabel="Setting" />
-  <div v-if="preset" class="enemy-modes">
-    <FCheckbox v-model="preset.noEnemiesMode" label="No enemies" data-test="no-enemies-mode" />
-    <FCheckbox v-model="preset.peacefulMode" label="Peaceful mode" data-test="peaceful-mode" />
+  <div class="enemy-tab">
+    <ControlTable :names="controlsForCategory('enemy')" :columns="COLUMNS" leadLabel="Setting" />
+    <div v-if="preset" class="enemy-modes">
+      <FCheckbox v-model="preset.noEnemiesMode" label="No enemies" data-test="no-enemies-mode" />
+      <FCheckbox v-model="preset.peacefulMode" label="Peaceful mode" data-test="peaceful-mode" />
+    </div>
+    <div v-if="preset" class="starting-area">
+      <span class="label">Starting area size</span>
+      <FPercentSlider v-model="preset.startingArea" data-test="starting-area" />
+    </div>
+    <section v-if="expansion" data-test="enemy-expansion" class="enemy-section">
+      <FCheckbox
+        v-model="expansion.enabled"
+        label="Enemy expansion"
+        data-test="enemy-expansion-enable"
+      />
+      <!-- Placeholder ranges; the number box is the source of truth. -->
+      <EnemyValueRow
+        data-test="enemy-exp-min-dist"
+        label="Minimum expansion distance"
+        v-model="expansion.minExpansionDistance"
+        :min="0"
+        :max="20"
+        :step="1"
+        :disabled="!expansion.enabled"
+      />
+      <EnemyValueRow
+        data-test="enemy-exp-max-dist"
+        label="Maximum expansion distance"
+        v-model="expansion.maxExpansionDistance"
+        :min="0"
+        :max="20"
+        :step="1"
+        :disabled="!expansion.enabled"
+      />
+      <EnemyValueRow
+        data-test="enemy-exp-group-size"
+        label="Evolution group size factor"
+        v-model="expansion.evolutionGroupSizeFactor"
+        :min="0"
+        :max="10"
+        :step="0.1"
+        :disabled="!expansion.enabled"
+      />
+      <EnemyValueRow
+        data-test="enemy-exp-min-cooldown"
+        label="Minimum cooldown (minutes)"
+        v-model="minCooldownMinutes"
+        :min="0"
+        :max="120"
+        :step="1"
+        :disabled="!expansion.enabled"
+      />
+      <EnemyValueRow
+        data-test="enemy-exp-max-cooldown"
+        label="Maximum cooldown (minutes)"
+        v-model="maxCooldownMinutes"
+        :min="0"
+        :max="120"
+        :step="1"
+        :disabled="!expansion.enabled"
+      />
+    </section>
+    <section v-if="evolution" data-test="enemy-evolution" class="enemy-section">
+      <FCheckbox v-model="evolution.enabled" label="Evolution" data-test="enemy-evolution-enable" />
+      <!-- Placeholder ranges; the number box is the source of truth. -->
+      <EnemyValueRow
+        data-test="enemy-evo-time"
+        label="Time factor"
+        v-model="evolution.timeFactor"
+        :min="0"
+        :max="0.01"
+        :step="0.000001"
+        :disabled="!evolution.enabled"
+      />
+      <EnemyValueRow
+        data-test="enemy-evo-destroy"
+        label="Destroy factor"
+        v-model="evolution.destroyFactor"
+        :min="0"
+        :max="0.1"
+        :step="0.0001"
+        :disabled="!evolution.enabled"
+      />
+      <EnemyValueRow
+        data-test="enemy-evo-pollution"
+        label="Pollution factor"
+        v-model="evolution.pollutionFactor"
+        :min="0"
+        :max="0.001"
+        :step="0.0000001"
+        :disabled="!evolution.enabled"
+      />
+    </section>
   </div>
-  <div v-if="preset" class="starting-area">
-    <span class="sa-label">Starting area size</span>
-    <FPercentSlider v-model="preset.startingArea" data-test="starting-area" />
-  </div>
-  <section v-if="evolution" data-test="enemy-evolution" class="enemy-section">
-    <FCheckbox v-model="evolution.enabled" label="Evolution" data-test="enemy-evolution-enable" />
-    <table class="control-table">
-      <tbody>
-        <!-- Placeholder ranges; the number box is the source of truth. -->
-        <EnemyValueRow
-          data-test="enemy-evo-time"
-          label="Time factor"
-          v-model="evolution.timeFactor"
-          :min="0"
-          :max="0.01"
-          :step="0.000001"
-          :disabled="!evolution.enabled"
-        />
-        <EnemyValueRow
-          data-test="enemy-evo-destroy"
-          label="Destroy factor"
-          v-model="evolution.destroyFactor"
-          :min="0"
-          :max="0.1"
-          :step="0.0001"
-          :disabled="!evolution.enabled"
-        />
-        <EnemyValueRow
-          data-test="enemy-evo-pollution"
-          label="Pollution factor"
-          v-model="evolution.pollutionFactor"
-          :min="0"
-          :max="0.001"
-          :step="0.0000001"
-          :disabled="!evolution.enabled"
-        />
-      </tbody>
-    </table>
-  </section>
-  <section v-if="expansion" data-test="enemy-expansion" class="enemy-section">
-    <FCheckbox
-      v-model="expansion.enabled"
-      label="Enemy expansion"
-      data-test="enemy-expansion-enable"
-    />
-    <table class="control-table">
-      <tbody>
-        <!-- Placeholder ranges; the number box is the source of truth. -->
-        <EnemyValueRow
-          data-test="enemy-exp-min-dist"
-          label="Minimum expansion distance"
-          v-model="expansion.minExpansionDistance"
-          :min="0"
-          :max="20"
-          :step="1"
-          :disabled="!expansion.enabled"
-        />
-        <EnemyValueRow
-          data-test="enemy-exp-max-dist"
-          label="Maximum expansion distance"
-          v-model="expansion.maxExpansionDistance"
-          :min="0"
-          :max="20"
-          :step="1"
-          :disabled="!expansion.enabled"
-        />
-        <EnemyValueRow
-          data-test="enemy-exp-group-size"
-          label="Evolution group size factor"
-          v-model="expansion.evolutionGroupSizeFactor"
-          :min="0"
-          :max="10"
-          :step="0.1"
-          :disabled="!expansion.enabled"
-        />
-        <EnemyValueRow
-          data-test="enemy-exp-min-cooldown"
-          label="Minimum cooldown (minutes)"
-          v-model="minCooldownMinutes"
-          :min="0"
-          :max="120"
-          :step="1"
-          :disabled="!expansion.enabled"
-        />
-        <EnemyValueRow
-          data-test="enemy-exp-max-cooldown"
-          label="Maximum cooldown (minutes)"
-          v-model="maxCooldownMinutes"
-          :min="0"
-          :max="120"
-          :step="1"
-          :disabled="!expansion.enabled"
-        />
-      </tbody>
-    </table>
-  </section>
 </template>
 
 <style scoped>
+/* Shared column geometry: labels ride the flexible 1fr track on the left, the
+   slider and number box sit in these fixed columns on the right so every value
+   row - and the Starting-area row - aligns. */
+.enemy-tab {
+  --col-slider: 220px;
+  --col-box: 68px;
+}
+
 .enemy-modes {
   display: flex;
-  gap: 16px;
+  flex-direction: column;
+  gap: 8px;
   padding: 8px;
 }
 
+/* Same three-column grid as EnemyValueRow, so this lone slider lines up with
+   the value-row sliders (the empty box column keeps the right edges matched). */
 .starting-area {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr var(--col-slider) var(--col-box);
   align-items: center;
   gap: 8px;
   padding: 8px;
 }
 
-/* Keep the standalone slider a sensible width rather than filling the panel. */
-.starting-area :deep(.f-percent) {
-  max-width: 180px;
-}
-
-.sa-label {
+.starting-area .label {
   font-weight: 700;
 }
 
 .enemy-section {
   padding: 8px;
-}
-
-.control-table {
-  width: 100%;
-  border-collapse: collapse;
 }
 </style>

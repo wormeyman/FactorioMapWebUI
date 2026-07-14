@@ -18,31 +18,33 @@ function set(value: number) {
 </script>
 
 <template>
-  <tr class="enemy-value-row">
-    <td class="label">{{ label }}</td>
-    <td class="cell">
-      <FSlider
-        :model-value="modelValue"
-        :min="min"
-        :max="max"
-        :step="step"
-        :disabled="disabled"
-        @update:model-value="set"
-      />
-    </td>
-    <td class="cell">
-      <FNumberInput :model-value="modelValue" :disabled="disabled" @update:model-value="set" />
-    </td>
-  </tr>
+  <div class="enemy-value-row">
+    <span class="label">{{ label }}</span>
+    <FSlider
+      :model-value="modelValue"
+      :min="min"
+      :max="max"
+      :step="step"
+      :disabled="disabled"
+      @update:model-value="set"
+    />
+    <FNumberInput :model-value="modelValue" :disabled="disabled" @update:model-value="set" />
+  </div>
 </template>
 
 <style scoped>
-.label {
-  font-weight: 700;
-  padding: 6px 8px;
+/* Label flush left (the 1fr track); slider + number box flush right, their
+   columns fixed so every row - and the standalone Starting-area row, which
+   reuses these same --col-* vars - lines up. */
+.enemy-value-row {
+  display: grid;
+  grid-template-columns: 1fr var(--col-slider, 220px) var(--col-box, 68px);
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
 }
 
-.cell {
-  padding: 6px 8px;
+.label {
+  font-weight: 700;
 }
 </style>
