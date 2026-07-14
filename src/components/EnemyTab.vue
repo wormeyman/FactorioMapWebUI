@@ -222,7 +222,7 @@ const maxCooldownMinutes = computed({
    row - and the Starting-area row - aligns. */
 .enemy-tab {
   --col-slider: 220px;
-  --col-box: 68px;
+  --col-box: 72px;
 }
 
 /* Mode checkboxes + Starting area size ride inside the enemy-bases table (via

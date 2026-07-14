@@ -23,7 +23,7 @@ function onChange(event: Event) {
 
 <style scoped>
 .f-number {
-  width: 56px;
+  width: 72px;
   padding: 3px 6px;
   border: none;
   font: inherit;
