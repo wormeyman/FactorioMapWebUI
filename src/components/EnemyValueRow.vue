@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import FInfo from "../ui/FInfo.vue";
 import FNumberInput from "../ui/FNumberInput.vue";
 import FSlider from "../ui/FSlider.vue";
 
@@ -9,6 +10,7 @@ defineProps<{
   max?: number;
   step?: number;
   disabled?: boolean;
+  info?: string;
 }>();
 const emit = defineEmits<{ "update:modelValue": [value: number] }>();
 
@@ -19,7 +21,7 @@ function set(value: number) {
 
 <template>
   <div class="enemy-value-row">
-    <span class="label">{{ label }}</span>
+    <span class="label">{{ label }}<FInfo v-if="info" :text="info" /></span>
     <FSlider
       :model-value="modelValue"
       :min="min"

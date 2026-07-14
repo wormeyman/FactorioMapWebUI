@@ -5,6 +5,7 @@ import { usePresetsStore } from "../store/presets";
 import ControlTable from "./ControlTable.vue";
 import EnemyValueRow from "./EnemyValueRow.vue";
 import FCheckbox from "../ui/FCheckbox.vue";
+import FInfo from "../ui/FInfo.vue";
 import FPercentSlider from "../ui/FPercentSlider.vue";
 
 const store = usePresetsStore();
@@ -96,6 +97,35 @@ const maxCooldownMinutes = computed({
     if (expansion.value) expansion.value.maxExpansionCooldown = Math.round(v * TICKS_PER_MINUTE);
   },
 });
+
+// In-game tooltip text (supplied verbatim from the map-gen GUI).
+const INFO = {
+  noEnemies:
+    'In "no enemies" mode, enemy units will not spawn from spawners, map generation, or items. Inactive enemy spawners will still appear on the map. Note: Enabling this will disable some achievements.',
+  peaceful:
+    "In peaceful mode, the enemies will not actively attack or expand. Enemies will still attack to defend themselves. Note: Enabling this will disable some achievements.",
+  startingArea:
+    "The size of the area without enemy bases around the player. Note: Making the area larger will disable some achievements.",
+  expansion:
+    "This can turn off/on the expansion logic as a whole. Note: Turning expansion off will disable some achievements.",
+  minDist:
+    "The minimum distance enemies will look to expand from other enemy bases. Note: A value higher than 3 will disable some achievements.",
+  maxDist:
+    "The maximum distance enemies will look to expand from other enemy bases. Note: A value lower than 5 will disable some achievements.",
+  groupSize:
+    "How much the evolution factor affects the size of enemy expansion parties. Note: A value lower than 4 will disable some achievements.",
+  minCooldown:
+    "The minimum time between any expansions being sent out. Note: A value higher than 10 will disable some achievements.",
+  maxCooldown:
+    "The maximum time between enemy expansions being sent out. Note: A value higher than one hour will disable some achievements.",
+  evolution:
+    "Controls whether enemy evolution is enabled. Note: Disabled evolution will disable some achievements.",
+  time: "Controls how fast evolution increases over time. Note: A value lower than 40 will disable some achievements.",
+  destroy:
+    "Controls how fast evolution increases due to destroying enemy spawners. Note: A value lower than 200 will disable some achievements.",
+  pollution:
+    "Controls how fast evolution increases due to producing evolution. Note: A value lower than 9 will disable some achievements.",
+};
 </script>
 
 <template>
@@ -108,7 +138,7 @@ const maxCooldownMinutes = computed({
               v-model="preset.noEnemiesMode"
               label="No enemies"
               data-test="no-enemies-mode"
-            />
+            /><FInfo :text="INFO.noEnemies" />
           </td>
         </tr>
         <tr v-if="preset" class="mode-row">
@@ -117,13 +147,15 @@ const maxCooldownMinutes = computed({
               v-model="preset.peacefulMode"
               label="Peaceful mode"
               data-test="peaceful-mode"
-            />
+            /><FInfo :text="INFO.peaceful" />
           </td>
         </tr>
         <tr v-if="preset" class="starting-area-row">
           <!-- Label spans Setting + Appears on + Frequency; the slider lands in
                the Size column so it aligns with the Size sliders above. -->
-          <td colspan="3" class="sa-label">Starting area size</td>
+          <td colspan="3" class="sa-label">
+            Starting area size<FInfo :text="INFO.startingArea" />
+          </td>
           <td class="sa-cell">
             <FPercentSlider v-model="preset.startingArea" data-test="starting-area" />
           </td>
@@ -135,11 +167,12 @@ const maxCooldownMinutes = computed({
         v-model="expansion.enabled"
         label="Enemy expansion"
         data-test="enemy-expansion-enable"
-      />
+      /><FInfo :text="INFO.expansion" />
       <EnemyValueRow
         data-test="enemy-exp-min-dist"
         label="Minimum expansion distance"
         v-model="minExpansionDistance"
+        :info="INFO.minDist"
         :min="1"
         :max="20"
         :step="1"
@@ -149,6 +182,7 @@ const maxCooldownMinutes = computed({
         data-test="enemy-exp-max-dist"
         label="Maximum expansion distance"
         v-model="maxExpansionDistance"
+        :info="INFO.maxDist"
         :min="1"
         :max="20"
         :step="1"
@@ -158,6 +192,7 @@ const maxCooldownMinutes = computed({
         data-test="enemy-exp-group-size"
         label="Evolution group size factor"
         v-model="expansion.evolutionGroupSizeFactor"
+        :info="INFO.groupSize"
         :min="1"
         :max="20"
         :step="1"
@@ -167,6 +202,7 @@ const maxCooldownMinutes = computed({
         data-test="enemy-exp-min-cooldown"
         label="Minimum cooldown (minutes)"
         v-model="minCooldownMinutes"
+        :info="INFO.minCooldown"
         :min="1"
         :max="60"
         :step="1"
@@ -176,6 +212,7 @@ const maxCooldownMinutes = computed({
         data-test="enemy-exp-max-cooldown"
         label="Maximum cooldown (minutes)"
         v-model="maxCooldownMinutes"
+        :info="INFO.maxCooldown"
         :min="5"
         :max="180"
         :step="1"
@@ -183,12 +220,17 @@ const maxCooldownMinutes = computed({
       />
     </section>
     <section v-if="evolution" data-test="enemy-evolution" class="enemy-section">
-      <FCheckbox v-model="evolution.enabled" label="Evolution" data-test="enemy-evolution-enable" />
+      <FCheckbox
+        v-model="evolution.enabled"
+        label="Evolution"
+        data-test="enemy-evolution-enable"
+      /><FInfo :text="INFO.evolution" />
       <!-- Values shown in the game's scaled display units (see EVO_DISPLAY_SCALE). -->
       <EnemyValueRow
         data-test="enemy-evo-time"
         label="Time factor"
         v-model="timeFactorDisplay"
+        :info="INFO.time"
         :min="0"
         :max="1000"
         :step="50"
@@ -198,6 +240,7 @@ const maxCooldownMinutes = computed({
         data-test="enemy-evo-destroy"
         label="Destroy factor"
         v-model="destroyFactorDisplay"
+        :info="INFO.destroy"
         :min="0"
         :max="1000"
         :step="50"
@@ -207,6 +250,7 @@ const maxCooldownMinutes = computed({
         data-test="enemy-evo-pollution"
         label="Pollution factor"
         v-model="pollutionFactorDisplay"
+        :info="INFO.pollution"
         :min="0"
         :max="1000"
         :step="10"

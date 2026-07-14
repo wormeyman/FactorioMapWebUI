@@ -57,7 +57,10 @@ export const CONTROL_CATALOG: Record<string, ControlEntry> = {
   coal: resource("nauvis", "Coal"),
   "crude-oil": resource("nauvis", "Crude oil"),
   "uranium-ore": resource("nauvis", "Uranium ore"),
-  "enemy-base": enemy("nauvis", "Enemy bases"),
+  "enemy-base": {
+    ...enemy("nauvis", "Enemy bases"),
+    info: "Note: Value lower than 100% will disable some achievements.",
+  },
   water: { ...terrain("nauvis", "Water", true), info: "If disabled: only in starting area" },
   trees: terrain("nauvis", "Trees", true),
   rocks: terrain("nauvis", "Rocks", true),
@@ -74,7 +77,10 @@ export const CONTROL_CATALOG: Record<string, ControlEntry> = {
   gleba_water: terrain("gleba", "Gleba water", false),
   gleba_plants: terrain("gleba", "Gleba plants", false),
   gleba_cliff: cliff("gleba", "Gleba cliffs"),
-  gleba_enemy_base: enemy("gleba", "Gleba enemy bases"),
+  gleba_enemy_base: {
+    ...enemy("gleba", "Gleba enemy bases"),
+    info: "Note: Value lower than 100% will disable some achievements.",
+  },
   // Fulgora
   scrap: resource("fulgora", "Scrap"),
   fulgora_cliff: cliff("fulgora", "Fulgora cliffs"),
