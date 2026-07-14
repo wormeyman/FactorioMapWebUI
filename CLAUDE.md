@@ -125,6 +125,27 @@ truth for "random each new map": `null` = random, which encodes to wire `0`.
 `src/ui/` is a Factorio-styled component kit (`F*` components + `factorio.css`).
 Sliders bind through the store so edits reach `activeExchangeString`.
 
+The **Enemy tab** (`src/components/EnemyTab.vue`) is the one tab that edits
+MapSettings _tail_ fields (`mapSettings.enemyEvolution` / `enemyExpansion`),
+overlaid back onto the tail at encode time by `writeEnemyToTail` - so untouched
+imports stay byte-exact (values are converted only on set). Three non-obvious UI
+conventions live here:
+
+- **Evolution factors are scaled for display.** The game's map-gen GUI shows
+  these tiny wire floats scaled up: time & pollution `display = wire * 1e7`,
+  destroy `* 1e5` (so default time `0.000004` reads `40`, destroy `0.002` reads
+  `200`, pollution `0.0000009` reads `9`). `EVO_DISPLAY_SCALE` in `EnemyTab.vue`
+  holds this; the slider/box work in display space, the wire stays raw. Verified
+  against the game by importing strings with known wire values and reading the
+  GUI.
+- **Cooldowns display in minutes**, stored as ticks (`* 3600`).
+- **Min/max expansion distance are linked** (max always > min, both clamped
+  `[1,20]`); editing one drags the other.
+
+Field labels carry in-game tooltip text via `FInfo` (an `info` prop on
+`EnemyValueRow`, an `info:` entry in `controlCatalog.ts` for the enemy-base
+autoplace rows).
+
 ### Preview service (`preview-service/`)
 
 A separate pnpm workspace (`worker/` Cloudflare Worker + `container/`

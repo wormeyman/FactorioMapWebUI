@@ -27,7 +27,11 @@ Decoded and typed on the model:
 Also shipped: a full multi-planet editor over the decoded model, localStorage
 presets, exchange-string import, and export of `map-gen-settings.json` +
 `map-settings.json` as a downloadable ZIP. `seed` is a single source of truth
-for "random each new map" (`null` = random, which encodes to wire 0).
+for "random each new map" (`null` = random, which encodes to wire 0). The
+**Enemy tab** additionally makes MapSettings tail fields editable - enemy
+evolution and expansion - with the game's own display scaling (evolution factors
+shown scaled up from the tiny wire floats, cooldowns in minutes), linked min/max
+expansion distance, and in-game tooltip text on every field.
 
 The **map preview service** (`preview-service/`) is code-complete and validated
 end to end locally: clicking "Generate preview" POSTs the active preset's
