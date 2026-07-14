@@ -83,16 +83,38 @@ describe("EnemyTab Evolution section", () => {
     expect((number.element as HTMLInputElement).disabled).toBe(true);
   });
 
-  it("flows an edited Time factor into the exchange string", async () => {
+  it("shows the default evolution factors in the game's scaled display units", () => {
+    const wrapper = mountTab();
+    const val = (t: string) =>
+      (wrapper.find(`[data-test="${t}"] input[type="number"]`).element as HTMLInputElement).value;
+    // Defaults time 0.000004 / destroy 0.002 / pollution 0.0000009 -> 40 / 200 / 9.
+    expect(val("enemy-evo-time")).toBe("40");
+    expect(val("enemy-evo-destroy")).toBe("200");
+    expect(val("enemy-evo-pollution")).toBe("9");
+  });
+
+  it("converts a displayed Time factor (x1e7) back to its wire value", async () => {
     setActivePinia(createPinia());
     localStorage.clear();
     const store = usePresetsStore();
     const wrapper = mount(EnemyTab);
     const number = wrapper.find('[data-test="enemy-evo-time"] input[type="number"]');
-    await number.setValue("0.25");
+    await number.setValue("80"); // 80 / 1e7 = 8e-6
     await number.trigger("change");
     const tail = decodeExchangeString(store.activeExchangeString as string).tail;
-    expect(tail["enemyEvolution.timeFactor"]).toBeCloseTo(0.25, 12);
+    expect(tail["enemyEvolution.timeFactor"]).toBeCloseTo(8e-6, 12);
+  });
+
+  it("converts a displayed Destroy factor (x1e5) back to its wire value", async () => {
+    setActivePinia(createPinia());
+    localStorage.clear();
+    const store = usePresetsStore();
+    const wrapper = mount(EnemyTab);
+    const number = wrapper.find('[data-test="enemy-evo-destroy"] input[type="number"]');
+    await number.setValue("400"); // 400 / 1e5 = 0.004
+    await number.trigger("change");
+    const tail = decodeExchangeString(store.activeExchangeString as string).tail;
+    expect(tail["enemyEvolution.destroyFactor"]).toBeCloseTo(0.004, 12);
   });
 
   it("keeps an edited factor value in the exchange string after Evolution is disabled", async () => {
@@ -101,12 +123,12 @@ describe("EnemyTab Evolution section", () => {
     const store = usePresetsStore();
     const wrapper = mount(EnemyTab);
     const number = wrapper.find('[data-test="enemy-evo-time"] input[type="number"]');
-    await number.setValue("0.3");
+    await number.setValue("120"); // 120 / 1e7 = 1.2e-5
     await number.trigger("change");
     const cb = wrapper.find('[data-test="enemy-evolution-enable"] input[type="checkbox"]');
     await cb.setValue(false);
     const tail = decodeExchangeString(store.activeExchangeString as string).tail;
-    expect(tail["enemyEvolution.timeFactor"]).toBeCloseTo(0.3, 12);
+    expect(tail["enemyEvolution.timeFactor"]).toBeCloseTo(1.2e-5, 12);
     expect(tail["enemyEvolution.enabled"]).toBe(false);
   });
 });

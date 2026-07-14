@@ -53,6 +53,32 @@ const maxExpansionDistance = computed({
   },
 });
 
+// Evolution factors: the map-gen GUI shows these scaled up from the tiny wire
+// floats. Verified against the game (import a known string, read the GUI):
+// time & pollution display = wire x 1e7, destroy = wire x 1e5. So the default
+// time 0.000004 reads 40, destroy 0.002 reads 200, pollution 0.0000009 reads 9.
+// The slider/box work in that display space; the wire stays the raw float, and
+// the scale is applied only on set so an untouched import stays byte-exact.
+type EvoFactorKey = "timeFactor" | "destroyFactor" | "pollutionFactor";
+const EVO_DISPLAY_SCALE: Record<EvoFactorKey, number> = {
+  timeFactor: 1e7,
+  destroyFactor: 1e5,
+  pollutionFactor: 1e7,
+};
+function evoFactorDisplay(key: EvoFactorKey) {
+  const scale = EVO_DISPLAY_SCALE[key];
+  return computed({
+    // Round away float-multiply noise (e.g. 400.00000000000006) for the box.
+    get: () => (evolution.value ? Math.round(evolution.value[key] * scale * 1e4) / 1e4 : 0),
+    set: (v: number) => {
+      if (evolution.value) evolution.value[key] = v / scale;
+    },
+  });
+}
+const timeFactorDisplay = evoFactorDisplay("timeFactor");
+const destroyFactorDisplay = evoFactorDisplay("destroyFactor");
+const pollutionFactorDisplay = evoFactorDisplay("pollutionFactor");
+
 const TICKS_PER_MINUTE = 3600;
 
 // Cooldowns are stored as ticks (u32) but shown in minutes. An untouched value
@@ -158,32 +184,32 @@ const maxCooldownMinutes = computed({
     </section>
     <section v-if="evolution" data-test="enemy-evolution" class="enemy-section">
       <FCheckbox v-model="evolution.enabled" label="Evolution" data-test="enemy-evolution-enable" />
-      <!-- Placeholder ranges; the number box is the source of truth. -->
+      <!-- Values shown in the game's scaled display units (see EVO_DISPLAY_SCALE). -->
       <EnemyValueRow
         data-test="enemy-evo-time"
         label="Time factor"
-        v-model="evolution.timeFactor"
+        v-model="timeFactorDisplay"
         :min="0"
-        :max="0.01"
-        :step="0.000001"
+        :max="1000"
+        :step="50"
         :disabled="!evolution.enabled"
       />
       <EnemyValueRow
         data-test="enemy-evo-destroy"
         label="Destroy factor"
-        v-model="evolution.destroyFactor"
+        v-model="destroyFactorDisplay"
         :min="0"
-        :max="0.1"
-        :step="0.0001"
+        :max="1000"
+        :step="50"
         :disabled="!evolution.enabled"
       />
       <EnemyValueRow
         data-test="enemy-evo-pollution"
         label="Pollution factor"
-        v-model="evolution.pollutionFactor"
+        v-model="pollutionFactorDisplay"
         :min="0"
-        :max="0.001"
-        :step="0.0000001"
+        :max="1000"
+        :step="10"
         :disabled="!evolution.enabled"
       />
     </section>
