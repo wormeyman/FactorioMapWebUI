@@ -35,4 +35,17 @@ function onChange(event: Event) {
     inset 1px 1px 0 rgb(0 0 0 / 40%),
     inset -1px -1px 0 rgb(255 255 255 / 30%);
 }
+
+/* Drop the spinner arrows. Chrome, Safari, Edge, Opera: */
+.f-number::-webkit-outer-spin-button,
+.f-number::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+/* Firefox: */
+.f-number[type="number"] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
 </style>
