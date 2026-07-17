@@ -50,9 +50,19 @@ export class BinaryWriter {
     }
   }
 
+  /** The inverse of BinaryReader's packed uint: bare u8 for 0-254, else 0xff + u32. */
+  private writePackedUint(value: number): void {
+    if (value < 0xff) {
+      this.writeUint8(value);
+    } else {
+      this.writeUint8(0xff);
+      this.writeUint32(value);
+    }
+  }
+
   writeString(value: string): void {
     const encoded = utf8.encode(value);
-    this.writeUint8(encoded.length);
+    this.writePackedUint(encoded.length);
     this.writeBytes(encoded);
   }
 

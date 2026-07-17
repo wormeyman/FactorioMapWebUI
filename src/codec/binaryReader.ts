@@ -59,8 +59,18 @@ export class BinaryReader {
     return this.bytes.subarray(at, at + n);
   }
 
+  /**
+   * Factorio's space-optimized uint: a bare u8 for 0-254, or 0xff escaping to a
+   * u32 for 255 and above. Verified against the game - see
+   * docs/mapexchangestrings/string-length-prefix-NOTES.md.
+   */
+  private readPackedUint(): number {
+    const first = this.readUint8();
+    return first === 0xff ? this.readUint32() : first;
+  }
+
   readString(): string {
-    const length = this.readUint8();
+    const length = this.readPackedUint();
     return utf8.decode(this.readBytes(length));
   }
 
