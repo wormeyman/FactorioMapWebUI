@@ -82,13 +82,85 @@ the newly-appearing cone is the next point in the series. (Note this must be don
 per region - see the region-centring result above, or the diffs will interleave
 points from four different regions.)
 
+## Candidate RNG - reverse-engineering progress (2026-07-17, v2.1.11)
+
+The ordered candidate series was recovered and attacked. The generator itself is
+still not identified, but its *structure* now is, and several published/assumed
+facts are disproved. All of the below is measured against 2.1.11 by CRT-combining
+runs at region sizes 2048/2050/2058/2066 (pairwise-coprime-ish, product > 2^32)
+and cross-checking against 512/1000/1024.
+
+### The coordinate is a 32-bit integer reduced mod the region size
+
+```
+world_coord = (V mod region_size) - region_size/2       (V is a 32-bit value)
+```
+
+**Proof it is exactly 32-bit:** CRT over the four region runs gives V modulo
+~2.23e12, yet every recovered V for 20 candidates x 2 axes lands below 2^32. By
+chance that is (2^32 / 2.23e12)^40 ~ 10^-100. So each candidate carries a full
+u32 quantity and the region size only enters as a final `mod`. The same V stream
+reproduces across *all* region sizes - region_size is not part of the RNG key,
+only the reduction.
+
+### The spacing parameter does not consume draws
+
+`suggested_minimum_candidate_point_spacing = 0.001` vs `= 45.25` produce
+**identical** candidate values. So the "Poisson-disk" spacing acts later, during
+spot *selection*, not during candidate generation. `candidate_spot_count = 1,2,3,
+...` therefore walks a single fixed draw stream `V[0], V[1], ...` (x then y per
+candidate), and the k-th accepted point is deterministic.
+
+### The stream is NOT GF(2)-linear - kills the whole LFSR family
+
+Berlekamp-Massey linear complexity of every bit-plane of 40 consecutive draws is
+~n/2 (18-22 of 40). A small-state F2-linear generator would plateau far below
+n/2. **This rules out xorshift / xoshiro / xoroshiro / taus88 / lfsr113 / LFSR /
+Mersenne-tempering-style generators** - i.e. the community's "it's black magic /
+some LFSR" assumption is wrong. The generator is non-linear (multiply/avalanche).
+
+Also ruled out by direct solve on the 40-draw stream: LCG over 2^32/2^31/2^48/
+2^64, PCG-not-attempted-blind, `finalizer(LCG-state)` for finalizer in
+{murmur3 fmix32, fmix64, single xorshifts, identity} on interleaved / x-only /
+y-only orderings, 64-bit LCG whose (hi,lo) = (Vx,Vy), and Wang hash of the index.
+The specific non-linear generator is **still unidentified** (PCG32-XSH-RR is the
+natural remaining suspect but was not blind-solved).
+
+### Seeding - partially cracked, and it differs from basis_noise
+
+- **`seed0` bit 0 is ignored.** `0 == 1`, `123456 == 123457`, `2^31 == 2^31+1`
+  all give identical candidates.
+- **`seed1` fully avalanches** the value: `V[0]` vs `seed1` shows no low-order /
+  LCG structure (well-mixed).
+- **`seed0`'s low bits (bit >= 1) enter `V` through a GF(2)-affine (XOR-linear)
+  bit-scatter.** `seed0 = 48`'s XOR-delta equals `seed0=16` XOR `seed0=32`
+  exactly (full 32-bit), and additive combos like `seed0=1234` predict the
+  coordinate exactly. Each seed0 bit XORs a fixed spread 32-bit mask into
+  `(Vx,Vy)`.
+- That seed0 scatter is **`seed1`-independent** (byte-identical masks at seed1=0
+  and seed1=5, for bits 1 and 4) but **index-dependent** (bit-1 mask is
+  `dVy=0x080` for `V[0]` but `dVx=66` for `V[1]`). So seed0 does *not* separate
+  as one global linear term - the linear map is per-candidate. Contrast
+  `basis-noise-NOTES.md`, where seed0 low bits below ~384 were *fully ignored*;
+  here they are a positional dither. The two primitives seed **differently**.
+
+Net: `V(seed0,seed1,region,index) = NonLinear(seed1,region,index) XOR
+L_index(seed0)`, with `L_index` GF(2)-linear in seed0 but varying with index.
+
+### Reproduce / next attempt
+
+Harness in a scratch dir (not committed - exploratory): `run.py` drives one
+headless run per `candidate_spot_count`; `extract.py` trilaterates the new cone
+per step (min component size 25 to reject grid-edge fragments); CRT combine over
+regions 2048/2050/2058/2066. The recovered 20-candidate stream (seed0=123456,
+seed1=0) is in `spot-candidate-stream.seed123456.json` alongside these notes.
+The open core is the non-linear generator + how `seed1` seeds it - the same hard
+step still open for `basis_noise` seeding.
+
 ## Still unknown
 
-- **The candidate-point RNG.** Integer coordinates and Poisson-disk-like spacing
-  narrow it a lot, but the generator itself is unidentified. Order can be
-  recovered by the diffing method above; that ordered series is the input a
-  generator hunt needs.
-- How `seed0`/`seed1` seed that RNG - likely entangled with the same open
-  question in `basis-noise-NOTES.md`.
+- **The non-linear candidate-point RNG** (family narrowed to multiply/avalanche;
+  PCG32 the leading unconfirmed suspect).
+- How `seed1` seeds it (avalanche confirmed, function unknown).
 - The favourability sort, the regional-target accumulation order, and how
   `hard_region_target_quantity` shrinks the last spot.
