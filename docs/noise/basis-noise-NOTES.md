@@ -131,35 +131,42 @@ This resolves the whole old puzzle:
 - constant XOR / offset / roll / translation ruled out -> correct: it is a clamp
   plus a dead low bit, none of those.
 
-### Still open: `seed1`, and the taus88 -> (a, b, sigma) table generation
+### Seed -> table wiring MAPPED; the taus88 -> permutation generator still open
 
-Structure now fully mapped (three seed-dependent permutations, no fixed gradient
-table); the generator itself is still unknown.
+The three permutations split cleanly by which seed drives them (all verified with
+a gauge-robust GF(2) test - see below):
 
-`seed1` behaves **completely differently** from `seed0`: with `seed0` fixed,
-*every* `seed1` value is distinct - no `0..341` clamp block, no `{2k,2k+1}` width-2
-(checked `seed1 = 0..341`, `5000..5003`, `100000..100001`). So `seed1` does **not**
-seed a taus word the `seed0` way. It also is **not** spot's `7927*seed1` XORed into
-the word: `field(seed0=0, seed1=1) != field(seed0=7927, seed1=0)` (and the same
-for primes 7919/7907, XOR and ADD). basis has two per-axis tables `a` (x) and `b`
-(y); the natural reading is that `seed0` drives one and `seed1` the other, seeded
-asymmetrically - but that is not yet pinned.
+- **`a` and `b` (the two per-axis hash tables) depend on `seed0` and `seed1 >> 8`
+  only** - `seed1`'s low byte is discarded. At fixed `seed0`, every `seed1` in
+  `[k*256, k*256+255]` gives **byte-identical** `a` and `b`; the tables change only
+  at 256-boundaries (checked: `seed1 = 0..255` one class, `256..511` the next,
+  etc.). `seed0` changes them at every value.
+- **`sigma` (hash -> gradient direction) depends on `seed0` and the *full*
+  `seed1`.** Within one 256-block of `seed1`, `a`/`b` are frozen, so the only thing
+  that moves is `sigma` - which is exactly why *every* `seed1` yields a distinct
+  field. With `a`/`b` frozen the hash grid `h(i,j)=a[i]^b[j]` is fixed, so
+  `tau = sigma_hi . sigma_lo^-1` (the seed1 remap of directions) is directly
+  observable and gauge-free; measured, it is a complex permutation (no simple
+  XOR/offset/rotation).
 
-The generator that turns a taus88 stream into `a`, `b`, `sigma` is unknown.
+So the earlier field-level "clamp at `0x155`, `{2k,2k+1}` width-2" is really
+**`sigma`'s** signature (`sigma` is the finest-varying table). Both words clamp at
+`0x155` and are bit-0-dead in `seed0`.
 
-**`sigma` is seed-dependent - there is NO fixed gradient table.** This was the
-natural next assumption (classic gradient noise, incl. BGN, indexes a *fixed*
-gradient set - which would make `sigma` shared across seeds and pin it, reducing
-`a`/`b` to a 256-way global-XOR search). It is false. Recovering the raw
-direction grid `K(i,j)` (physical gradient-direction index, gauge-free) for three
-seeds and asking - via a GF(2) linear system - whether **one** permutation `pi`
-unscrambles every grid into an XOR-table `pi(K) = f(i) ^ g(j)`: a bijection
-survives for each grid alone (nulldim 9 = 8 hash bits + constant) but the joint
-solution **collapses to the constant** (`classes = 1/256`) for all three pairs,
-including two seeds that share `seed1 = 0`. Method self-validated: synthetic grids
-built with a *shared* sigma stay fully separable (256/256), with *different* sigma
-collapse. So basis generates **three** seed-dependent permutations (`a`, `b`,
-`sigma`) per seed; even `seed0` alone changes all three.
+**`sigma` is seed-dependent - there is NO fixed gradient table.** (The natural next
+assumption: classic gradient noise, incl. BGN, indexes a *fixed* gradient set,
+which would make `sigma` shared and pin it. False.) Recovering the raw direction
+grid `K(i,j)` for three seeds and asking - via a GF(2) system - whether **one**
+permutation `pi` unscrambles every grid into an XOR-table `pi(K)=f(i)^g(j)`: a
+bijection survives per grid (nulldim 9) but the joint solution **collapses to the
+constant** for all pairs, including two sharing `seed1=0`. Self-validated on
+synthetic shared/unshared sigma.
+
+**Still unknown:** (1) the exact combine `(seed0, seed1>>8) -> W_ab` - it is *not*
+`seed0 +- 256*(seed1>>8)`, *not* `seed0 ^ 256*(seed1>>8)`, and not a spot-style
+`7927`-multiple (tested at several seed0; `(0,256)~(256,0)` turned out to be a
+clamp coincidence, `(0,256)~(0,0)`). (2) how a taus88 stream becomes each
+permutation.
 
 Generative reconstruction (generate candidate `a,b,sigma` from taus88 and require
 the predicted integer grid `sigma[a[i]^b[j]]` to match the measured grid
@@ -193,6 +200,16 @@ cos(2*pi*K/256)` and `value(I, J+eps) ~= C * sin(2*pi*K/256)`, so
 `eps = 1/256` is exact in f32 for `I,J <= 255` (no cancellation) and isolates the
 `(I,J)` corner (the other three sit at `d ~= 1`, falloff `(1-d)^3 ~= 0`). Verified
 0/2304 against the fixture. Two probes per lattice point; a 48x48 grid is one run.
+
+**Which-seed test** (`which_seed.py`, gauge-robust). For each grid recover the
+XOR-difference vectors `alpha(I) = L(a[I]^a[0])`, `beta(J) = L(b[J]^b[0])` (`L` =
+that grid's arbitrary GF(2) gauge) by building a bijective unscrambler from the
+per-grid null space. Two grids share a table iff a single GF(2) `8x8` matrix `M`
+maps one grid's difference vectors to the other's (absorbing `L_x . L_y^-1`);
+solve for `M` per output bit and count inconsistent equations - `0` means shared.
+Self-validated: synthetic shared -> 0, unshared -> ~170. This is what proved
+`a`/`b` depend on `seed1>>8` only and isolate which seed drives which table,
+without ever fixing the gauge.
 
 ## spot_noise - SOLVED (see spot-noise-NOTES.md)
 
