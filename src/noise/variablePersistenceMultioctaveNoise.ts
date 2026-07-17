@@ -133,3 +133,64 @@ export function makeVariablePersistenceMultioctaveNoise(
     return gain * acc;
   };
 }
+
+export interface AmplitudeCorrectedMultioctaveParams {
+  /** Map seed (basis seed word). */
+  readonly seed0: number;
+  /** Per-call seed selector. */
+  readonly seed1: number;
+  /** Octave count (>= 1). */
+  readonly octaves: number;
+  /** Base input scale (noise units per world tile); octave 0 uses `input_scale/2`. */
+  readonly inputScale: number;
+  /** World-space x translation applied to every octave. */
+  readonly offsetX: number;
+  /** Constant persistence (amplitude ratio between successive octaves). */
+  readonly persistence: number;
+  /** Target output amplitude (the corrected sum is scaled to roughly this). */
+  readonly amplitude: number;
+}
+
+/**
+ * `amplitude_corrected_multioctave_noise` - the Lua wrapper
+ * (`core/prototypes/noise-functions.lua`) over
+ * {@link variablePersistenceMultioctaveNoise}. It just chooses the op's
+ * `output_scale` so the `2^N`-gained geometric sum ends up at roughly `amplitude`:
+ *
+ *   output_scale = (1 - p) / 2^N / (1 - p^N) * amplitude
+ *
+ * (the `1 - p^N` is the geometric-series sum of the octave weights; the `/2^N`
+ * cancels the op's gain). The wrapper's `persistence` is a constant here - and the
+ * game's degenerate constant-persistence path yields the same math as the variable
+ * op (verified against the oracle to the basis floor), so this is a direct call.
+ *
+ * At `p == 1` the `(1 - p)/(1 - p^N)` ratio is 0/0; its limit is `1/N`, so
+ * `output_scale = amplitude / (N * 2^N)`.
+ *
+ * The elevation tree uses this to build the *persistence field* it then feeds to
+ * `make_0_12like_lakes` (`persistence = clamp(amplitude_corrected... + 0.3, 0.1, 0.9)`).
+ */
+export function amplitudeCorrectedMultioctaveNoise(
+  x: number,
+  y: number,
+  params: AmplitudeCorrectedMultioctaveParams,
+  tables: BasisNoiseTables = basisNoiseTablesFromSeed(params.seed0, params.seed1),
+): number {
+  const { octaves, persistence: p, amplitude } = params;
+  const ratio = p === 1 ? 1 / octaves : (1 - p) / (1 - p ** octaves);
+  const outputScale = (ratio / 2 ** octaves) * amplitude;
+  return variablePersistenceMultioctaveNoise(
+    x,
+    y,
+    p,
+    {
+      seed0: params.seed0,
+      seed1: params.seed1,
+      octaves,
+      inputScale: params.inputScale,
+      outputScale,
+      offsetX: params.offsetX,
+    },
+    tables,
+  );
+}

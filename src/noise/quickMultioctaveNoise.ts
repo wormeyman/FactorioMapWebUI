@@ -147,3 +147,52 @@ export function makeQuickMultioctaveNoise(
     return sum;
   };
 }
+
+export interface QuickMultioctavePersistenceParams {
+  /** Map seed (basis seed word). */
+  readonly seed0: number;
+  /** Per-call seed selector. */
+  readonly seed1: number;
+  /** Octave count (>= 1). */
+  readonly octaves: number;
+  /** Base input scale (noise units per world tile). */
+  readonly inputScale: number;
+  /** Overall output multiplier. */
+  readonly outputScale: number;
+  /** Input-scale ratio between successive octaves. */
+  readonly octaveInputScaleMultiplier: number;
+  /** Amplitude ratio between successive octaves. */
+  readonly persistence: number;
+}
+
+/**
+ * `quick_multioctave_noise_persistence` - the Lua wrapper
+ * (`core/prototypes/noise-functions.lua`) over {@link quickMultioctaveNoise}. It
+ * normalises the raw quick op by pre-scaling `input_scale` and `output_scale`, and
+ * maps `persistence` to the octave output multiplier:
+ *
+ *   input_scale  = input_scale * octave_input_scale_multiplier^(octaves - 1)
+ *   output_scale = output_scale * 2^(octaves - 1)
+ *   octave_output_scale_multiplier = persistence
+ *   octave_input_scale_multiplier  = 1 / octave_input_scale_multiplier
+ *
+ * so the finest octave lands at `input_scale` and the sum is `2^(N-1)`-scaled. The
+ * elevation tree's `starting_lake_noise` uses this. `offset_x` defaults to 0.
+ */
+export function quickMultioctaveNoisePersistence(
+  x: number,
+  y: number,
+  params: QuickMultioctavePersistenceParams,
+): number {
+  const { octaves, octaveInputScaleMultiplier: oism } = params;
+  return quickMultioctaveNoise(x, y, {
+    seed0: params.seed0,
+    seed1: params.seed1,
+    octaves,
+    inputScale: params.inputScale * oism ** (octaves - 1),
+    outputScale: params.outputScale * 2 ** (octaves - 1),
+    octaveOutputScaleMultiplier: params.persistence,
+    octaveInputScaleMultiplier: 1 / oism,
+    offsetX: 0,
+  });
+}

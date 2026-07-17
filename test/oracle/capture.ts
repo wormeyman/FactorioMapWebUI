@@ -230,6 +230,72 @@ async function captureVariablePersistenceMultioctave(): Promise<void> {
   console.log(`wrote ${out} (${configs.length} configs x ${positions.length} points)`);
 }
 
+/**
+ * The two multioctave Lua wrappers (`core/prototypes/noise-functions.lua`):
+ * `quick_multioctave_noise_persistence` (over the quick op) and
+ * `amplitude_corrected_multioctave_noise` (over the variable-persistence op). Both
+ * are pure parameter re-mappings - no new RE - captured here as ground truth for
+ * the CI-safe port tests. One fixture, two blocks of configs.
+ */
+async function captureMultioctaveWrappers(): Promise<void> {
+  const seed = 123456;
+  const positions = gridPositions();
+
+  const quickCfgs = [
+    { octaves: 1, inputScale: 1 / 8, outputScale: 1, oism: 0.5, persistence: 0.7, seed1: 14 },
+    { octaves: 4, inputScale: 1 / 8, outputScale: 0.8, oism: 0.5, persistence: 0.68, seed1: 14 },
+    { octaves: 5, inputScale: 1 / 8, outputScale: 1, oism: 0.5, persistence: 0.75, seed1: 14 },
+    { octaves: 3, inputScale: 0.2, outputScale: 2, oism: 0.6, persistence: 0.5, seed1: 42 },
+  ];
+  const quick = [];
+  for (const c of quickCfgs) {
+    const expression = `quick_multioctave_noise_persistence{x = x, y = y, seed0 = map_seed, seed1 = ${c.seed1}, input_scale = ${c.inputScale}, output_scale = ${c.outputScale}, octaves = ${c.octaves}, octave_input_scale_multiplier = ${c.oism}, persistence = ${c.persistence}}`;
+    const workDir = await mkdtemp(join(tmpdir(), "oracle-capture-"));
+    try {
+      quick.push({
+        ...c,
+        values: await sampleExpression(expression, positions, { workDir, seed }),
+      });
+      console.log(`  quick_persistence octaves=${c.octaves} seed1=${c.seed1}`);
+    } finally {
+      await rm(workDir, { recursive: true, force: true });
+    }
+  }
+
+  const acCfgs = [
+    { octaves: 2, inputScale: 1 / 8, offsetX: 1000, persistence: 0.7, amplitude: 0.5, seed1: 1 },
+    { octaves: 4, inputScale: 1 / 8, offsetX: 1000, persistence: 0.7, amplitude: 0.5, seed1: 1 },
+    { octaves: 6, inputScale: 1 / 16, offsetX: 0, persistence: 0.6, amplitude: 1, seed1: 3 },
+    { octaves: 3, inputScale: 0.1, offsetX: 5000, persistence: 0.85, amplitude: 2, seed1: 42 },
+  ];
+  const amplitudeCorrected = [];
+  for (const c of acCfgs) {
+    const expression = `amplitude_corrected_multioctave_noise{x = x, y = y, seed0 = map_seed, seed1 = ${c.seed1}, octaves = ${c.octaves}, input_scale = ${c.inputScale}, offset_x = ${c.offsetX}, persistence = ${c.persistence}, amplitude = ${c.amplitude}}`;
+    const workDir = await mkdtemp(join(tmpdir(), "oracle-capture-"));
+    try {
+      amplitudeCorrected.push({
+        ...c,
+        values: await sampleExpression(expression, positions, { workDir, seed }),
+      });
+      console.log(`  amplitude_corrected octaves=${c.octaves} seed1=${c.seed1}`);
+    } finally {
+      await rm(workDir, { recursive: true, force: true });
+    }
+  }
+
+  const fixture = {
+    _comment:
+      "Ground truth from Factorio 2.1.11 via the test/oracle harness. The two multioctave Lua wrappers routed onto elevation. Regenerate: node --experimental-strip-types test/oracle/capture.ts multioctave-wrappers",
+    seed0: seed,
+    positions,
+    quick,
+    amplitudeCorrected,
+  };
+  const out = join(FIXTURES, "oracle-multioctave-wrappers.seed123456.json");
+  await writeFile(out, JSON.stringify(fixture, null, 2) + "\n");
+  console.log(`wrote ${out}`);
+}
+
 if (!oracleAvailable()) {
   console.error("No Factorio binary found (set FACTORIO_BIN). Cannot capture fixtures.");
   process.exit(1);
@@ -244,3 +310,4 @@ if (want("basis")) await captureBasis();
 if (want("multioctave")) await captureMultioctave();
 if (want("quick")) await captureQuickMultioctave();
 if (want("variable-persistence")) await captureVariablePersistenceMultioctave();
+if (want("multioctave-wrappers")) await captureMultioctaveWrappers();
