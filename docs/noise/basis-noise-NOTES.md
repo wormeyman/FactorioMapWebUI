@@ -88,19 +88,43 @@ Three traps, all of which cost a run:
   come first. The HTML docs and `runtime-api.json` list `positions` first, but the
   `order` field (property_names=0) is authoritative.
 
-## Still open
+## Still open: the seeding
 
-- **The seeding.** How `seed0` / `seed1` generate `a` and `b` is unknown, and is
-  entangled with `sigma` (the hash -> direction mapping). A uniform gradient *set*
-  does not imply `G[h]` sits at angle `2*pi*h/256`; assuming that identity gives
-  correlation 0.06. The three tables here are recovered per-seed from the game and
-  are only determined up to a gauge - they need not be the game's literal
-  internals, but they reproduce its output exactly.
-- **This does not make map gen reimplementable on its own.** `spot_noise` - which
-  places every ore patch - is untouched and is the harder half: a stateful
-  region/candidate-point algorithm whose RNG is unknown. Community consensus is
-  that it is "black magic"; nobody has cracked it publicly.
+How `seed0` / `seed1` generate `a` and `b` is unknown, and is entangled with
+`sigma` (the hash -> direction mapping). A uniform gradient *set* does not imply
+`G[h]` sits at angle `2*pi*h/256`; assuming that identity gives correlation 0.06.
+The three tables here are recovered per-seed from the game and are only
+determined up to a gauge - they need not be the game's literal internals, but
+they reproduce its output exactly.
 
+`seed0` and `seed1` can both be passed as **literals** in the expression (they do
+not have to be `map_seed`), and **arbitrary `property_expression_names` keys are
+evaluated by `calculate_tile_properties`** - so many seeds can be probed in a
+single headless map. Control: literal `seed0 = 123456` reproduces `seed0 =
+map_seed` on a seed-123456 map exactly, so literals are honoured.
+
+Measured facts that any correct theory must explain:
+
+- **Small `seed0` values are indistinguishable.** `seed0` in
+  `{0,1,2,3,4,5,6,7,8,12,16,24,32,64,128,256,320}` all produce **bit-identical**
+  fields (max|dG| = 0.000000). Every value from 384 up that was tried (384, 448,
+  511, 512, 576, 640, 768, 896, 1023, 1024, 2047, 2048) produces a field
+  differing in 63-64 of 64 lattice points, with max|dG| ~ 8.3 (i.e. ~2 * 4.2 -
+  completely unrelated gradients). So there is a threshold between 320 and 384.
+- **It is not a bit mask.** `128 == 0` and `256 == 0`, yet `384 = 128 | 256 != 0`.
+  Non-linear, so no "low bits ignored" explanation works.
+- **Exact collisions recur at higher seeds**: `512 == 513` and `1024 == 1025`.
+- **`seed1` changes the field completely** (0/256 indices equal).
+- Ruled out for the seed -> field relation: constant XOR, constant offset mod 256,
+  1-D roll of the i axis, and 2-D translation within +/-15 (best 1.2% vs 0.4%
+  chance).
+
+## Still open: spot_noise
+
+This does not make map gen reimplementable on its own. `spot_noise` - which
+places every ore patch - is untouched and is the harder half: a stateful
+region/candidate-point algorithm whose RNG is unknown. Community consensus is
+that it is "black magic"; nobody has cracked it publicly.
 ## Reproducing
 
 The probe harness is not committed (it needs a Factorio install). Recipe: an
