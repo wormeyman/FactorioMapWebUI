@@ -88,43 +88,89 @@ Three traps, all of which cost a run:
   come first. The HTML docs and `runtime-api.json` list `positions` first, but the
   `order` field (property_names=0) is authoritative.
 
-## Still open: the seeding
+## The seeding - seed0 word SOLVED, seed1 + table-gen still open
 
-How `seed0` / `seed1` generate `a` and `b` is unknown, and is entangled with
-`sigma` (the hash -> direction mapping). A uniform gradient *set* does not imply
-`G[h]` sits at angle `2*pi*h/256`; assuming that identity gives correlation 0.06.
-The three tables here are recovered per-seed from the game and are only
-determined up to a gauge - they need not be the game's literal internals, but
-they reproduce its output exactly.
+Progress 2026-07-17. Two things are now proven; one remains.
 
-`seed0` and `seed1` can both be passed as **literals** in the expression (they do
-not have to be `map_seed`), and **arbitrary `property_expression_names` keys are
-evaluated by `calculate_tile_properties`** - so many seeds can be probed in a
-single headless map. Control: literal `seed0 = 123456` reproduces `seed0 =
-map_seed` on a seed-123456 map exactly, so literals are honoured.
+### SOLVED: the `seed0` -> taus88 seed word
 
-Measured facts that any correct theory must explain:
+`basis_noise` seeds the **same L'Ecuyer taus88** that `spot_noise` uses (see
+`docs/noise/spot-noise-NOTES.md`), with the **same `0x155` clamp**:
 
-- **Small `seed0` values are indistinguishable.** `seed0` in
-  `{0,1,2,3,4,5,6,7,8,12,16,24,32,64,128,256,320}` all produce **bit-identical**
-  fields (max|dG| = 0.000000). Every value from 384 up that was tried (384, 448,
-  511, 512, 576, 640, 768, 896, 1023, 1024, 2047, 2048) produces a field
-  differing in 63-64 of 64 lattice points, with max|dG| ~ 8.3 (i.e. ~2 * 4.2 -
-  completely unrelated gradients). So there is a threshold between 320 and 384.
-- **It is not a bit mask.** `128 == 0` and `256 == 0`, yet `384 = 128 | 256 != 0`.
-  Non-linear, so no "low bits ignored" explanation works.
-- **Exact collisions recur at higher seeds**: `512 == 513` and `1024 == 1025`.
-- **`seed1` changes the field completely** (0/256 indices equal).
-- Ruled out for the seed -> field relation: constant XOR, constant offset mod 256,
-  1-D roll of the i axis, and 2-D translation within +/-15 (best 1.2% vs 0.4%
-  chance).
+```
+word = max(seed0, 0x155)      // 0x155 = 341
+s1 = s2 = s3 = word           // then taus88, exactly as spotSeedWord()
+```
 
-## Still open: spot_noise
+The difference from spot is only what is combined with `seed0` before the clamp:
+spot uses `max((SEED_BASE + 7927*seed1 + ...) ^ seed0, 0x155)`; basis (at
+`seed1 = 0`) has **no `SEED_BASE`** - the word is `seed0` itself, clamped.
 
-This does not make map gen reimplementable on its own. `spot_noise` - which
-places every ore patch - is untouched and is the harder half: a stateful
-region/candidate-point algorithm whose RNG is unknown. Community consensus is
-that it is "black magic"; nobody has cracked it publicly.
+Two consequences of seeding `s1=s2=s3=word` fall straight out and match every
+measurement:
+
+- **`seed0`'s bit 0 is dead** (the taus88 state words drop their low 1/3/4 bits
+  on the first step). So `seed0` and `seed0^1` give bit-identical fields:
+  `{2k, 2k+1}` always collide. This is the *same* artifact documented for spot in
+  `spotCandidates.ts`.
+- **`seed0` in `0..341` all clamp to word `341`**, so the whole block is one
+  field; `342` is the first untouched value.
+
+Verified exhaustively over `seed0 = 0..351` plus `5000..5005` and
+`100000..100003`: the equality classes match `max(seed0 & ~1, 0x155)` with **zero
+mismatches** (dense sweep, 12-point field fingerprint per seed).
+
+This resolves the whole old puzzle:
+
+- "`{0..320}` indistinguishable, `384+` differ, threshold between 320 and 384" ->
+  the threshold is exactly **341/342** (clamp at `0x155`); 320, 128, 256 are all
+  `<= 341` so they clamp to word 341.
+- "not a bit mask: `128==0`, `256==0`, `384 = 128|256 != 0`" -> nothing bitwise;
+  128 and 256 are just below the clamp, 384 is above it.
+- "`512==513`, `1024==1025`" -> the `{2k,2k+1}` bit-0 collisions.
+- constant XOR / offset / roll / translation ruled out -> correct: it is a clamp
+  plus a dead low bit, none of those.
+
+### Still open: `seed1`, and the taus88 -> (a, b, sigma) table generation
+
+`seed1` behaves **completely differently** from `seed0`: with `seed0` fixed,
+*every* `seed1` value is distinct - no `0..341` clamp block, no `{2k,2k+1}` width-2
+(checked `seed1 = 0..341`, `5000..5003`, `100000..100001`). So `seed1` does **not**
+seed a taus word the `seed0` way. It also is **not** spot's `7927*seed1` XORed into
+the word: `field(seed0=0, seed1=1) != field(seed0=7927, seed1=0)` (and the same
+for primes 7919/7907, XOR and ADD). basis has two per-axis tables `a` (x) and `b`
+(y); the natural reading is that `seed0` drives one and `seed1` the other, seeded
+asymmetrically - but that is not yet pinned.
+
+The generator that turns a taus88 stream into `a`, `b`, `sigma` is unknown.
+Reconstruction was attempted **at the field level** (gauge-invariant) against the
+fixture's 512 real game points for `word = 123456`: Durstenfeld / high-bit
+(`(draw*(i+1))>>32`) / byte-stream Fisher-Yates, both directions, all
+{a,b,sigma} orderings, warmups 0..8, shared-vs-separate tables, generated-vs-fixture
+sigma - **all fail** (best residual ~2.5, i.e. random; a hit is ~1e-6). So it is
+not a textbook shuffle off a single `taus88(word)` stream. The fixture's `a`/`b`
+starting `0,1,2,4,8,16,32,...` are a **gauge-fixed** recovery (they expose the
+GF(2)^8 hash structure), not the game's raw tables - which is why table-level
+matching is a dead end and field-level is the right oracle.
+
+### Reproducing this leg
+
+Rebuilt the headless oracle in a scratch dir (`oracle.py`): register one
+`noise-expression` per candidate seed, route each onto its own
+`property_expression_names` key, read them all at fixed non-lattice points with
+`calculate_tile_properties` in `on_init`, `error("DUMPED-OK")` to exit. ~1.7 s per
+run, dozens of seeds per run. Equality of the 12-point field fingerprint is the
+discriminator; there were no non-contiguous fingerprint collisions, so the
+running distinct-field count is a faithful `m(seed0)`.
+
+## spot_noise - SOLVED (see spot-noise-NOTES.md)
+
+`spot_noise` - which places every ore patch, long called "black magic" - was
+cracked on 2026-07-17: taus88 candidate RNG + a dart-throw selection phase. Full
+write-up in `docs/noise/spot-noise-NOTES.md`; implementations in
+`src/noise/spotCandidates.ts` and `src/noise/spotSelection.ts`. The `0x155` clamp
+and `s1=s2=s3=word` seeding proven there are what identified basis's `seed0` word
+above.
 ## Reproducing
 
 The probe harness is not committed (it needs a Factorio install). Recipe: an
