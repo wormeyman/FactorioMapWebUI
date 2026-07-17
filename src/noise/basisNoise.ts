@@ -3,8 +3,13 @@
  *
  * Reverse-engineered against Factorio 2.1.11 and verified to a max error of
  * 3.1e-7 - tighter than the game's own internal self-consistency (~2e-6, from
- * its fastapprox `pow`). See docs/noise/basis-noise-NOTES.md for the derivation,
- * the evidence, and the one piece still missing (the seed -> tables derivation).
+ * its fastapprox `pow`). See docs/noise/basis-noise-NOTES.md for the derivation
+ * and the evidence.
+ *
+ * The `(seed0, seed1) -> tables` derivation is also solved:
+ * `basisNoiseTablesFromSeed` builds `a`/`b`/`sigma` straight from the seed (no
+ * game round-trip), matching the disassembly of `Noise::setSeed` and verified
+ * against the game across the seed combine, the low-byte salt and the clamp.
  *
  * NOT wired into the app. This is the building block a client-side map preview
  * would need; the editor itself does not evaluate noise.
@@ -28,10 +33,10 @@ const GRADIENT_Y: readonly number[] = Array.from({ length: TABLE_SIZE }, (_, h) 
  * Kensler's "Better Gradient Noise" hash (`h = a[i] ^ b[j]`); `sigma` maps that
  * hash to a gradient direction index.
  *
- * These are recovered from the game per seed - deriving them from `seed0` /
- * `seed1` directly is still an open problem. The three tables are only
- * determined up to a gauge, so they need not be the game's literal internals;
- * they reproduce its output exactly, which is what matters here.
+ * Build them from a seed with `basisNoiseTablesFromSeed`, or hand-supply a
+ * gauge-equivalent set (the three tables are only determined up to a gauge, so
+ * they need not be the game's literal internals; they reproduce its output
+ * exactly, which is what matters here).
  */
 export interface BasisNoiseTables {
   /** Hash value -> gradient direction index. Permutation of 0..255. */
@@ -75,4 +80,87 @@ export function basisNoise(x: number, y: number, tables: BasisNoiseTables): numb
     }
   }
   return value;
+}
+
+// ---------------------------------------------------------------------------
+// Seed -> tables. Straight from the disassembly of Factorio 2.1.11's
+// `Noise::setSeed(uint, uchar)` and `Noise::noise` (arm64 slice). The three
+// tables and the salt are built by shuffling identity permutations with one
+// continuous taus88 stream seeded from the map seed; see the notes.
+// ---------------------------------------------------------------------------
+
+/**
+ * All-zero state is a taus88 fixed point, so the seed word is clamped from below
+ * to 0x155 (the same clamp `spot_noise` uses). This is why every seed in
+ * `0..341` produces the same field, and why `seed0`'s bit 0 is dead (the taus88
+ * state words drop their low bits on the first step).
+ */
+const MIN_SEED_WORD = 0x155;
+
+interface Taus88State {
+  s1: number;
+  s2: number;
+  s3: number;
+}
+
+/**
+ * One canonical L'Ecuyer taus88 step (output after the update). Identical to the
+ * generator in `spotCandidates.ts`; the game runs it vectorized (components z2/z3
+ * in NEON lanes, z1 scalar) but the sequence is the same.
+ */
+function taus88Next(st: Taus88State): number {
+  st.s1 = ((((st.s1 & 0xfffffffe) << 12) >>> 0) ^ ((((st.s1 << 13) >>> 0) ^ st.s1) >>> 19)) >>> 0;
+  st.s2 = ((((st.s2 & 0xfffffff8) << 4) >>> 0) ^ ((((st.s2 << 2) >>> 0) ^ st.s2) >>> 25)) >>> 0;
+  st.s3 = ((((st.s3 & 0xfffffff0) << 17) >>> 0) ^ ((((st.s3 << 3) >>> 0) ^ st.s3) >>> 11)) >>> 0;
+  return (st.s1 ^ st.s2 ^ st.s3) >>> 0;
+}
+
+/**
+ * A backward (Durstenfeld) Fisher-Yates shuffle of `identity[0..255]`, drawing
+ * 255 values from the stream: for `pos` from 255 down to 1, swap slot `pos` with
+ * `next() % (pos + 1)`. This is exactly the shuffle the game applies to each of
+ * its four tables, all off one continuous stream.
+ */
+function shuffleIdentity(next: () => number): number[] {
+  const t = Array.from({ length: TABLE_SIZE }, (_, i) => i);
+  for (let pos = TABLE_SIZE - 1; pos >= 1; pos--) {
+    const j = next() % (pos + 1);
+    const tmp = t[pos];
+    t[pos] = t[j];
+    t[j] = tmp;
+  }
+  return t;
+}
+
+/**
+ * Build the `basis_noise` tables directly from `(seed0, seed1)` - `seed0` is the
+ * map seed, `seed1` distinguishes the many `basis_noise` calls a map-gen program
+ * makes. Reproduces the game to the ~2e-7 noise floor.
+ *
+ * The wiring (from `Noise::setSeed`): the effective taus88 seed word is
+ * `max(seed0 + 7*(seed1>>8), 0x155)` - `seed1`'s low byte is *not* in the word -
+ * and the three state words are all set to it. One continuous stream then drives
+ * four identity shuffles in order: a scratch table (from which the byte
+ * `scratch[seed1 & 0xff]` is taken as a salt), the Y-axis table, the X-axis
+ * table, and the gradient permutation. Evaluation hashes as
+ * `gradPerm[xTable[i] ^ yTable[j] ^ salt]`; folding the salt into `sigma` lets the
+ * plain `a[i] ^ b[j]` evaluator above reproduce it unchanged.
+ */
+export function basisNoiseTablesFromSeed(seed0: number, seed1: number): BasisNoiseTables {
+  const word = Math.max((seed0 + 7 * (seed1 >>> 8)) >>> 0, MIN_SEED_WORD);
+  const saltIndex = seed1 & (TABLE_SIZE - 1);
+  const st: Taus88State = { s1: word, s2: word, s3: word };
+  const next = () => taus88Next(st);
+
+  const scratch = shuffleIdentity(next);
+  const salt = scratch[saltIndex];
+  const yTable = shuffleIdentity(next);
+  const xTable = shuffleIdentity(next);
+  const gradPerm = shuffleIdentity(next);
+
+  const sigma = Array.from(
+    { length: TABLE_SIZE },
+    (_, h) => gradPerm[(h ^ salt) & (TABLE_SIZE - 1)],
+  );
+  return { a: xTable, b: yTable, sigma };
 }

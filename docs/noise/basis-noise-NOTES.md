@@ -1,9 +1,12 @@
 # basis_noise - reverse-engineering notes
 
 Source: Factorio 2.1.11 (build 86962), captured headless via probe
-`noise-expression` prototypes read back with `LuaSurface.calculate_tile_properties`.
-Reference implementation: `src/noise/basisNoise.ts`. Fixture:
-`test/fixtures/basis-noise.seed123456.json`. Tests: `test/basisNoise.spec.ts`.
+`noise-expression` prototypes read back with `LuaSurface.calculate_tile_properties`,
+and cross-checked against a disassembly of the shipped executable (the Mach-O
+retains its C++ symbols). Reference implementation: `src/noise/basisNoise.ts`.
+Fixtures: `test/fixtures/basis-noise.seed123456.json` (field) and
+`test/fixtures/basis-noise-seeding.game.json` (seed -> field). Tests:
+`test/basisNoise.spec.ts`, `test/basisNoiseSeeding.spec.ts`.
 
 ## The result
 
@@ -22,6 +25,9 @@ different `input_scale` than the tables were measured at. For scale: the game's
 own `multioctave_noise{octaves=1}` and `basis_noise` disagree by ~2e-6 (its `pow`
 is documented as coming from the fastapprox library), so this is a closer match
 than Factorio is to itself.
+
+The tables `a`, `b` and the gradient assignment are now derived **straight from
+the seed** (`basisNoiseTablesFromSeed`); see "The seeding" below.
 
 ## Why this shape
 
@@ -57,6 +63,7 @@ lattice points where the game gives exactly 0.
 | 256 uniform directions | angle spacing | exactly 360/256 = 1.40625 deg, std 0.0000 |
 | period 256 per axis | `G(k)` vs `G(k+256)` | 0.000e+00 (exact) |
 | full model | 512 independent points from tables alone | max err 3.1e-7, corr 1.0000000000 |
+| seed -> tables | 9 seed pairs generated from seed alone vs the game | max err 2.8e-7 |
 
 ## The probing technique
 
@@ -88,128 +95,131 @@ Three traps, all of which cost a run:
   come first. The HTML docs and `runtime-api.json` list `positions` first, but the
   `order` field (property_names=0) is authoritative.
 
-## The seeding - seed0 word SOLVED, seed1 + table-gen still open
+## The seeding - SOLVED (2026-07-17, by disassembly)
 
-Progress 2026-07-17. Two things are now proven; one remains.
+The field-level probing (below) had mapped the *structure* of the seeding but
+stalled on two pieces: the exact `(seed0, seed1)` combine, and how a taus88 stream
+becomes the permutation tables. Both fell out immediately once the shipped
+executable was disassembled - the macOS universal binary
+(`.../Factorio.app/Contents/MacOS/factorio`, 2.1.11) is **not stripped**: it
+retains mangled C++ symbols, so `NoiseOperations::BasisNoise`, `Noise::setSeed`
+and `Noise::noise` are all findable by name and disassemblable directly.
 
-### SOLVED: the `seed0` -> taus88 seed word
-
-`basis_noise` seeds the **same L'Ecuyer taus88** that `spot_noise` uses (see
-`docs/noise/spot-noise-NOTES.md`), with the **same `0x155` clamp**:
+### The whole algorithm
 
 ```
-word = max(seed0, 0x155)      // 0x155 = 341
-s1 = s2 = s3 = word           // then taus88, exactly as spotSeedWord()
+# From the BasisNoise ctor: how (seed0, seed1) become the two args to setSeed.
+word    = max(seed0 + 7*(seed1 >> 8), 0x155)   # uint;  seed1 LOW byte is dropped here
+lowByte = seed1 & 0xff                          # passed separately
+
+# From Noise::setSeed(uint word, uchar lowByte): one continuous taus88 stream,
+# seeded s1 = s2 = s3 = word, drives four backward Fisher-Yates (Durstenfeld)
+# shuffles of identity[0..255], IN THIS ORDER:
+scratch = shuffle(identity)     # draws   0..254
+salt    = scratch[lowByte]      # a single byte, stored at this+5
+yTable  = shuffle(identity)     # draws 255..509   (object offset +0x006)
+xTable  = shuffle(identity)     # draws 510..764   (object offset +0x106)
+gradPerm= shuffle(identity)     # draws 765..1019  (permutes the gradient table)
+
+# From Noise::noise: the hash carries the salt as a constant XOR.
+h(i, j) = xTable[i & 255] ^ yTable[j & 255] ^ salt
+G       = gradientTable[ gradPerm[h] ]     # gradientTable is angle-ordered 4.2*(cos,sin)
 ```
 
-The difference from spot is only what is combined with `seed0` before the clamp:
-spot uses `max((SEED_BASE + 7927*seed1 + ...) ^ seed0, 0x155)`; basis (at
-`seed1 = 0`) has **no `SEED_BASE`** - the word is `seed0` itself, clamped.
+`shuffle` is the textbook backward Durstenfeld: `for pos = 255..1: j = next() %
+(pos+1); swap(t[pos], t[j])`. `next()` is one canonical L'Ecuyer taus88 step
+(the game vectorizes it - z2/z3 in the two NEON lanes, z1 scalar - but the
+sequence is identical to the scalar generator in `src/noise/spotCandidates.ts`).
 
-Two consequences of seeding `s1=s2=s3=word` fall straight out and match every
-measurement:
+Implementation: `basisNoiseTablesFromSeed` in `src/noise/basisNoise.ts`. It folds
+the salt into `sigma` (`sigma[h] = gradPerm[h ^ salt]`) so the existing
+`a[i]^b[j]` evaluator reproduces `gradPerm[xTable[i]^yTable[j]^salt]` unchanged.
 
-- **`seed0`'s bit 0 is dead** (the taus88 state words drop their low 1/3/4 bits
-  on the first step). So `seed0` and `seed0^1` give bit-identical fields:
-  `{2k, 2k+1}` always collide. This is the *same* artifact documented for spot in
-  `spotCandidates.ts`.
-- **`seed0` in `0..341` all clamp to word `341`**, so the whole block is one
-  field; `342` is the first untouched value.
+### Why each earlier field-level observation falls out
 
-Verified exhaustively over `seed0 = 0..351` plus `5000..5005` and
-`100000..100003`: the equality classes match `max(seed0 & ~1, 0x155)` with **zero
-mismatches** (dense sweep, 12-point field fingerprint per seed).
+- **`seed0` bit 0 is dead; `0..341` all collapse to one field; `342` is the
+  first distinct one; `512==513`, `1024==1025`.** All from
+  `word = max(seed0 + ..., 0x155)` seeding `s1=s2=s3=word`: the clamp guards the
+  taus88 all-zero fixed point (0x155 = 341), and taus88's state words drop their
+  low 1/3/4 bits on the first step, killing `seed0`'s bit 0.
+- **`a`/`b` depend on `seed0` and `seed1>>8` only; the low byte is discarded.**
+  Because the low byte does not enter `word`, and `a`/`b` are built purely from
+  the `word`-seeded stream. The old `(0,256) ~ (0,0)` "coincidence" is real: both
+  give `word <= 0x155` (clamped equal) with `lowByte = 0`.
+- **`sigma` (hash -> direction) depends on the full `seed1`.** Because the low
+  byte enters as `salt = scratch[lowByte]`, XORed into the hash at evaluation -
+  a per-seed constant offset that makes the effective `hash -> direction` map move
+  with the low byte while `a`/`b` stay put.
 
-This resolves the whole old puzzle:
+### How it was found in the binary (method notes)
 
-- "`{0..320}` indistinguishable, `384+` differ, threshold between 320 and 384" ->
-  the threshold is exactly **341/342** (clamp at `0x155`); 320, 128, 256 are all
-  `<= 341` so they clamp to word 341.
-- "not a bit mask: `128==0`, `256==0`, `384 = 128|256 != 0`" -> nothing bitwise;
-  128 and 256 are just below the clamp, 384 is above it.
-- "`512==513`, `1024==1025`" -> the `{2k,2k+1}` bit-0 collisions.
-- constant XOR / offset / roll / translation ruled out -> correct: it is a clamp
-  plus a dead low bit, none of those.
+1. `nm factorio | c++filt | grep BasisNoise` -> `NoiseOperations::BasisNoise::run`,
+   the ctors taking `(uint seed0, uint seed1, ...)`, etc. `run` is a ~100-byte
+   thunk that tail-calls `Noise::noise`; the seed math is in the `BasisNoise`
+   ctor, which computes `setSeed(seed0 + 7*(seed1>>8), seed1 & 0xff)` and calls
+   `Noise::setSeed`.
+2. `objdump --macho` ignores `--start-address`/`--stop-address` and mis-maps
+   vmaddr vs file offset - it dumped the whole 500 MB. A tiny capstone script
+   (parse `LC_SEGMENT_64` for vmaddr->fileoff, disassemble a byte range,
+   resolve `bl`/`b` targets against the `nm` table) is the workable disassembler.
+3. `Noise::setSeed` is one clamp (`csel ... 0x155`) plus four Durstenfeld loops
+   over one taus88 stream; the taus shift constants (`{13,19,12}/{2,25,4}/
+   {3,11,17}`, masks `~1/~7/~15`) sit in `__const` and confirm canonical taus88.
+   `Noise::Noise(bool)` builds the static template: `a[k]=k`, `b[k]=k` (identity),
+   gradient slot `k` = a minimax-poly `(cos, sin)` at angle `2*pi*k/256`.
+4. The one non-obvious bit is the **draw offset**: table `a` (the X table, at
+   `this+0x106`) is the *third* shuffle, so it starts at draw 510, not 0 - the
+   255-draw scratch pass and the Y table precede it. A gauge-robust GF(2) offset
+   scan against the fixture pinned it at 510 (and revealed the fixture's "a" is
+   the game's `this+0x106` X table, indexed by the x coordinate in `Noise::noise`).
+5. Verified: generating `a`/`b`/`sigma` from the seed alone and evaluating
+   reproduces the game to ~2e-7 across 9 `(seed0, seed1)` pairs exercising the
+   `7*(seed1>>8)` combine (seed1 up to 65535), the nonzero-lowByte salt
+   (low = 1..255), the `0x155` clamp (seed0 = 7), and `seed0 = 2^31`.
 
-### Seed -> table wiring MAPPED; the taus88 -> permutation generator still open
+### The field-level structure work (superseded, kept for method)
 
-The three permutations split cleanly by which seed drives them (all verified with
-a gauge-robust GF(2) test - see below):
+Before the disassembly, the seeding was attacked purely through the field. That
+work correctly established: the `0x155` clamp and `s1=s2=s3=word` seeding (shared
+with `spot_noise`); that `basis` has no `SEED_BASE` (unlike spot); that there are
+three seed-dependent permutations with `a`/`b` driven by `(seed0, seed1>>8)` and
+`sigma` by the full `seed1`; and that `sigma` is **not** a fixed gradient table.
+It could not crack the combine or the table generator by blind search - every
+textbook shuffle off a taus88 stream failed the exact-integer-grid test, because
+the real build burns 255 draws on the scratch pass first and salts the hash.
+Lesson: for a generator that is one short function of machine code, a
+**non-stripped binary is the fastest oracle by far** - hours of blind GF(2) /
+shuffle search vs. one afternoon of disassembly.
 
-- **`a` and `b` (the two per-axis hash tables) depend on `seed0` and `seed1 >> 8`
-  only** - `seed1`'s low byte is discarded. At fixed `seed0`, every `seed1` in
-  `[k*256, k*256+255]` gives **byte-identical** `a` and `b`; the tables change only
-  at 256-boundaries (checked: `seed1 = 0..255` one class, `256..511` the next,
-  etc.). `seed0` changes them at every value.
-- **`sigma` (hash -> gradient direction) depends on `seed0` and the *full*
-  `seed1`.** Within one 256-block of `seed1`, `a`/`b` are frozen, so the only thing
-  that moves is `sigma` - which is exactly why *every* `seed1` yields a distinct
-  field. With `a`/`b` frozen the hash grid `h(i,j)=a[i]^b[j]` is fixed, so
-  `tau = sigma_hi . sigma_lo^-1` (the seed1 remap of directions) is directly
-  observable and gauge-free; measured, it is a complex permutation (no simple
-  XOR/offset/rotation).
+The gauge-free tools built for that effort are still the right verification
+harness:
 
-So the earlier field-level "clamp at `0x155`, `{2k,2k+1}` width-2" is really
-**`sigma`'s** signature (`sigma` is the finest-varying table). Both words clamp at
-`0x155` and are bit-0-dead in `seed0`.
+**Raw direction-grid recovery.** With `input_scale = 1`, noise coord == world
+coord. Near lattice point `(I,J)`, `value(I+eps, J) ~= C * cos(2*pi*K/256)` and
+`value(I, J+eps) ~= C * sin(2*pi*K/256)`, so `K(I,J) =
+round(atan2(vy,vx)/(2*pi)*256) mod 256` is the physical direction index. `eps =
+1/256` is exact in f32 for `I,J <= 255` and isolates the `(I,J)` corner. This is
+denser and stricter than the float field, and gauge-free.
 
-**`sigma` is seed-dependent - there is NO fixed gradient table.** (The natural next
-assumption: classic gradient noise, incl. BGN, indexes a *fixed* gradient set,
-which would make `sigma` shared and pin it. False.) Recovering the raw direction
-grid `K(i,j)` for three seeds and asking - via a GF(2) system - whether **one**
-permutation `pi` unscrambles every grid into an XOR-table `pi(K)=f(i)^g(j)`: a
-bijection survives per grid (nulldim 9) but the joint solution **collapses to the
-constant** for all pairs, including two sharing `seed1=0`. Self-validated on
-synthetic shared/unshared sigma.
+**Which-seed GF(2) test** (`which_seed.py`). For each grid recover the
+XOR-difference vectors `alpha(I) = L(a[I]^a[0])`, `beta(J) = L(b[J]^b[0])` via a
+per-grid unscrambler; two grids share a table iff a single GF(2) 8x8 matrix maps
+one grid's difference vectors to the other's. This is what proved `a`/`b` depend
+on `seed1>>8` only, and (reused) what pinned the draw offset at 510.
 
-**Still unknown:** (1) the exact combine `(seed0, seed1>>8) -> W_ab` - it is *not*
-`seed0 +- 256*(seed1>>8)`, *not* `seed0 ^ 256*(seed1>>8)`, and not a spot-style
-`7927`-multiple (tested at several seed0; `(0,256)~(256,0)` turned out to be a
-clamp coincidence, `(0,256)~(0,0)`). (2) how a taus88 stream becomes each
-permutation.
+### Reproducing the seeding oracle
 
-Generative reconstruction (generate candidate `a,b,sigma` from taus88 and require
-the predicted integer grid `sigma[a[i]^b[j]]` to match the measured grid
-**exactly** - no gauge freedom this way) was run hard and **all fail** (best ~15
-of 2304 cells, random baseline 9): Durstenfeld and high-bit (`(draw*(i+1))>>32`)
-and byte-stream Fisher-Yates and argsort-by-key, ascending/descending, all six
-{a,b,sigma} orderings, warmups 0..16, one shared `taus88(word)` stream vs three
-separate streams (`word(seed0)`, `word(seed1)`, `word(seed0^seed1)`,
-`word(seed0+seed1)`). So the table build is **not** a textbook shuffle off a
-`taus88` stream. Likely needs Factorio's actual gradient-permutation code (binary
-RE) or a fundamentally different generator. The fixture's `a`/`b` starting
-`0,1,2,4,8,16,32,...` are a **gauge-fixed** recovery (they expose the GF(2)^8 hash
-structure), not the game's raw tables - so table-level matching is a dead end; the
-exact **integer direction grid** is the right oracle (denser and stricter than the
-float field, and gauge-free for generative tests).
-
-### Reproducing this leg
-
-Rebuilt the headless oracle in a scratch dir (`oracle.py`): register one
-`noise-expression` per candidate seed, route each onto its own
-`property_expression_names` key, read them all at fixed non-lattice points with
-`calculate_tile_properties` in `on_init`, `error("DUMPED-OK")` to exit. ~1.7 s per
-run, dozens of seeds per run. Equality of the 12-point field fingerprint is the
-discriminator; there were no non-contiguous fingerprint collisions, so the
-running distinct-field count is a faithful `m(seed0)`.
-
-**Raw direction-grid recovery** (the gauge-free oracle). With `input_scale = 1`,
-noise coord == world coord. Near lattice point `(I,J)`, `value(I+eps, J) ~= C *
-cos(2*pi*K/256)` and `value(I, J+eps) ~= C * sin(2*pi*K/256)`, so
-`K(I,J) = round(atan2(vy,vx)/(2*pi)*256) mod 256` is the physical direction index.
-`eps = 1/256` is exact in f32 for `I,J <= 255` (no cancellation) and isolates the
-`(I,J)` corner (the other three sit at `d ~= 1`, falloff `(1-d)^3 ~= 0`). Verified
-0/2304 against the fixture. Two probes per lattice point; a 48x48 grid is one run.
-
-**Which-seed test** (`which_seed.py`, gauge-robust). For each grid recover the
-XOR-difference vectors `alpha(I) = L(a[I]^a[0])`, `beta(J) = L(b[J]^b[0])` (`L` =
-that grid's arbitrary GF(2) gauge) by building a bijective unscrambler from the
-per-grid null space. Two grids share a table iff a single GF(2) `8x8` matrix `M`
-maps one grid's difference vectors to the other's (absorbing `L_x . L_y^-1`);
-solve for `M` per output bit and count inconsistent equations - `0` means shared.
-Self-validated: synthetic shared -> 0, unshared -> ~170. This is what proved
-`a`/`b` depend on `seed1>>8` only and isolate which seed drives which table,
-without ever fixing the gauge.
+Rebuild the headless probe in a scratch dir: a mod registering
+`{ type = "noise-expression", name = "probe_elev", expression =
+"basis_noise{x = x, y = y, seed0 = <S0>, seed1 = <S1>, input_scale = 0.125,
+output_scale = 1}" }`, a `--map-gen-settings` JSON routing
+`property_expression_names.elevation = "probe_elev"`, and an `on_init` that calls
+`surface.calculate_tile_properties({"elevation"}, positions)` and
+`helpers.write_file`s the result, then `error("DUMPED-OK")` to exit (~1.7 s/run).
+An isolated `--config` INI with `read-data` at the app's `Contents/data` and
+`write-data` in the scratch dir keeps it clear of the real install. The mod must
+declare `"factorio_version": "2.1"`. Sample the *same* positions for every seed
+and diff against `basisNoiseTablesFromSeed`.
 
 ## spot_noise - SOLVED (see spot-noise-NOTES.md)
 
@@ -217,8 +227,9 @@ without ever fixing the gauge.
 cracked on 2026-07-17: taus88 candidate RNG + a dart-throw selection phase. Full
 write-up in `docs/noise/spot-noise-NOTES.md`; implementations in
 `src/noise/spotCandidates.ts` and `src/noise/spotSelection.ts`. The `0x155` clamp
-and `s1=s2=s3=word` seeding proven there are what identified basis's `seed0` word
-above.
+and `s1=s2=s3=word` seeding proven there are what identified basis's `seed0` word,
+and the shared taus88 is the same generator basis shuffles its tables with.
+
 ## Reproducing
 
 The probe harness is not committed (it needs a Factorio install). Recipe: an
