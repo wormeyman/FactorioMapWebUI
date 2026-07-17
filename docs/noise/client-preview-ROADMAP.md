@@ -157,8 +157,9 @@ The binary defines exactly **14** `NoiseOperations::*::run` types. Status:
 | `SpotNoise` | resources/enemies | DONE (RNG+select+render) |
 | `Const`, `Clamp`, `If`, `PowInt` | all trees | trivial (math) |
 | `BinaryExpression`/`UnaryExpression` (arithmetic) | all trees | trivial |
-| `MultioctaveNoise` | terrain | small (basis layering; partly measured) |
-| `VariablePersistenceMultioctaveNoise` | terrain | small (variant of above) |
+| `MultioctaveNoise` | terrain | DONE (`multioctaveNoise.ts`) |
+| `QuickMultioctaveNoise` | climate (temp/moisture/aux) | DONE (`quickMultioctaveNoise.ts`) |
+| `VariablePersistenceMultioctaveNoise` | terrain (elevation) | partial (octave-0 + norm measured; see notes) |
 | `DistanceFromNearestPoint` | spawn/starting area | small |
 | `Terrace` | terrain banding | small |
 | `Ridge` | terrain | small |

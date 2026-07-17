@@ -99,9 +99,76 @@ async function captureMultioctave(): Promise<void> {
   console.log(`wrote ${out} (${configs.length} configs x ${positions.length} points)`);
 }
 
+/** quick_multioctave_noise ground truth across octaves / multipliers / offset / seeds. */
+async function captureQuickMultioctave(): Promise<void> {
+  const seed = 123456;
+  const positions = gridPositions();
+  // Vary octaves, the two per-octave multipliers, offset_x (including the large
+  // climate-tree values that exercise the f32 floor), input/output scale and seed1.
+  const configs = [
+    // octaves=1 pins the base case; offset_x=0 isolates the raw octave.
+    { octaves: 1, inputScale: 0.125, outputScale: 1, oosm: 0.6, oism: 0.5, offsetX: 0, seed1: 137 },
+    // octave pairing (2*floor(k/2) reseed) first shows up at 3 octaves.
+    { octaves: 3, inputScale: 0.125, outputScale: 1, oosm: 0.6, oism: 0.5, offsetX: 0, seed1: 137 },
+    // large offset_x (climate-tree scale) -> f32 floor.
+    {
+      octaves: 4,
+      inputScale: 1 / 6,
+      outputScale: 2 / 3,
+      oosm: 0.7,
+      oism: 0.5,
+      offsetX: 40000,
+      seed1: 42,
+    },
+    {
+      octaves: 5,
+      inputScale: 0.1,
+      outputScale: 1,
+      oosm: 0.65,
+      oism: 0.55,
+      offsetX: 12000,
+      seed1: 5,
+    },
+    {
+      octaves: 6,
+      inputScale: 0.08,
+      outputScale: 1.5,
+      oosm: 0.5,
+      oism: 0.5,
+      offsetX: 0,
+      seed1: 999,
+    },
+  ];
+  const cases = [];
+  for (const c of configs) {
+    const expression = `quick_multioctave_noise{x = x, y = y, seed0 = map_seed, seed1 = ${c.seed1}, input_scale = ${c.inputScale}, output_scale = ${c.outputScale}, octaves = ${c.octaves}, octave_output_scale_multiplier = ${c.oosm}, octave_input_scale_multiplier = ${c.oism}, offset_x = ${c.offsetX}}`;
+    const workDir = await mkdtemp(join(tmpdir(), "oracle-capture-"));
+    try {
+      const values = await sampleExpression(expression, positions, { workDir, seed });
+      cases.push({ ...c, values });
+      console.log(
+        `  captured octaves=${c.octaves} oism=${c.oism} oosm=${c.oosm} offset=${c.offsetX}`,
+      );
+    } finally {
+      await rm(workDir, { recursive: true, force: true });
+    }
+  }
+  const fixture = {
+    _comment:
+      "Ground truth from Factorio 2.1.11 via the test/oracle harness. quick_multioctave_noise routed onto elevation. Regenerate: node --experimental-strip-types test/oracle/capture.ts",
+    seed0: seed,
+    positions,
+    cases,
+  };
+  const out = join(FIXTURES, "oracle-quick-multioctave.seed123456.json");
+  await writeFile(out, JSON.stringify(fixture, null, 2) + "\n");
+  console.log(`wrote ${out} (${configs.length} configs x ${positions.length} points)`);
+}
+
 if (!oracleAvailable()) {
   console.error("No Factorio binary found (set FACTORIO_BIN). Cannot capture fixtures.");
   process.exit(1);
 }
 await captureBasis();
 await captureMultioctave();
+await captureQuickMultioctave();

@@ -120,19 +120,52 @@ coordinate makes it *worse* (the game's exact f32 op order differs), so it is le
 in f64 - correct to the noise floor where a preview actually samples. Bit-exactness
 is explicitly not the goal (see the roadmap).
 
+## The offset_x parameter (plain op default = -1774.83)
+
+The per-octave x shift is `k * 17.17000305 / offset_x`, and the plain op's fixed
+-1774.83 is just its default `offset_x`. Confirmed from the disassembly (the
+`0x40312b8551ec1eb8 = 17.17000305` double, divided by the offset_x register). NOTE
+the two relatives split on offset semantics:
+
+- **plain / variable_persistence**: per-octave shift `k * 17.17000305 / offset_x`
+  (offset_x large -> tiny shift). Same `fdiv`-by-offset_x in both cores.
+- **quick_multioctave_noise**: `offset_x` is instead a single world-space translation
+  `(x + offset_x) * scale`, applied identically to every octave; quick decorrelates
+  octaves by re-seeding, not by an x shift. See `quick-multioctave-noise-NOTES.md`.
+
+## Done since: quick_multioctave_noise
+
+**SOLVED** - `src/noise/quickMultioctaveNoise.ts`,
+`docs/noise/quick-multioctave-noise-NOTES.md`. The temperature/moisture/aux op. Sum
+of N basis octaves, `OISM`/`OOSM` per-octave scale/amplitude multipliers, no
+normalisation, world-space `offset_x`, seed word +2 per octave-pair (with a
+`(7*(seed1>>8))&1` phase term). `quick_multioctave_noise_persistence` is a thin Lua
+wrapper over it (just needs porting).
+
 ## Still open (the rest of the family)
 
-Needed for the elevation/climate trees, built on this core but not yet RE'd:
-
-- **`variable_persistence_multioctave_noise`** - persistence per octave comes from
-  a noise expression (the `Noise::multioctaveNoise(..., float const* , ...)`
-  overload). Elevation's `make_0_12like_lakes` uses it.
-- **`quick_multioctave_noise`** - a distinct op (`NoiseExpressions::
-  QuickMultioctaveNoise`, 10 constants) exposing `offset_x`,
-  `octave_output_scale_multiplier`, `octave_input_scale_multiplier`. The
-  temperature/moisture/aux trees use it. Its `offset_x` is almost certainly what
-  the plain op's fixed `param6` (and hence the -1774.83) is a default of - mapping
-  `offset_x -> per-octave shift` is the main open item.
-- **`amplitude_corrected_multioctave_noise` / `quick_multioctave_noise_persistence`**
-  are Lua wrappers (`core/prototypes/noise-functions.lua`) over the above - port
-  the wrapper once the primitive it wraps is done.
+- **`variable_persistence_multioctave_noise`** - the elevation-tree op
+  (`make_0_12like_lakes`, nauvis). `persistence` is a spatially-varying noise
+  *expression* (the `Noise::multioctaveNoise(..., float const*, ...)` overload,
+  `NoiseOperations::VariablePersistenceMultioctaveNoise`), evaluated per tile.
+  Partial findings from `VariablePersistenceMultioctaveNoise::run` + oracle:
+  - Its offset is the plain-op form `k * 17.17000305 / offset_x` (same core constant).
+  - The end-of-core normalisation (per tile, from the persistence buffer) is
+    `output_scale * sqrt((p^2 - 1) / (p^(2N) - 1))` (fastapprox pow), with amplitude
+    ratio `p` (shrinking), `1/sqrt(N)` for `p == 1`. This is the RMS norm of a
+    geometric `p^k` amplitude series, matching the `amplitude_corrected` wrapper's
+    `(1-p)/(1-p^N)/2^N` output_scale.
+  - **Octave-0 measured**: with an *expression* persistence, `varPers(octaves=1)` =
+    `2 * basis((x + offset_x) * (IS/2), y * (IS/2); seed0, seed1)` to the floor - i.e.
+    input scale `IS/2` and a structural amplitude factor of 2 (the wrapper's `2^N`
+    gain, matched at N=1). The multi-octave scale/amplitude progression is NOT yet
+    a clean geometric sum (N=2 does not fit two basis at IS/2, IS/4), so the run
+    function transforms `input_scale` in a way still to be decoded (the SIMD
+    prefix-product over the per-octave persistence buffer in overload#1).
+  - **Gotcha**: a *constant* `persistence` hits a degenerate path (the primitive
+    expects a register/expression); RE it with an expression persistence and a
+    separately-captured persistence field (route the persistence expr onto elevation
+    too), then fit with the per-tile `p_i`.
+- **`amplitude_corrected_multioctave_noise`** is a Lua wrapper
+  (`core/prototypes/noise-functions.lua`) over `variable_persistence_multioctave_noise`
+  - port the wrapper once that primitive is done.
