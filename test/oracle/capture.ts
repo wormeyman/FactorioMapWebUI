@@ -60,8 +60,48 @@ async function captureBasis(): Promise<void> {
   }
 }
 
+/** multioctave_noise ground truth across octaves / persistence / scales / seeds. */
+async function captureMultioctave(): Promise<void> {
+  const seed = 123456;
+  const positions = gridPositions();
+  // Vary every lever, including non-power-of-2 persistence (exercises the
+  // fastapprox log2/exp2 in the RMS normalization) and multiple seed1s.
+  const configs = [
+    { octaves: 1, persistence: 0.5, inputScale: 0.125, outputScale: 1, seed1: 137 },
+    { octaves: 2, persistence: 0.5, inputScale: 0.125, outputScale: 1, seed1: 137 },
+    { octaves: 3, persistence: 0.5, inputScale: 0.125, outputScale: 2, seed1: 137 },
+    { octaves: 4, persistence: 0.9, inputScale: 0.15, outputScale: 1, seed1: 137 },
+    { octaves: 5, persistence: 0.7, inputScale: 0.08, outputScale: 3, seed1: 42 },
+    { octaves: 6, persistence: 0.65, inputScale: 0.2, outputScale: 1, seed1: 5 },
+    { octaves: 4, persistence: 0.45, inputScale: 0.05, outputScale: 1, seed1: 999 },
+  ];
+  const cases = [];
+  for (const c of configs) {
+    const expression = `multioctave_noise{x = x, y = y, seed0 = map_seed, seed1 = ${c.seed1}, octaves = ${c.octaves}, persistence = ${c.persistence}, input_scale = ${c.inputScale}, output_scale = ${c.outputScale}}`;
+    const workDir = await mkdtemp(join(tmpdir(), "oracle-capture-"));
+    try {
+      const values = await sampleExpression(expression, positions, { workDir, seed });
+      cases.push({ ...c, values });
+      console.log(`  captured octaves=${c.octaves} p=${c.persistence} seed1=${c.seed1}`);
+    } finally {
+      await rm(workDir, { recursive: true, force: true });
+    }
+  }
+  const fixture = {
+    _comment:
+      "Ground truth from Factorio 2.1.11 via the test/oracle harness. multioctave_noise routed onto elevation. Regenerate: node --experimental-strip-types test/oracle/capture.ts",
+    seed0: seed,
+    positions,
+    cases,
+  };
+  const out = join(FIXTURES, "oracle-multioctave.seed123456.json");
+  await writeFile(out, JSON.stringify(fixture, null, 2) + "\n");
+  console.log(`wrote ${out} (${configs.length} configs x ${positions.length} points)`);
+}
+
 if (!oracleAvailable()) {
   console.error("No Factorio binary found (set FACTORIO_BIN). Cannot capture fixtures.");
   process.exit(1);
 }
 await captureBasis();
+await captureMultioctave();
