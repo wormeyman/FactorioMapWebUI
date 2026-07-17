@@ -142,30 +142,21 @@ normalisation, world-space `offset_x`, seed word +2 per octave-pair (with a
 `(7*(seed1>>8))&1` phase term). `quick_multioctave_noise_persistence` is a thin Lua
 wrapper over it (just needs porting).
 
+## Done since: variable_persistence_multioctave_noise
+
+**SOLVED** - `src/noise/variablePersistenceMultioctaveNoise.ts`,
+`docs/noise/variable-persistence-multioctave-noise-NOTES.md`. The elevation-tree op.
+Horner sum of N same-seed basis octaves (lacunarity 1/2, scale `input_scale*0.5^(k+1)`),
+weight `p^(N-1-k)` from a per-tile persistence expression, gain `2^N`, **no** RMS
+normalisation (the norm branch in the `float const*` overload is a different entry
+point; the register `run` path the oracle uses has none). `offset_x` is a world-space
+translation `(x+offset_x)*scale`; per-octave decorrelation is a fixed `k*(-7936)` noise
+shift, seed shared. `amplitude_corrected_multioctave_noise` (the Lua wrapper) just
+sets `output_scale = (1-p)/2^N/(1-p^N)*amplitude` - port once desired, no new RE.
+
 ## Still open (the rest of the family)
 
-- **`variable_persistence_multioctave_noise`** - the elevation-tree op
-  (`make_0_12like_lakes`, nauvis). `persistence` is a spatially-varying noise
-  *expression* (the `Noise::multioctaveNoise(..., float const*, ...)` overload,
-  `NoiseOperations::VariablePersistenceMultioctaveNoise`), evaluated per tile.
-  Partial findings from `VariablePersistenceMultioctaveNoise::run` + oracle:
-  - Its offset is the plain-op form `k * 17.17000305 / offset_x` (same core constant).
-  - The end-of-core normalisation (per tile, from the persistence buffer) is
-    `output_scale * sqrt((p^2 - 1) / (p^(2N) - 1))` (fastapprox pow), with amplitude
-    ratio `p` (shrinking), `1/sqrt(N)` for `p == 1`. This is the RMS norm of a
-    geometric `p^k` amplitude series, matching the `amplitude_corrected` wrapper's
-    `(1-p)/(1-p^N)/2^N` output_scale.
-  - **Octave-0 measured**: with an *expression* persistence, `varPers(octaves=1)` =
-    `2 * basis((x + offset_x) * (IS/2), y * (IS/2); seed0, seed1)` to the floor - i.e.
-    input scale `IS/2` and a structural amplitude factor of 2 (the wrapper's `2^N`
-    gain, matched at N=1). The multi-octave scale/amplitude progression is NOT yet
-    a clean geometric sum (N=2 does not fit two basis at IS/2, IS/4), so the run
-    function transforms `input_scale` in a way still to be decoded (the SIMD
-    prefix-product over the per-octave persistence buffer in overload#1).
-  - **Gotcha**: a *constant* `persistence` hits a degenerate path (the primitive
-    expects a register/expression); RE it with an expression persistence and a
-    separately-captured persistence field (route the persistence expr onto elevation
-    too), then fit with the per-tile `p_i`.
 - **`amplitude_corrected_multioctave_noise`** is a Lua wrapper
   (`core/prototypes/noise-functions.lua`) over `variable_persistence_multioctave_noise`
-  - port the wrapper once that primitive is done.
+  (now done) - port the thin wrapper (with a `p == 1` guard) when the elevation tree
+  needs it.
