@@ -7,7 +7,8 @@ executable - every selection phase confirmed instruction-for-instruction (see
 "Binary-RE cross-check" below). Companion to `docs/noise/basis-noise-NOTES.md`,
 which covers `basis_noise` (solved the same two ways).
 
-`spot_noise` places every ore patch. Both halves are now solved (2026-07-17):
+`spot_noise` places every ore patch. All three stages are now solved
+(2026-07-17), each confirmed against the binary:
 
 - **Candidate RNG** (see "Candidate RNG - SOLVED"): canonical L'Ecuyer taus88,
   seeded per region with three small primes. Implementation
@@ -18,6 +19,9 @@ which covers `basis_noise` (solved the same two ways).
   trim with self-similar hard-target shrink. Implementation
   `src/noise/spotSelection.ts`, 55 game-captured configurations in
   `test/fixtures/spot-selection.game.json`.
+- **Field rendering** (see "Field rendering - SOLVED"): each selected spot is a
+  linear cone `peak * (1 - dist/radius)`; overlapping cones combine by **max**
+  over a `basement_value` floor.
 
 Community consensus was that this function is "black magic"; none of the facts
 below appear to be publicly documented.
@@ -323,9 +327,46 @@ now pinned for whoever wires up the renderer:
   `+0x58` region_size, `+0x5c` candidate_spot_count*skip_span, `+0x60` spacing,
   `+0x64` skip_offset, `+0x68` skip_span, `+0x6c` hard_region_target_quantity.
 
-## Still unknown / untested corners
+## Field rendering - SOLVED (2026-07-17, binary)
 
-- How overlapping cones combine in the rendered field (max vs sum), and the
-  exact `basement_value` rendering - this lives in `SpotNoise::run`, not in the
-  selection path verified above.
-- (Unrelated but adjacent: `basis_noise` seeding - SOLVED, see basis-noise-NOTES.md.)
+The last open corner - how the selected spots become the output field - is
+`NoiseOperations::SpotNoise::run`, and it is a plain max-of-cones over a
+basement:
+
+```
+out[query] = basement_value                       # initial fill, from SpotNoise+0x50
+for each spot within the region bounds:
+  for each query position with |query - spot| <= maximum_spot_basement_radius:
+    dist = sqrt((query.x - spot.x)^2 + (query.y - spot.y)^2)
+    cone = spot.peak - dist * spot.slope          # peak at centre, 0 at spot.radius
+    out[query] = max(out[query], cone)            # MAX, not sum
+```
+
+- **Overlapping cones combine by MAX** (`fcsel s0, out, cone, gt`), never summed.
+  So two adjacent patches produce the higher of the two cones at each tile, not a
+  piled-up total.
+- **`basement_value`** (`SpotNoise+0x50`) is both the initial fill and the floor:
+  a tile far from every spot reads `basement_value`, and since the cone runs
+  linearly negative past `spot.radius`, the basement also wins in the annulus
+  between `spot.radius` and `maximum_spot_basement_radius`.
+- **`maximum_spot_basement_radius`** (`+0x54`) is the per-query **cull radius**: a
+  spot is only tested against query points within it (`dist > it -> skip`). Set it
+  to 0 and every query is skipped -> the field is uniformly `basement_value`,
+  which is the documented "no spots" gotcha, now fully explained (nothing is
+  placed *and* nothing would render).
+- `spot.slope = spot.peak / spot.radius` (stored by `placeSpots`), so
+  `cone = peak * (1 - dist/radius)` - the exact linear cone the selection notes'
+  `|p-c| = radius*(1 - value/peak)` trilateration assumed. Spot struct is
+  `{x@0, y@4, quantity@8, peak@0xc, slope@0x10}` (20 bytes).
+- Spots are looked up per region via `ThreadSafeSpotNoiseCache::getSpotListFuture`
+  (async, mutex-guarded, SHA1-keyed cache), then bounds-culled by
+  `computeRegionBounds` before the inner loop - both pure optimizations.
+
+`spot_noise` is now understood end to end: candidate RNG, selection, and
+rendering, each confirmed against the binary.
+
+## Nothing left open
+
+`basis_noise` seeding (the sibling primitive a client-side preview needs) is also
+solved - see `basis-noise-NOTES.md`. The remaining work for a client-side map
+preview is plumbing (evaluating whole noise programs), not cracking primitives.
