@@ -1,8 +1,11 @@
-# spot_noise - reverse-engineering notes (in progress)
+# spot_noise - reverse-engineering notes
 
 Source: Factorio 2.1.11 (build 86962), probed headless via `noise-expression`
-prototypes read back with `LuaSurface.calculate_tile_properties`. Companion to
-`docs/noise/basis-noise-NOTES.md`, which covers `basis_noise` (solved).
+prototypes read back with `LuaSurface.calculate_tile_properties`, and
+independently cross-checked against a disassembly of the (non-stripped) shipped
+executable - every selection phase confirmed instruction-for-instruction (see
+"Binary-RE cross-check" below). Companion to `docs/noise/basis-noise-NOTES.md`,
+which covers `basis_noise` (solved the same two ways).
 
 `spot_noise` places every ore patch. Both halves are now solved (2026-07-17):
 
@@ -268,11 +271,61 @@ was proven with fav = -x; `candidate_spot_count` is NOT the stream length but
 the accepted-spot count (streams ran to index 169 for 6 spots at spacing 1e5);
 linear and harmonic spacing decay are excluded by the same event bounds.
 
+## Binary-RE cross-check - every phase confirmed (2026-07-17)
+
+The field-derived selection algorithm was independently verified against a
+disassembly of the shipped 2.1.11 executable (the same non-stripped Mach-O the
+`basis_noise` seeding was cracked from - see basis-noise-NOTES.md). The
+`ThreadSafeSpotNoiseCache::SpotListGenerator` methods are named exactly for each
+phase and match `src/noise/spotSelection.ts` instruction-for-instruction:
+
+- **`generatePoints`** - the dart-throw. `spacingSq = spacing*spacing`; the
+  reject path is literally `fmul spacingSq, spacingSq, #0.9375` (**15/16**, the
+  hard-won decay constant, sitting as an immediate); acceptance is
+  `distSq >= spacingSq` against every accepted spot. On rejection it draws a
+  *new* candidate (two more taus88 outputs) with the decayed threshold. **No
+  tried cap** - since `spacingSq` decays geometrically to 0, acceptance is
+  eventually guaranteed, so the game has nothing like `spotSelection.ts`'s
+  `MAX_TRIED` (that is a pure safety net). The inline candidate RNG re-confirms
+  the primes `0x1ee3/0x1eef/0x1ef7` (7907/7919/7927) and base `0x3fbe2c`.
+- **`generateSpotList`** - the skip set. Copies accepted indices
+  `skip_offset, skip_offset + skip_span, skip_offset + 2*skip_span, ...` into the
+  working set, i.e. exactly `accepted.filter(j => j % span === offset)`. So the
+  target and trim below **run per skip set**, not globally (resolves the old open
+  question). Order of operations: `generatePoints` -> select skip set -> evaluate
+  the density/favorability/quantity/radius expressions at those spots ->
+  `sortSpotCandidates` -> `placeSpots`.
+- **`computeRegionTargetQuantity`** - `sum(density over the set) / count`
+  (`fdiv` by the spot count = mean) `* region_size^2` (`mul w,w,w` then `fmul`).
+  Mean density over the *selected* spots times region area, exactly as measured.
+- **`sortSpotCandidates`** - a `std::__stable_sort` (stable, so ties keep
+  acceptance order) over an index array, comparator `fav[a]`/`fav[b]`. The
+  base-case `fcmp fav[last], fav[first]; b.le (no-swap)` puts higher favorability
+  first: **descending**, matching `.sort((a,b) => b.fav - a.fav || a.j - b.j)`.
+- **`placeSpots`** - the trim. Accumulates `quantity` in sorted order while
+  `acc < target`; with `hard_region_target_quantity` the last spot's quantity is
+  cut to `target - acc` and its cone shrinks self-similarly: `ratio = q'/q`, then
+  `exp2(log2(ratio) * 0.33333334)` = **`cbrt(q'/q)`** scales the radius, and
+  `peak = 3*q' / (pi * r'^2)` (constants `3.0` and `pi` are right there). Exactly
+  `coneScale = Math.cbrt(q2 / q)`.
+
+Two rendering-side details the *selection* function deliberately does not model,
+now pinned for whoever wires up the renderer:
+
+- The effective radius is `min(maximum_spot_basement_radius, radius_expression)`
+  (a `fcsel` in `placeSpots`), and a spot with **non-positive quantity or radius
+  is skipped** (not emitted, not counted toward the target) - which is the
+  mechanism behind the documented `maximum_spot_basement_radius = 0` "no spots"
+  gotcha.
+- `SpotNoise` object field offsets, for reference when reading the disassembly:
+  `+0x38` density reg, `+0x3c` quantity reg, `+0x40` radius reg, `+0x44`
+  favorability reg, `+0x48` seed1/seed0, `+0x54` maximum_spot_basement_radius,
+  `+0x58` region_size, `+0x5c` candidate_spot_count*skip_span, `+0x60` spacing,
+  `+0x64` skip_offset, `+0x68` skip_span, `+0x6c` hard_region_target_quantity.
+
 ## Still unknown / untested corners
 
-- Whether target/trim run per skip set or globally when skip_span > 1 combines
-  with a non-uniform density (all skip probes used constant density).
-- Whether a tried-candidate cap exists beyond ~170 rejections-in-a-row.
 - How overlapping cones combine in the rendered field (max vs sum), and the
-  exact `basement_value` / `maximum_spot_basement_radius` rendering.
-- (Unrelated but adjacent: `basis_noise` seeding - see basis-noise-NOTES.md.)
+  exact `basement_value` rendering - this lives in `SpotNoise::run`, not in the
+  selection path verified above.
+- (Unrelated but adjacent: `basis_noise` seeding - SOLVED, see basis-noise-NOTES.md.)
