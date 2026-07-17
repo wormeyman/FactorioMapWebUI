@@ -4,10 +4,14 @@ Source: Factorio 2.1.11 (build 86962), probed headless via `noise-expression`
 prototypes read back with `LuaSurface.calculate_tile_properties`. Companion to
 `docs/noise/basis-noise-NOTES.md`, which covers `basis_noise` (solved).
 
-`spot_noise` places every ore patch. It is **not solved** - the candidate-point
-RNG is still unknown. What follows is what has been measured, so the next attempt
-starts here rather than at zero. Community consensus is that this function is
-"black magic"; none of the facts below appear to be publicly documented.
+`spot_noise` places every ore patch. The **candidate-point RNG is now solved**
+(2026-07-17, see "Candidate RNG - SOLVED" below): it is canonical L'Ecuyer
+taus88, seeded per region with three small primes. The reference implementation
+is `src/noise/spotCandidates.ts` (tests: `test/spotCandidates.spec.ts`, game
+fixtures: `test/fixtures/spot-candidates.game.json`). Spot *selection*
+(favorability, quantity targets, spacing rejection) is still open. Community
+consensus was that this function is "black magic"; none of the facts below
+appear to be publicly documented.
 
 ## The technique: candidate points are directly observable
 
@@ -82,11 +86,64 @@ the newly-appearing cone is the next point in the series. (Note this must be don
 per region - see the region-centring result above, or the diffs will interleave
 points from four different regions.)
 
-## Candidate RNG - reverse-engineering progress (2026-07-17, v2.1.11)
+## Candidate RNG - SOLVED (2026-07-17, v2.1.11)
 
-The ordered candidate series was recovered and attacked. The generator itself is
-still not identified, but its *structure* now is, and several published/assumed
-facts are disproved. All of the below is measured against 2.1.11 by CRT-combining
+The complete algorithm, verified bit-exact against the game:
+
+```
+W    = (0x3FBE2C + 7927*seed1 + 7919*rx + 7907*ry)  mod 2^32
+word = max(W XOR seed0, 0x155)
+s1 = s2 = s3 = word                      -- canonical L'Ecuyer taus88 state
+V[k] = taus88 output k (output taken after the state update)
+candidate i = (V[2i], V[2i+1])           -- x then y, 2 draws per candidate
+world coord = region_index * region_size + (V mod region_size) - region_size/2
+```
+
+- `(rx, ry)` is the region *index* (regions centred on multiples of
+  `region_size`). 7907/7919/7927 are three consecutive primes; 7919 is the
+  1000th prime. Bit 0 of the `0x3FBE2C` base is unobservable (dead in all three
+  taus88 words) and irrelevant to output.
+- The `max(word, 0x155)` clamp guards the taus88 all-zero fixed point: measured
+  words 0..341 all behave as 341 and 342 is untouched; the clamp applies to the
+  *final* word, after the seed0 XOR (proven by driving each side to a tiny value
+  independently).
+- Blind validation: candidate sets predicted *before* the game ran matched
+  exactly for 6/6 random (seed0, seed1, region, region_size) combinations,
+  including the game's real `region_size = 1024`, negative region indices, and
+  seeds up to 2^32-1. Combined with the taus88 identification below (1280
+  observed bits, 88-bit state, zero contradictions), the model is exact.
+
+Why the seeding facts measured earlier fall out of this: seed0 bit 0 is dead
+because taus88's state words ignore their low 1/3/4 bits; the "index-dependent
+XOR scatter" of seed0's low bits is just the F2-linear propagation of a state
+XOR through a linear generator; and the seed1 "avalanche" is nothing more than
+multiplication by 7927.
+
+### How it was cracked (method notes for the next primitive)
+
+1. **The published "not GF(2)-linear" conclusion (below) was wrong** - or
+   rather, over-claimed. Berlekamp-Massey on 40 draws returns complexity ~n/2
+   for *any* linear generator with state larger than ~20 bits; it only rules
+   out tiny LFSRs. taus88's 88-bit state was never actually excluded.
+2. The decisive (and free) test: treat the 88 initial-state bits as GF(2)
+   unknowns, expand the generator symbolically, and Gauss-eliminate the 1280
+   observed bit equations. taus88 with canonical constants came back consistent
+   at rank exactly 88; lfsr113/xorshift128/xorshift32 and every draw-order
+   variant contradicted. The recovered state forward-reproduced all 40 draws.
+3. Two clues pointed at taus88 before any solve: Factorio's `RandomGenerator`
+   carries three 32-bit words, and "seed0 bit 0 ignored" matches s1's dead
+   bit 0 exactly.
+4. With the generator known, **CRT across region sizes is unnecessary**: a
+   power-of-two region size exposes the draw's low bits directly as linear
+   equations, so 6 candidates (132 bits) over-determine the 88-bit state from
+   ONE run - and the unknown draw order is recovered by trying all 720
+   permutations (44 excess bits make false positives ~2^-44). One headless run
+   with ~30 probe expressions (different seeds routed onto arbitrary
+   `property_expression_names` keys) recovered the whole seeding matrix.
+
+The original structural findings (all confirmed by the solution) follow.
+
+All of the below is measured against 2.1.11 by CRT-combining
 runs at region sizes 2048/2050/2058/2066 (pairwise-coprime-ish, product > 2^32)
 and cross-checking against 512/1000/1024.
 
@@ -111,13 +168,14 @@ spot *selection*, not during candidate generation. `candidate_spot_count = 1,2,3
 ...` therefore walks a single fixed draw stream `V[0], V[1], ...` (x then y per
 candidate), and the k-th accepted point is deterministic.
 
-### The stream is NOT GF(2)-linear - kills the whole LFSR family
+### The stream looked non-linear - a WRONG conclusion, kept as a warning
 
 Berlekamp-Massey linear complexity of every bit-plane of 40 consecutive draws is
-~n/2 (18-22 of 40). A small-state F2-linear generator would plateau far below
-n/2. **This rules out xorshift / xoshiro / xoroshiro / taus88 / lfsr113 / LFSR /
-Mersenne-tempering-style generators** - i.e. the community's "it's black magic /
-some LFSR" assumption is wrong. The generator is non-linear (multiply/avalanche).
+~n/2 (18-22 of 40). This was read as "not F2-linear, rules out taus88/LFSR" -
+but BM needs ~2x the state size in samples, so 40 draws only rule out
+generators with < ~20 state bits. taus88 (88 bits) shows exactly this ~n/2
+signature on short streams. The direct symbolic GF(2) solve (see above) is the
+correct test, and it identified taus88 from the same 40 draws.
 
 Also ruled out by direct solve on the 40-draw stream: LCG over 2^32/2^31/2^48/
 2^64, PCG-not-attempted-blind, `finalizer(LCG-state)` for finalizer in
@@ -126,7 +184,7 @@ y-only orderings, 64-bit LCG whose (hi,lo) = (Vx,Vy), and Wang hash of the index
 The specific non-linear generator is **still unidentified** (PCG32-XSH-RR is the
 natural remaining suspect but was not blind-solved).
 
-### Seeding - partially cracked, and it differs from basis_noise
+### Seeding - historical partial findings (all explained by the solved law)
 
 - **`seed0` bit 0 is ignored.** `0 == 1`, `123456 == 123457`, `2^31 == 2^31+1`
   all give identical candidates.
@@ -147,20 +205,24 @@ natural remaining suspect but was not blind-solved).
 Net: `V(seed0,seed1,region,index) = NonLinear(seed1,region,index) XOR
 L_index(seed0)`, with `L_index` GF(2)-linear in seed0 but varying with index.
 
-### Reproduce / next attempt
+### Reproducing
 
-Harness in a scratch dir (not committed - exploratory): `run.py` drives one
-headless run per `candidate_spot_count`; `extract.py` trilaterates the new cone
-per step (min component size 25 to reject grid-edge fragments); CRT combine over
-regions 2048/2050/2058/2066. The recovered 20-candidate stream (seed0=123456,
-seed1=0) is in `spot-candidate-stream.seed123456.json` alongside these notes.
-The open core is the non-linear generator + how `seed1` seeds it - the same hard
-step still open for `basis_noise` seeding.
+The recovered 20-candidate stream (seed0=123456, seed1=0) is in
+`spot-candidate-stream.seed123456.json` alongside these notes; 11 further
+game-captured candidate sets (random seeds/regions plus the clamp edge cases)
+are in `test/fixtures/spot-candidates.game.json`. Probe harness (not committed,
+needs a Factorio install): one headless `--create` run with a mod registering
+`spot_noise` probe expressions (literal seeds, `candidate_spot_count = 6`,
+radius 20, quantity 10000), routed onto arbitrary `property_expression_names`
+keys; `on_init` coarse-scans each region window at stride 8, fine-scans each
+blob at stride 1, and the apex of each cone IS the candidate (integer coords,
+peak `3q/(pi r^2)`). Gotcha from this session: mods for 2.1.x must declare
+`"factorio_version": "2.1"`.
 
-## Still unknown
+## Still unknown (the selection phase)
 
-- **The non-linear candidate-point RNG** (family narrowed to multiply/avalanche;
-  PCG32 the leading unconfirmed suspect).
-- How `seed1` seeds it (avalanche confirmed, function unknown).
-- The favourability sort, the regional-target accumulation order, and how
+- The favourability sort, the regional-target accumulation order, how
+  `suggested_minimum_candidate_point_spacing` rejects candidates, and how
   `hard_region_target_quantity` shrinks the last spot.
+- How `skip_span` / `skip_offset` partition the accepted spots into patch sets.
+- (Unrelated but adjacent: `basis_noise` seeding - see basis-noise-NOTES.md.)
