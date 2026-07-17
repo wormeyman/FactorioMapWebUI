@@ -133,6 +133,9 @@ This resolves the whole old puzzle:
 
 ### Still open: `seed1`, and the taus88 -> (a, b, sigma) table generation
 
+Structure now fully mapped (three seed-dependent permutations, no fixed gradient
+table); the generator itself is still unknown.
+
 `seed1` behaves **completely differently** from `seed0`: with `seed0` fixed,
 *every* `seed1` value is distinct - no `0..341` clamp block, no `{2k,2k+1}` width-2
 (checked `seed1 = 0..341`, `5000..5003`, `100000..100001`). So `seed1` does **not**
@@ -143,15 +146,35 @@ for primes 7919/7907, XOR and ADD). basis has two per-axis tables `a` (x) and `b
 asymmetrically - but that is not yet pinned.
 
 The generator that turns a taus88 stream into `a`, `b`, `sigma` is unknown.
-Reconstruction was attempted **at the field level** (gauge-invariant) against the
-fixture's 512 real game points for `word = 123456`: Durstenfeld / high-bit
-(`(draw*(i+1))>>32`) / byte-stream Fisher-Yates, both directions, all
-{a,b,sigma} orderings, warmups 0..8, shared-vs-separate tables, generated-vs-fixture
-sigma - **all fail** (best residual ~2.5, i.e. random; a hit is ~1e-6). So it is
-not a textbook shuffle off a single `taus88(word)` stream. The fixture's `a`/`b`
-starting `0,1,2,4,8,16,32,...` are a **gauge-fixed** recovery (they expose the
-GF(2)^8 hash structure), not the game's raw tables - which is why table-level
-matching is a dead end and field-level is the right oracle.
+
+**`sigma` is seed-dependent - there is NO fixed gradient table.** This was the
+natural next assumption (classic gradient noise, incl. BGN, indexes a *fixed*
+gradient set - which would make `sigma` shared across seeds and pin it, reducing
+`a`/`b` to a 256-way global-XOR search). It is false. Recovering the raw
+direction grid `K(i,j)` (physical gradient-direction index, gauge-free) for three
+seeds and asking - via a GF(2) linear system - whether **one** permutation `pi`
+unscrambles every grid into an XOR-table `pi(K) = f(i) ^ g(j)`: a bijection
+survives for each grid alone (nulldim 9 = 8 hash bits + constant) but the joint
+solution **collapses to the constant** (`classes = 1/256`) for all three pairs,
+including two seeds that share `seed1 = 0`. Method self-validated: synthetic grids
+built with a *shared* sigma stay fully separable (256/256), with *different* sigma
+collapse. So basis generates **three** seed-dependent permutations (`a`, `b`,
+`sigma`) per seed; even `seed0` alone changes all three.
+
+Generative reconstruction (generate candidate `a,b,sigma` from taus88 and require
+the predicted integer grid `sigma[a[i]^b[j]]` to match the measured grid
+**exactly** - no gauge freedom this way) was run hard and **all fail** (best ~15
+of 2304 cells, random baseline 9): Durstenfeld and high-bit (`(draw*(i+1))>>32`)
+and byte-stream Fisher-Yates and argsort-by-key, ascending/descending, all six
+{a,b,sigma} orderings, warmups 0..16, one shared `taus88(word)` stream vs three
+separate streams (`word(seed0)`, `word(seed1)`, `word(seed0^seed1)`,
+`word(seed0+seed1)`). So the table build is **not** a textbook shuffle off a
+`taus88` stream. Likely needs Factorio's actual gradient-permutation code (binary
+RE) or a fundamentally different generator. The fixture's `a`/`b` starting
+`0,1,2,4,8,16,32,...` are a **gauge-fixed** recovery (they expose the GF(2)^8 hash
+structure), not the game's raw tables - so table-level matching is a dead end; the
+exact **integer direction grid** is the right oracle (denser and stricter than the
+float field, and gauge-free for generative tests).
 
 ### Reproducing this leg
 
@@ -162,6 +185,14 @@ Rebuilt the headless oracle in a scratch dir (`oracle.py`): register one
 run, dozens of seeds per run. Equality of the 12-point field fingerprint is the
 discriminator; there were no non-contiguous fingerprint collisions, so the
 running distinct-field count is a faithful `m(seed0)`.
+
+**Raw direction-grid recovery** (the gauge-free oracle). With `input_scale = 1`,
+noise coord == world coord. Near lattice point `(I,J)`, `value(I+eps, J) ~= C *
+cos(2*pi*K/256)` and `value(I, J+eps) ~= C * sin(2*pi*K/256)`, so
+`K(I,J) = round(atan2(vy,vx)/(2*pi)*256) mod 256` is the physical direction index.
+`eps = 1/256` is exact in f32 for `I,J <= 255` (no cancellation) and isolates the
+`(I,J)` corner (the other three sit at `d ~= 1`, falloff `(1-d)^3 ~= 0`). Verified
+0/2304 against the fixture. Two probes per lattice point; a 48x48 grid is one run.
 
 ## spot_noise - SOLVED (see spot-noise-NOTES.md)
 
