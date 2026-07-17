@@ -160,7 +160,7 @@ The binary defines exactly **14** `NoiseOperations::*::run` types. Status:
 | `MultioctaveNoise` | terrain | DONE (`multioctaveNoise.ts`) |
 | `QuickMultioctaveNoise` | climate (temp/moisture/aux) | DONE (`quickMultioctaveNoise.ts`) |
 | `VariablePersistenceMultioctaveNoise` | terrain (elevation) | DONE (`variablePersistenceMultioctaveNoise.ts`) |
-| `DistanceFromNearestPoint` | spawn/starting area | small |
+| `DistanceFromNearestPoint` | spawn/starting area | UNDERSTOOD (disasm) - `min(maximum_distance, nearest euclidean dist to any point)`; points are int/256 fixed-point. Trivial to implement; blocked on the runtime point data (see below), so deferred to the elevation render. |
 | `Terrace` | terrain banding | small |
 | `Ridge` | terrain | small |
 | `RandomPenalty` | jitter | small |
@@ -171,6 +171,33 @@ Method for each: disassemble `NoiseOperations::<Op>::run` (the capstone
 disassembler `scratchpad/re/fdis.py` seeks by symbol address from
 `nm | c++filt`), and/or probe it through the oracle, then validate to ~1e-6.
 None are "black magic" - the two that were are already done.
+
+### M1 scoping note: the elevation tree depends on runtime spawn data
+
+Traced the Nauvis `elevation` tree (`core/prototypes/noise-programs.lua`). The
+default `elevation_nauvis` is large (`elevation_nauvis_function` over `nauvis_main`,
+`nauvis_bridges`, `nauvis_detail`, `nauvis_macro`, `nauvis_hills_plateaus`, ...);
+the `elevation_lakes` / `elevation_island` variants are smaller
+(`finish_elevation{make_0_12like_lakes{...}}`). **All of them reference values that
+are not pure noise:**
+
+- `distance` - distance from the spawn point (world origin-ish).
+- `starting_lake_positions` / `starting_positions` - runtime-generated spawn/lake
+  points, fed to `distance_from_nearest_point`. These come from the game's
+  starting-area placement, not a noise expression.
+- `water_level`, `segmentation_multiplier` - map-gen settings (scalars the app's
+  `Preset` already models, but the noise DSL exposes them as vars).
+
+So an elevation render needs a decision before the evaluator work: either (a) render
+**far from spawn**, where the `distance`- and `starting_*`-gated terms fade out, and
+supply `water_level`/`segmentation_multiplier` from the preset - the cheapest path to
+a recognizable coastline; or (b) additionally RE the spawn / starting-lake placement
+to be faithful near the origin. (a) is the right MVP.
+
+There is also an evaluator-shape fork: hand-port each named expression to a TS
+closure (roadmap's stated primary strategy) vs. write a parser for the noise DSL
+strings. Hand-porting is less upfront work for the MVP; a parser pays off only if
+the whole tree corpus gets ported.
 
 ## Porting the expression trees (layer 3) - the biggest chunk
 
