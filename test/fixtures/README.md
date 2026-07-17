@@ -21,6 +21,7 @@ them byte-for-byte as captured.
 | `starting-area-5.txt` | Minimal Space-Age map (seed 123456), `starting_area` = `5.0` | Negative control for `area_to_generate_at_start`: a 5x starting_area leaves the box unchanged. Also round-trip coverage for a large `starting_area`. |
 | `map-64x64.txt` | Minimal Space-Age map (seed 123456), `width` = `height` = `64` | Negative control for `area_to_generate_at_start`: a tiny finite map leaves the box unchanged. Also round-trip coverage for a small map. |
 | `map-exchange-parsed.default-seed123456.dump.json` | In-game dump of `helpers.parse_map_exchange_string(get_map_exchange_string())` for the default seed-123456 map (byte-identical to `starting-points-1-origin.txt`) | Authoritative field-by-field parse from the game itself; the oracle that cross-validates the whole mid-block decoder and confirms `area_to_generate_at_start` is absent from the public MapGenSettings table |
+| `basis-noise.seed123456.json` | Factorio 2.1.11 `basis_noise` sampled via `calculate_tile_properties`: the three recovered 256-entry tables plus 512 independent (x, y, value) points | Ground truth for `src/noise/basisNoise.ts`, the reverse-engineered noise primitive. See `docs/noise/basis-noise-NOTES.md` |
 
 Note on `area_to_generate_at_start` (the former `opaqueRestA`, 24 bytes between
 `height` and `starting_area`): it is a vestigial serialization field. It is
