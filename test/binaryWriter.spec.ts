@@ -34,7 +34,7 @@ describe("BinaryWriter", () => {
     expect([...w.toBytes()]).toEqual([0x34, 0x12]);
   });
 
-  it("writes a uint8-length-prefixed UTF-8 string, including the empty string", () => {
+  it("writes a short string with a bare uint8 length prefix, including the empty string", () => {
     const w = new BinaryWriter();
     w.writeString("coal");
     w.writeString("");
@@ -42,6 +42,35 @@ describe("BinaryWriter", () => {
     const r = new BinaryReader(w.toBytes());
     expect(r.readString()).toBe("coal");
     expect(r.readString()).toBe("");
+  });
+
+  it("writes a 254-byte string with a bare uint8 length prefix", () => {
+    const w = new BinaryWriter();
+    w.writeString("v".repeat(254));
+    expect(w.toBytes()[0]).toBe(0xfe);
+    expect(w.length).toBe(255);
+  });
+
+  it("escapes to 0xff + uint32 for a 255-byte string", () => {
+    const w = new BinaryWriter();
+    w.writeString("v".repeat(255));
+    expect([...w.toBytes().subarray(0, 5)]).toEqual([0xff, 0xff, 0x00, 0x00, 0x00]);
+    expect(w.length).toBe(260);
+  });
+
+  it("reproduces the game's own prefix bytes for a 300-byte string", () => {
+    // Ground truth from Factorio 2.1.11 - see
+    // docs/mapexchangestrings/string-length-prefix-NOTES.md.
+    const w = new BinaryWriter();
+    w.writeString(`elevation_${"x".repeat(290)}`);
+    expect([...w.toBytes().subarray(0, 5)]).toEqual([0xff, 0x2c, 0x01, 0x00, 0x00]);
+  });
+
+  it("round-trips a long string through the reader", () => {
+    const value = "e".repeat(1000);
+    const w = new BinaryWriter();
+    w.writeString(value);
+    expect(new BinaryReader(w.toBytes()).readString()).toBe(value);
   });
 
   it("appends raw bytes verbatim and tracks length", () => {

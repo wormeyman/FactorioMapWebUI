@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vite-plus/test";
 import { BinaryReader } from "../src/codec/binaryReader";
 
+const utf8 = new TextEncoder();
+
 describe("BinaryReader", () => {
   it("reads little-endian primitives in sequence", () => {
     // u8=0x2a, u16=0x0102, u32=0x01020304, f32=1.5, f64=2.5
@@ -26,10 +28,38 @@ describe("BinaryReader", () => {
     expect(r.readInt32()).toBe(-115200);
   });
 
-  it("reads a uint8-length-prefixed UTF-8 string", () => {
+  it("reads a short string from its bare uint8 length prefix", () => {
     const r = new BinaryReader(new Uint8Array([4, 0x63, 0x6f, 0x61, 0x6c, 0xff]));
     expect(r.readString()).toBe("coal");
     expect(r.remaining()).toEqual(new Uint8Array([0xff]));
+  });
+
+  // Factorio's space-optimized uint: lengths 0-254 are a bare u8; 255 and above
+  // escape to 0xff + a u32. Boundary captured from the game itself - see
+  // docs/mapexchangestrings/string-length-prefix-NOTES.md.
+  it("reads a 254-byte string from a bare uint8 length prefix (the last unescaped length)", () => {
+    const value = "v".repeat(254);
+    const r = new BinaryReader(new Uint8Array([0xfe, ...utf8.encode(value)]));
+    expect(r.readString()).toBe(value);
+  });
+
+  it("reads a 255-byte string from a 0xff-escaped uint32 length prefix", () => {
+    const value = "v".repeat(255);
+    const r = new BinaryReader(
+      new Uint8Array([0xff, 0xff, 0x00, 0x00, 0x00, ...utf8.encode(value)]),
+    );
+    expect(r.readString()).toBe(value);
+  });
+
+  it("reads a 300-byte string using the exact prefix bytes the game emitted", () => {
+    // Captured from Factorio 2.1.11: property_expression_names["elevation"] set
+    // to a 300-char value serialized as ff 2c 01 00 00 followed by the bytes.
+    const value = `elevation_${"x".repeat(290)}`;
+    const r = new BinaryReader(
+      new Uint8Array([0xff, 0x2c, 0x01, 0x00, 0x00, ...utf8.encode(value), 0x7f]),
+    );
+    expect(r.readString()).toBe(value);
+    expect(r.remaining()).toEqual(new Uint8Array([0x7f]));
   });
 
   it("works on a subarray view with a non-zero byteOffset", () => {
