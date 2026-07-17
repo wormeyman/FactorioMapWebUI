@@ -4,14 +4,20 @@ Source: Factorio 2.1.11 (build 86962), probed headless via `noise-expression`
 prototypes read back with `LuaSurface.calculate_tile_properties`. Companion to
 `docs/noise/basis-noise-NOTES.md`, which covers `basis_noise` (solved).
 
-`spot_noise` places every ore patch. The **candidate-point RNG is now solved**
-(2026-07-17, see "Candidate RNG - SOLVED" below): it is canonical L'Ecuyer
-taus88, seeded per region with three small primes. The reference implementation
-is `src/noise/spotCandidates.ts` (tests: `test/spotCandidates.spec.ts`, game
-fixtures: `test/fixtures/spot-candidates.game.json`). Spot *selection*
-(favorability, quantity targets, spacing rejection) is still open. Community
-consensus was that this function is "black magic"; none of the facts below
-appear to be publicly documented.
+`spot_noise` places every ore patch. Both halves are now solved (2026-07-17):
+
+- **Candidate RNG** (see "Candidate RNG - SOLVED"): canonical L'Ecuyer taus88,
+  seeded per region with three small primes. Implementation
+  `src/noise/spotCandidates.ts`, fixtures `test/fixtures/spot-candidates.game.json`.
+- **Spot selection** (see "Spot selection - SOLVED"): dart-throw over the
+  candidate stream with a 15/16-per-rejection squared-spacing decay, skip
+  round-robin, density target sampled at the accepted spots, favorability-sorted
+  trim with self-similar hard-target shrink. Implementation
+  `src/noise/spotSelection.ts`, 55 game-captured configurations in
+  `test/fixtures/spot-selection.game.json`.
+
+Community consensus was that this function is "black magic"; none of the facts
+below appear to be publicly documented.
 
 ## The technique: candidate points are directly observable
 
@@ -219,10 +225,54 @@ blob at stride 1, and the apex of each cone IS the candidate (integer coords,
 peak `3q/(pi r^2)`). Gotcha from this session: mods for 2.1.x must declare
 `"factorio_version": "2.1"`.
 
-## Still unknown (the selection phase)
+## Spot selection - SOLVED (2026-07-17, v2.1.11)
 
-- The favourability sort, the regional-target accumulation order, how
-  `suggested_minimum_candidate_point_spacing` rejects candidates, and how
-  `hard_region_target_quantity` shrinks the last spot.
-- How `skip_span` / `skip_offset` partition the accepted spots into patch sets.
+The algorithm that turns the candidate stream into rendered spots, verified
+exactly on 55 game-captured configurations (density/favorability/quantity
+expressions, spacing 0.001..100000, counts 6..24, skip sets, hard targets,
+region sizes 1024/2048):
+
+```
+1. DART-THROW over the candidate stream, in generation order.
+     spacingSq = suggested_minimum_candidate_point_spacing^2
+     accept candidate iff distSq(candidate, a) >= spacingSq for every
+       previously accepted a; on each rejection spacingSq *= 15/16.
+     Walk until candidate_spot_count * skip_span spots are accepted.
+     (No cap observed through ~170 tried; rejected candidates never return.)
+2. SKIP: accepted spot j (acceptance order) belongs to set j mod skip_span;
+   an expression renders the set matching its skip_offset.
+3. TARGET: regional quantity target = mean of density_expression over the
+   set's accepted spot positions, times region_size^2. (Proven to sample the
+   ACCEPTED spots, not the first candidates and not a uniform average, via
+   step-function densities on seeds whose acceptance shifts the sample.)
+4. TRIM: stable-sort the set by favorability (evaluated at each spot)
+   descending (ties keep acceptance order; negative favorability does NOT
+   exclude a spot); walk in that order accumulating spot_quantity_expression
+   (evaluated at the spot); keep while accumulated < target. With
+   hard_region_target_quantity=1 the last kept spot's quantity is cut to hit
+   the target exactly and its cone shrinks SELF-SIMILARLY: radius and peak
+   both scale by (q'/q)^(1/3) (measured peak ratio 0.7937 = (1/2)^(1/3) for a
+   half-quantity shrink).
+```
+
+The decay constant is exact and was the hard part: per-rejection factor on
+*distances* is sqrt(15/16) = 0.9682458. Bounds from 2000+ accept/reject events
+narrowed it to (0.968235, 0.968263); 12 seeds where sqrt(15/16), 61/63 and
+e^(-1/31) predict *different accepted sets* then scored 12/12, 4/12, 0/12.
+I.e. the game compares squared distances and knocks 1/16 off the squared
+threshold per rejection - "suggested minimum spacing ... to try to achieve".
+
+Notable dead ends measured on the way: acceptance under constant favorability
+is generation order (dens1..6 kept exactly the first k candidates); the sort
+was proven with fav = -x; `candidate_spot_count` is NOT the stream length but
+the accepted-spot count (streams ran to index 169 for 6 spots at spacing 1e5);
+linear and harmonic spacing decay are excluded by the same event bounds.
+
+## Still unknown / untested corners
+
+- Whether target/trim run per skip set or globally when skip_span > 1 combines
+  with a non-uniform density (all skip probes used constant density).
+- Whether a tried-candidate cap exists beyond ~170 rejections-in-a-row.
+- How overlapping cones combine in the rendered field (max vs sum), and the
+  exact `basement_value` / `maximum_spot_basement_radius` rendering.
 - (Unrelated but adjacent: `basis_noise` seeding - see basis-noise-NOTES.md.)
