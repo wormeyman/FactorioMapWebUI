@@ -17,8 +17,8 @@ describe("eval/primitives basisNoiseExpr", () => {
         p.x,
         p.y,
         {
-          seed0: basisFixture.seed0,
-          seed1: basisFixture.seed1,
+          seed0: basisFixture.seed,
+          seed1: 0,
           inputScale: basisFixture.inputScale,
           outputScale: 1,
         },
