@@ -573,54 +573,59 @@ The core deliverable: `make_0_12like_lakes` + `finish_elevation` + `elevationLak
 
 - [ ] **Step 1: Write the failing test**
 
-Create `test/elevationLakes.spec.ts`. It uses `makeElevationLakes` once and sweeps the fixture points. The CI-relevant invariant is the **water mask** (`elevation < 0`); numeric parity is asserted with a near/far split (large world coordinates hit the documented f32 floor). If Task 0 recorded a non-default ctx, set `ctxOverrides` accordingly (default `{}` for the confirmed far-from-spawn case).
+Create `test/elevationLakes.spec.ts`. It uses `makeElevationLakes` once and sweeps the fixture points, asserting **only on points where the game's `startingLakeDistance == 1024`** (saturated / genuinely far-from-spawn). Task 0 established the ctx facts, baked into this test:
+- `starting_positions` is the origin spawn: `distance == hypot(x,y)`, so the default `startingPositions=[{0,0}]` is faithful everywhere → `ctxOverrides = {}`.
+- `starting_lake_positions` is NOT empty near spawn: the 9 near-band points have real lakes (`sld` 57-91) that the empty-lake ctx cannot reproduce, so they are excluded. The 17 saturated far points are parity-tested.
+- Every point samples basis at `(x + offset_x)` with `offset_x = 10000`, so all parity points sit in the f32-coordinate-floor regime; there is no meaningful near-field class here. One bound covers them (the existing varPers spec reaches `< 5e-3` far-field at offset_x=40000; 1e-2 is a safe guardrail for the gain-amplified tree sum).
 
 ```ts
 import { describe, expect, it } from "vite-plus/test";
 import fixture from "./fixtures/oracle-elevation-lakes.seed123456.json";
 import { makeElevationLakes } from "../src/noise/expressions/elevationLakes";
 
-// If Task 0 proved the game's starting_positions is the origin spawn and
-// starting_lake_positions is empty, the EvalCtx defaults are faithful and this
-// stays empty. Otherwise set the points Task 0 recorded.
-const ctxOverrides = {} as {
-  startingPositions?: { x: number; y: number }[];
-  startingLakePositions?: { x: number; y: number }[];
-};
+// Task 0 confirmed: starting_positions = origin spawn (distance == hypot), so the
+// EvalCtx defaults are faithful. starting_lake_positions is non-empty near spawn,
+// so we parity-test only where the game's own starting_lake_distance saturated at
+// 1024 (the empty-lake far-from-spawn ctx is exact there).
+const SATURATED = (i: number) => fixture.startingLakeDistance[i] >= 1024;
 
-describe("elevationLakes reproduces the game's elevation_lakes tree", () => {
-  const evalAt = makeElevationLakes({ seed0: fixture.seed0, ...ctxOverrides });
+describe("elevationLakes reproduces the game's elevation_lakes tree (far from spawn)", () => {
+  const evalAt = makeElevationLakes({ seed0: fixture.seed0 });
+
+  it("has parity-testable points (guards against a fixture regen dropping them)", () => {
+    expect(fixture.positions.filter((_p, i) => SATURATED(i)).length).toBeGreaterThanOrEqual(12);
+  });
 
   it("matches the water mask (elevation < 0) away from the coastline", () => {
     for (let i = 0; i < fixture.positions.length; i++) {
+      if (!SATURATED(i)) continue;
       const exp = fixture.elevation[i];
       if (Math.abs(exp) < 1e-3) continue; // coastline: sign is ambiguous within the floor
       const p = fixture.positions[i];
-      const got = evalAt(p.x, p.y);
-      expect(got < 0).toBe(exp < 0);
+      expect(evalAt(p.x, p.y) < 0).toBe(exp < 0);
     }
   });
 
-  it("matches the numeric elevation to the noise floor (near) / f32 floor (far)", () => {
-    let worstNear = 0;
-    let worstFar = 0;
+  it("matches the numeric elevation to the f32 coordinate floor", () => {
+    let worst = 0;
+    let worstLabel = "";
     for (let i = 0; i < fixture.positions.length; i++) {
+      if (!SATURATED(i)) continue;
       const p = fixture.positions[i];
-      const got = evalAt(p.x, p.y);
-      const err = Math.abs(got - fixture.elevation[i]);
-      const far = Math.abs(p.x) > 500 || Math.abs(p.y) > 500;
-      if (far) worstFar = Math.max(worstFar, err);
-      else worstNear = Math.max(worstNear, err);
+      const err = Math.abs(evalAt(p.x, p.y) - fixture.elevation[i]);
+      if (err > worst) {
+        worst = err;
+        worstLabel = `@(${p.x},${p.y})`;
+      }
     }
-    // Near-origin: a handful of stacked basis evals over the ~2e-6 floor.
-    expect(worstNear).toBeLessThan(1e-3);
-    // Far: the game's f32 coordinate pipeline diverges from our f64.
-    expect(worstFar).toBeLessThan(1e-1);
+    // offset_x = 10000 puts every point in the f32 regime; the game's f32 coordinate
+    // pipeline diverges from our f64 (see variablePersistence spec's far-field bound).
+    expect(worst, `worst ${worstLabel}`).toBeLessThan(1e-2);
   });
 });
 ```
 
-Note: the bounds are calibrated guardrails - after Step 4 tighten them to just above the observed `worstNear`/`worstFar` (do NOT loosen them to pass; a large error is a real bug to debug via systematic-debugging).
+Note: the `1e-2` bound is a calibrated guardrail - after Step 4 tighten it to just above the observed `worst` (do NOT loosen it to pass; a large error is a real port bug to debug via systematic-debugging).
 
 - [ ] **Step 2: Run test to verify it fails**
 

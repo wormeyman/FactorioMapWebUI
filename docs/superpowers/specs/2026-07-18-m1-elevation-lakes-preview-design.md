@@ -282,6 +282,32 @@ selected (gated on Factorio presence).
   correct `log2` helper but do not gold-plate a fastapprox match - it only matters
   once the water-coverage slider is wired.
 
+## Task 0 result (oracle spike, 2026-07-18)
+
+Ran the capture at seed 123456 (26-point grid: a 3x3 near-origin band + two far
+rings at r=2200/3300 x 8 angles + one deep-field point). Findings:
+
+- **`distance == hypot(x, y)`** to 4.6e-3 (large-coord 1/256 quantization) at every
+  point. So the game's `starting_positions` is the single origin spawn `[{0,0}]`;
+  the `EvalCtx` default `startingPositions=[{x:0,y:0}]` is faithful **everywhere**.
+- **`starting_lake_positions` is NOT empty.** The game placed real starting lakes:
+  `starting_lake_distance` runs 57-91 across the near-origin band and saturates at
+  1024 only in the far field (17 of 26 points). So the far-from-spawn default
+  `startingLakePositions=[]` is faithful **only where sld == 1024**. Near spawn the
+  empty-lake model diverges (the lakes pull elevation down via finish_elevation
+  terms 3-4). This is the far-from-spawn fidelity limit the scope decision accepted;
+  it is documented in `renderElevation.ts`, and rendering the actual near-spawn lakes
+  is deferred (needs the real lake positions, out of M1 scope).
+- **Full-tree sampling through the harness works** (the C1 unknown): `elevation_lakes`
+  routed onto `elevation` evaluates cleanly in `on_init`, and the free vars
+  (`distance`, `starting_lake_positions`, `water_level`, `segmentation_multiplier`)
+  are all available.
+
+Consequence for Task 4: the CI parity test uses the default ctx (`ctxOverrides = {}`)
+and asserts only on the saturated (sld == 1024) points. Every point samples basis at
+`offset_x = 10000`, so all parity points sit in the f32 coordinate-floor regime (one
+tolerance bound, no near-field class).
+
 ## Files touched (new)
 
 - `src/noise/eval/ctx.ts`, `src/noise/eval/math.ts`, `src/noise/eval/primitives.ts`
