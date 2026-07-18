@@ -468,7 +468,7 @@ describe("eval/primitives basisNoiseExpr", () => {
       const got = basisNoiseExpr(
         p.x,
         p.y,
-        { seed0: basisFixture.seed0, seed1: basisFixture.seed1, inputScale: basisFixture.inputScale, outputScale: 1 },
+        { seed0: basisFixture.seed, seed1: 0, inputScale: basisFixture.inputScale, outputScale: 1 },
         tables,
       );
       worst = Math.max(worst, Math.abs(got - p.v));
