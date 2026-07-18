@@ -160,7 +160,7 @@ The binary defines exactly **14** `NoiseOperations::*::run` types. Status:
 | `MultioctaveNoise` | terrain | DONE (`multioctaveNoise.ts`) |
 | `QuickMultioctaveNoise` | climate (temp/moisture/aux) | DONE (`quickMultioctaveNoise.ts`) |
 | `VariablePersistenceMultioctaveNoise` | terrain (elevation) | DONE (`variablePersistenceMultioctaveNoise.ts`) |
-| `DistanceFromNearestPoint` | spawn/starting area | UNDERSTOOD (disasm) - `min(maximum_distance, nearest euclidean dist to any point)`; points are int/256 fixed-point. Trivial to implement; blocked on the runtime point data (see below), so deferred to the elevation render. |
+| `DistanceFromNearestPoint` | spawn/starting area | DONE (`distanceFromNearestPoint.ts`) - `min(maximum_distance, nearest euclidean dist to any point)`; points int/256 fixed-point. Geometry read off disasm; needs runtime point data (see below) so validates via the elevation tree, not standalone. |
 | `Terrace` | terrain banding | small |
 | `Ridge` | terrain | small |
 | `RandomPenalty` | jitter | small |
