@@ -4,7 +4,7 @@ import { createElevationRenderer, type WorkerLike } from "../src/components/useE
 function fakeWorker(): WorkerLike & { posted: unknown[] } {
   return {
     posted: [],
-    postMessage(m) {
+    postMessage(m: unknown) {
       this.posted.push(m);
     },
     terminate: vi.fn(),

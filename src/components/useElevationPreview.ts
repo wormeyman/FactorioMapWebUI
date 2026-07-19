@@ -18,9 +18,13 @@ export interface ElevationRenderer {
 }
 
 function createRenderWorker(): WorkerLike {
+  // A real Worker's onerror is ((ev: ErrorEvent) => any) | null, narrower than
+  // WorkerLike's ((e: unknown) => void) | null (kept broad so tests can invoke
+  // it with any value) - the real Worker structurally provides everything
+  // WorkerLike needs, so assert the narrowing here rather than loosen the type.
   return new Worker(new URL("../noise/preview/elevationRender.worker.ts", import.meta.url), {
     type: "module",
-  });
+  }) as unknown as WorkerLike;
 }
 
 /**
