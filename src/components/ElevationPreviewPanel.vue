@@ -37,6 +37,7 @@ async function generate() {
 
   if (preset.seed === null && rolledSeed.value === null) rolledSeed.value = randomU32();
   const seed0 = preset.seed ?? (rolledSeed.value as number);
+  seed.value = seed0;
 
   const s0 = info.ctx.startingPositions[0] ?? { x: 0, y: 0 };
   const half = (PREVIEW_PX * TILES_PER_PIXEL) / 2;
@@ -65,7 +66,6 @@ async function generate() {
         0,
         0,
       );
-      seed.value = seed0;
       hasRendered.value = true;
     }
   } catch {
@@ -92,7 +92,7 @@ async function generate() {
     </div>
     <div class="preview-stage f-bevel-in">
       <canvas
-        v-show="supported && hasRendered"
+        v-show="supported && hasRendered && !error"
         ref="canvas"
         data-test="preview-canvas"
         class="preview-canvas"

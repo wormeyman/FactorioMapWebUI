@@ -5,7 +5,6 @@ import {
   makeQuickMultioctaveNoise,
   makeQuickMultioctaveNoisePersistence,
   quickMultioctaveNoise,
-  quickMultioctaveNoisePersistence,
 } from "../src/noise/quickMultioctaveNoise";
 
 interface QuickCase {
@@ -79,8 +78,12 @@ describe("quickMultioctaveNoise reproduces the game", () => {
     }
   });
 
-  it("makeQuickMultioctaveNoisePersistence (hoisted tables) agrees exactly with the point form", () => {
+  it("makeQuickMultioctaveNoisePersistence agrees with the raw quickMultioctaveNoise transform", () => {
     // The elevation tree's starting_lake_noise parameters (seed1: 14, octaves: 5).
+    // Independent check: rather than comparing against quickMultioctaveNoisePersistence
+    // (which now just delegates to makeQuickMultioctaveNoisePersistence, making that
+    // comparison a tautology), compare against the raw quickMultioctaveNoise op fed the
+    // param transform spelled out explicitly here.
     const params = {
       seed0: fixture.seed0,
       seed1: 14,
@@ -90,9 +93,19 @@ describe("quickMultioctaveNoise reproduces the game", () => {
       octaveInputScaleMultiplier: 0.5,
       persistence: 0.75,
     };
+    const rawParams = {
+      seed0: fixture.seed0,
+      seed1: 14,
+      octaves: 5,
+      inputScale: (1 / 8) * 0.5 ** (5 - 1),
+      outputScale: 1 * 2 ** (5 - 1),
+      octaveOutputScaleMultiplier: 0.75,
+      octaveInputScaleMultiplier: 1 / 0.5,
+      offsetX: 0,
+    };
     const fn = makeQuickMultioctaveNoisePersistence(params);
     for (const p of fixture.positions) {
-      expect(fn(p.x, p.y)).toBe(quickMultioctaveNoisePersistence(p.x, p.y, params));
+      expect(fn(p.x, p.y)).toBe(quickMultioctaveNoise(p.x, p.y, rawParams));
     }
   });
 });
