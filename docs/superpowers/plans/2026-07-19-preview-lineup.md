@@ -12,6 +12,7 @@
 
 - The server preview is **1 tile per pixel at size 1024** = 1024 tiles across, centered on origin (measured 2026-07-19 from Factorio's log; see the design spec). Client target: `PREVIEW_PX = 1024`, `TILES_PER_PIXEL = 1`, `originX = originY = -512` (i.e. `-(PREVIEW_PX*TILES_PER_PIXEL)/2`, independent of the preset spawn).
 - Recenter only the **view window** on origin; the elevation tree still receives the real `startingPositions` (its `distance`-gated terms need them) - keep passing `info.ctx.startingPositions` unchanged.
+- The window change applies to the client panel for **both** map types (Nauvis and Lakes) - the panel does not branch on `mapType`, and this is intended: the server renders whichever elevation the preset selects, so aligning the window lets both client-Nauvis-vs-server-Nauvis and client-Lakes-vs-server-Lakes line up. It does mean the Lakes preview moves from its old 2048-tile, spawn-centered view to the same 1024-tile, origin-centered one. Do NOT add a per-map-type branch.
 - Run tests: `pnpm vp test` (full) / `pnpm vp test test/<file>.spec.ts` (single). Lint/format: `pnpm vp check --fix` (the only lint step; no vue-tsc gate - `.vue` files are never type-checked, watch `.ts` diagnostics yourself). Node 24.18.0. Always `pnpm vp ...` (bare/`npx` vp fails EBADDEVENGINES).
 - Extensionless `src/**` imports; tests import from `"vite-plus/test"`.
 - Every commit message ends with:
@@ -47,7 +48,7 @@ In `test/elevationPreviewPanel.spec.ts`, change the Lakes test's `toMatchObject`
     });
 ```
 
-And add a test proving the view is centered on origin regardless of the preset spawn (insert after the Nauvis-render test, ~line 72). It also imports `nextTick` - add `import { nextTick } from "vue";` at the top if not present:
+And add a test proving the view is centered on origin regardless of the preset spawn (insert after the Nauvis-render test, ~line 72). `generate()` reads the `preview` computed synchronously at click time, and the mutation below happens before the click, so no `nextTick` is needed:
 
 ```ts
   it("centers the view on world origin (0,0), not the preset spawn point", async () => {
@@ -56,7 +57,6 @@ And add a test proving the view is centered on origin regardless of the preset s
     const w = setup("nauvis", renderer);
     const store = usePresetsStore();
     store.activePreset!.startingPoints = [{ x: 300, y: -400 }];
-    await nextTick();
     await w.find('[data-test="generate"]').trigger("click");
     await flushPromises();
     const arg = (renderer.render as ReturnType<typeof vi.fn>).mock.calls[0][0];
@@ -67,10 +67,12 @@ And add a test proving the view is centered on origin regardless of the preset s
   });
 ```
 
+Also (faithfulness, optional but tidy): update the `okRenderer` fake's returned dims to match the new 1024px render - `buffer: new ArrayBuffer(1024 * 1024 * 4), width: 1024, height: 1024`. The assertions don't depend on it (the fake ignores request dims), but it keeps the mock honest.
+
 - [ ] **Step 2: Run the panel spec to verify it fails**
 
 Run: `pnpm vp test test/elevationPreviewPanel.spec.ts`
-Expected: FAIL - Lakes test sees `width:512, originX:-1024, ...`; the new origin test sees `originX:-412` (still spawn-relative) - both mismatch the expected `1024`/`-512`.
+Expected: FAIL - Lakes test sees `width:512, originX:-1024, ...`; the new origin test sees `originX: 300 - (512*4)/2 = -724` (still spawn-relative under the old constants) - both mismatch the expected `1024`/`-512`.
 
 - [ ] **Step 3: Update the panel constants and window (GREEN)**
 
@@ -161,14 +163,16 @@ And add the shared class (anywhere after `:root`, near the other `.f-*` classes)
 ```css
 /* Shared sizing for the two map previews (client canvas + server image) so they
    render at the same on-screen size. Width-driven and square: the two panels live
-   in equal-width columns, so capping width to one shared value makes them match.
-   max-height:100% guards against vertical overflow in a short viewport. */
+   in equal-width columns (App.vue's 1fr/1fr grid), so capping width to one shared
+   value makes them match. Deliberately NO max-height: the editor column also has a
+   tab bar, so its stage is shorter than the side panel's, and a height cap would
+   clamp the two media by different amounts and reintroduce the size drift this
+   class exists to remove. (Trade-off: a very short viewport can let the square
+   overflow its stage - acceptable versus unequal sizes.) */
 .f-preview-media {
   width: 100%;
   aspect-ratio: 1 / 1;
   max-width: var(--f-preview-media-max);
-  max-height: 100%;
-  height: auto;
   image-rendering: pixelated;
 }
 ```

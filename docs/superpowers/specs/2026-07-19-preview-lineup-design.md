@@ -27,9 +27,22 @@ only the client changes.
   extents differ (server's fixed default vs the client's 2048 tiles), so the same
   terrain appears at different scales.
 
-The comparison is only meaningful when the server panel's planet = **Nauvis** (the
-client renders land/water in blue/green; the server renders full-color terrain).
-This is a fidelity spot-check of coastline shape/position, not a color match.
+The comparison is meaningful whenever the server's rendered elevation matches the
+client's map type. The client renders whichever elevation tree the preset selects -
+**Nauvis** (the default) or **Lakes** - as blue/green land/water; the server renders
+that same preset (its map-gen-settings carry the elevation choice) in full color. So
+a Nauvis preset compares client-Nauvis vs server-Nauvis, and a Lakes preset compares
+client-Lakes vs server-Lakes. Either way this is a coastline shape/position
+spot-check, not a color match.
+
+Because the alignment is about the *view window* (extent + center + display size),
+not the elevation tree, **it applies uniformly to both client map types** - the
+panel does not branch on map type. Lakes previews therefore also move to the
+1024-tile, origin-centered, 1024px window (from the old 2048-tile, spawn-centered
+view). That is intended: it is exactly what lets the Lakes client render line up
+with the server's Lakes render. (If a standalone, wider, spawn-centered Lakes view
+is ever wanted independent of the comparison, that would be a separate map-type
+branch - out of scope here.)
 
 ## Approach - three alignments (client-only)
 
@@ -67,17 +80,19 @@ window* is recentred on origin.
 
 ### 3. On-screen display size
 
-Give both panels' displayed media the same fixed square display size so they are
-literally the same size on screen despite their different containers. A shared
-`max-width/height:100%` alone does NOT equalize them: each image caps at its own
-container's width, and the side panel and the main tab area differ. So pick one
-shared display square sized to fit the **narrower** of the two containers (the side
-panel), expressed as a CSS custom property / shared class, and apply it to both
-`.preview-canvas` and `.preview-image` as an explicit `width`/`height` (with
-`max-width:100%` retained so it still shrinks on a very narrow viewport). Both then
-render at exactly that size. The exact value is chosen during implementation by
-checking the rendered side-panel width; both panels reference the single shared
-value so they cannot drift apart.
+Give both panels' displayed media the same on-screen size. The two panels live in
+equal-width grid columns (`minmax(480px,1fr)` and `minmax(420px,1fr)` in App.vue -
+both `1fr`, so equal width above their mins), so a **width-driven** square
+equalizes them: `width:100%; aspect-ratio:1/1; max-width:<shared>` makes each media
+render at `min(column-inner-width, <shared>)`, and the columns are equal, so the two
+match. Do **not** add `max-height:100%`: the editor column also carries the tab bar,
+making its stage shorter than the side panel's, so a height cap would clamp the two
+media differently and reintroduce the very drift this section removes. The shared
+value lives in one place (a CSS custom property / class in `factorio.css`) so the
+two panels cannot drift apart. Caveats (acceptable): below the width where both `1fr`
+columns can hold the square, each caps at its own column min (480 vs 420 differ
+slightly); and with no height cap a very short viewport can let the square overflow
+its stage - both are edge cases far preferable to unequal sizes.
 
 ## Decisions (confirmed)
 
@@ -117,4 +132,9 @@ value so they cannot drift apart.
 - No change to the server render or the preview-service.
 - No zoom/pan/offset UI (fixed match).
 - No color/tile-type parity - the client stays land/water only.
-- Aligning non-Nauvis planets (the client only renders Nauvis elevation).
+- Non-Nauvis *planets* (vulcanus/gleba/...): the client only ports Nauvis-family
+  elevation (Nauvis + Lakes), so the comparison is meaningful only when the server
+  panel's planet is Nauvis. (This is about planets, not the Nauvis/Lakes elevation
+  choice, which the client does render.)
+- No per-map-type window branching - the aligned window applies to both Nauvis and
+  Lakes client renders (see Current state).
