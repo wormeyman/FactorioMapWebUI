@@ -28,7 +28,7 @@
     "concurrently": "^10.0.3",
     "happy-dom": "^20.10.6",
     "typescript": "^6.0.3",
-    "vite-plus": "^0.2.4"
+    "vite-plus": "^0.2.5"
   },
   "devEngines": {
     "packageManager": {
