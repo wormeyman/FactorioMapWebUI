@@ -24,6 +24,15 @@ describe("App shell", () => {
     expect(w.text()).toContain("New preset");
   });
 
+  it("links to the GitHub repo from the title bar", () => {
+    const w = mountApp();
+    const link = w.find("a.repo-link");
+    expect(link.exists()).toBe(true);
+    expect(link.attributes("href")).toBe("https://github.com/wormeyman/FactorioMapWebUI");
+    expect(link.attributes("target")).toBe("_blank");
+    expect(link.attributes("rel")).toContain("noopener");
+  });
+
   it("creates a preset from the builtin dropdown via the Create button", async () => {
     const w = mountApp();
     await w.find('input[data-test="new-preset-name"]').setValue("speedrun");
