@@ -91,7 +91,9 @@ body {
    tab bar, so its stage is shorter than the side panel's, and a height cap would
    clamp the two media by different amounts and reintroduce the size drift this
    class exists to remove. (Trade-off: a very short viewport can let the square
-   overflow its stage - acceptable versus unequal sizes.) */
+   overflow its stage - acceptable versus unequal sizes.) Assumes square media: the
+   client canvas and the 1024x1024 server PNG both are, so aspect-ratio:1/1 is a
+   no-op on shape; a non-square source would be distorted. */
 .f-preview-media {
   width: 100%;
   aspect-ratio: 1 / 1;
