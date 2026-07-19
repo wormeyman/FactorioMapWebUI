@@ -7,7 +7,9 @@ describe("eval/ctx", () => {
     expect(ctx.waterLevel).toBe(0);
     expect(ctx.segmentationMultiplier).toBe(1);
     expect(ctx.startingPositions).toEqual([{ x: 0, y: 0 }]);
-    expect(ctx.startingLakePositions).toEqual([]);
+    // Lake positions are no longer forced to []; makeElevationLakes computes the
+    // real ones when unset (single owner of the default). Unset => undefined here.
+    expect(ctx.startingLakePositions).toBeUndefined();
     expect(ctx.x).toBe(3);
     expect(ctx.y).toBe(4);
     expect(ctx.seed0).toBe(123456);

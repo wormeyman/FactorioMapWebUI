@@ -18,7 +18,13 @@ export interface EvalCtx {
   waterLevel: number;
   segmentationMultiplier: number;
   startingPositions: Point[];
-  startingLakePositions: Point[];
+  /**
+   * Lake points for `starting_lake_distance`. Optional: when unset,
+   * `makeElevationLakes` computes the game's real positions from
+   * `(seed0, startingPositions)` (the single owner of this default). An explicit
+   * value (including `[]`) is honored as-is.
+   */
+  startingLakePositions?: Point[];
 }
 
 /** Everything except the required `seed0` may be omitted and defaulted. */
@@ -31,7 +37,6 @@ export const DEFAULT_CTX_FIELDS = {
   waterLevel: 0,
   segmentationMultiplier: 1,
   startingPositions: [{ x: 0, y: 0 }] as Point[],
-  startingLakePositions: [] as Point[],
 };
 
 /** Apply the M1 defaults over a partial input. Array defaults are fresh per call. */
@@ -44,6 +49,6 @@ export function withCtxDefaults(input: EvalCtxInput): EvalCtx {
     segmentationMultiplier:
       input.segmentationMultiplier ?? DEFAULT_CTX_FIELDS.segmentationMultiplier,
     startingPositions: input.startingPositions ?? [{ x: 0, y: 0 }],
-    startingLakePositions: input.startingLakePositions ?? [],
+    startingLakePositions: input.startingLakePositions,
   };
 }

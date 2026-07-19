@@ -4,6 +4,7 @@ import { basisNoiseExpr } from "../eval/primitives";
 import { clamp, max, min } from "../eval/math";
 import { withCtxDefaults, type EvalCtxInput } from "../eval/ctx";
 import { quickMultioctaveNoisePersistence } from "../quickMultioctaveNoise";
+import { startingLakePositions as computeStartingLakes } from "../startingLakes";
 import {
   amplitudeCorrectedMultioctaveNoise,
   makeVariablePersistenceMultioctaveNoise,
@@ -35,7 +36,8 @@ export function makeElevationLakes(params: ElevationLakesParams): (x: number, y:
   const waterLevel = params.waterLevel ?? 0;
   const seg = params.segmentationMultiplier ?? 1;
   const startingPositions = params.startingPositions ?? [{ x: 0, y: 0 }];
-  const startingLakePositions = params.startingLakePositions ?? [];
+  const startingLakePositions =
+    params.startingLakePositions ?? computeStartingLakes(seed0, startingPositions);
 
   // make_0_12like_lakes locals (bias = 20, terrain_octaves = 8).
   const bias = 20;
