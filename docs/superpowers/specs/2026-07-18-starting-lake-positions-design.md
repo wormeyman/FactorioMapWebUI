@@ -1,7 +1,7 @@
 # Faithful near-spawn starting lakes (`starting_lake_positions`)
 
 Date: 2026-07-18
-Status: design (approved for planning)
+Status: design (approved for planning; RE verified by independent disasm review)
 Follows: `2026-07-18-m1-elevation-lakes-preview-design.md` (M1)
 
 ## Problem
@@ -18,51 +18,81 @@ The API mirror is explicit that this is recoverable, not runtime-random:
 > and map seed`
 
 So the positions are a pure, deterministic function of `(starting_positions,
-map_seed)` with **no dependency on the elevation field** - there is no
-chicken-and-egg. Recovering that function makes the near-spawn render faithful for
-any seed while staying fully offline.
+map_seed)` with **no dependency on the elevation field** - no chicken-and-egg.
+Recovering that function makes the near-spawn render faithful for any seed while
+staying fully offline.
 
 ## Scope
 
-In scope:
-
-- Recover `MapGenSettings::getStartingLakePositions()` and port it to TS.
-- Feed the computed positions into the existing `renderElevation` pipeline.
-- Cross-validate against a headless-Factorio oracle dump.
+In scope: recover `MapGenSettings::getStartingLakePositions()`, port it to TS, feed
+the result into the existing `renderElevation` pipeline, and cross-validate against
+a headless-Factorio oracle dump.
 
 Out of scope (unchanged from M1): the larger `elevation_nauvis` tree, graded
 elevation shading (still a binary water/land mask), and per-pixel table-rebuild
-perf (spec deferral N6).
+perf (M1 deferral N6).
 
-## What the disassembly already tells us (feasibility)
+## The algorithm (fully recovered from the arm64 disasm)
 
-`MapGenSettings::getStartingLakePositions() const` is a single non-stripped
-function, arm64 `0x10160a2fc`-`0x10160a710` (x86_64 `0x101736b10`-`0x101736f40`,
-~1072 bytes). Read off the arm64 disasm prologue and head:
+`MapGenSettings::getStartingLakePositions() const`, arm64 `0x10160a2fc`-`0x10160a760`
+(~1072 bytes), non-stripped. An independent disasm review verified the full body.
+It is **simpler and lower-risk than a rejection/placement search** - a plain 1-in,
+1-out map with a single RNG draw per lake:
 
-- Reads the `starting_positions` vector at `MapGenSettings+0x58` (begin/end
-  pointers `x24`/`x23`); computes count and allocates an output vector proportional
-  to the input count (`operator new`). So it emits lake position(s) per starting
-  position and returns empty when there are no starting positions.
-- Seeds the RNG with the pattern already reverse-engineered in this repo:
-  `word = max(settings.seed [+0x4c], 0x155)` - the taus88 seeding from
-  `basisNoiseTablesFromSeed` / `spotCandidates`. **The RNG is already ported here;
-  this is not a from-scratch crack.**
-- Loads `0x401921FB54442D18` (= 2*pi) and `0x3B800000` (= 1/256 as f32), with heavy
-  d8-d15 register saves - i.e. polar placement (angle + radius) quantized to the
-  `/256` fixed point that `distanceFromNearestPoint` already uses.
-- May call the sibling `StartingAreaDistribution` helpers (`::operator()`,
-  `::isSeparatedEnough`, `::reduceMinDistance`) also present as named symbols;
-  Task 0 determines whether they are on the lake path or only the spawn path.
+1. **Input / output shape.** Reads the `starting_positions` vector at
+   `MapGenSettings+0x58` (begin/end at `+0x58`; `subs` gives byte length). Allocates
+   an output vector of the **same byte count** (`operator new`, then `asr #3` =>
+   8-byte elements = one `MapPosition{int32 x, int32 y}` out per one in). So the
+   output is **exactly one lake per starting position, in order** - not multi-lake,
+   not count-scaled. Empty input => empty output (early return at `+120`).
 
-This is a moderate, tractable function reusing machinery we have solved before -
-the same class as the spot-noise selection RE, which landed exact.
+2. **RNG seeding (a third, simplest variant).** `word = max(seed [+0x4c], 0x155)`
+   (`ldr w8,[x21,#0x4c]; cmp #0x155; csel hi`). taus88 with `s1 = s2 = s3 = word`
+   (`dup.2s` seeds the two vector lanes; the scalar holds the third). Seeded **once,
+   outside the loop**; the stream is continuous across lakes. **No `seed1` combine**
+   (unlike basis noise) and **no `^ seed0`** (unlike spot noise) - `word` is just
+   `max(seed0, 0x155)`.
+
+3. **Per lake: one draw, fixed radius, random angle.**
+   - One taus88 step -> `u = draw * 2^-32` in `[0, 1)`.
+   - `angle = u * 2*pi` (constant `0x401921FB54442D18` = 2*pi; `1/(2*pi)` also loaded).
+   - **Radius is a fixed constant `R = 75.0` tiles** (`0x4052C00000000000`), *not*
+     random. Only the angle varies. The port must **not** draw a second RNG value.
+   - `sin`/`cos` via an inlined **fast-sine minimax polynomial** with an
+     intermediate **f32 round-trip** (`fcvt s,d; fcvt d,s`); the second axis uses a
+     `-0.25` turn phase shift. All polynomial coefficients are present in the disasm
+     (Task 0 transcribes them exactly).
+
+4. **Fixed-point conversion.** Spawn input int32 is `* 1/256` (`0x3B800000` f32) to
+   tiles; output is `trunc(spawn_tiles + R * trig)` via `fcvtzs` (**truncate toward
+   zero**, i.e. `Math.trunc`, not `Math.floor` - differs on negative coords) then
+   `<< 8` back to the `/256` int32 `MapPosition`.
+
+5. **No callees on the lake path.** Every `bl` in the function is `operator new`
+   (x2), `operator delete`, `__throw_*` (x3), `_Unwind_Resume`. The
+   `StartingAreaDistribution` helpers are **not** called here (they live on the
+   starting-area path). There is no separation/rejection loop.
+
+The only genuine porting subtlety is transcribing the fast-sine polynomial +
+f32 round-trip bit-exactly; the oracle fixture is the final arbiter.
 
 ## Architecture
 
-Three small, independently testable units plus a docs touch-up.
+Four small, independently testable units plus a docs touch-up.
 
-### 1. `src/noise/startingLakes.ts` (new)
+### 1. `src/noise/taus88.ts` (new - extraction)
+
+The taus88 core currently exists but is **not reusable**: `taus88Next`/`Taus88State`
+are module-private and duplicated in `basisNoise.ts` and `spotCandidates.ts`, and
+`spotSelection.ts` inlines a third copy. None of the exported seeding helpers match
+`word = max(seed0, 0x155)`.
+
+Extract the canonical step + state into `src/noise/taus88.ts` (`export`
+`taus88Next`, `Taus88State`, `seededState(word)`). Refactor `basisNoise.ts` and
+`spotCandidates.ts` to import it - a behavior-preserving dedupe covered by their
+existing bit-exact tests. This keeps the new lake seeding from adding a fourth copy.
+
+### 2. `src/noise/startingLakes.ts` (new)
 
 ```ts
 export function startingLakePositions(
@@ -71,40 +101,45 @@ export function startingLakePositions(
 ): Point[]
 ```
 
-- A 1:1 port of `getStartingLakePositions`, pure and I/O-free.
-- Reuses the existing taus88 RNG helpers rather than re-deriving seeding.
-- Returns world-tile positions (`Point`, matching `distanceFromNearestPoint`'s
-  `/256` fixed-point convention - confirmed in Task 0).
-- Depends on: the RNG helpers and `Point`. Nothing depends on its internals; the
-  only consumer calls the one exported function.
+- 1:1 port of the algorithm above; pure, I/O-free.
+- Seeding: `word = max(seed0, 0x155)`, `s1=s2=s3=word`, one draw per position,
+  `angle = draw*2^-32 * 2*pi`, `R = 75`, fast-sine poly (+ f32 round-trip),
+  `trunc` toward zero, `/256` fixed-point round-trip.
+- Coordinate convention: `Point` is already in **tiles**; treat `startingPositions`
+  as tiles (do **not** re-apply `/256` on input - that scaling models the game's
+  int32->tile read, already done). Output `Point`s are tiles, matching
+  `distanceFromNearestPoint`'s `quantise` (a no-op on integer tiles).
+- Depends only on `taus88.ts` and `Point`. Sole consumer calls the one export.
 
-### 2. Wiring into the render (`ctx.ts` / `elevationLakes.ts` / `renderElevation.ts`)
+### 3. Wiring the default (single owner = `makeElevationLakes`)
 
-The renderer already threads `startingLakePositions` through
-`distanceFromNearestPoint`, so the tree is untouched. The change is the **default**:
-when a caller does not supply `startingLakePositions`, derive it from
-`startingLakePositions(seed0, startingPositions)` instead of defaulting to `[]`.
-`startingPositions` keeps its `[{x:0,y:0}]` default.
+`makeElevationLakes` becomes the **single** owner of the lake-positions default:
+when `params.startingLakePositions` is `undefined`, it computes
+`startingLakePositions(seed0, startingPositions)`; an explicit array (including `[]`)
+is honored as-is. This covers **both** entry points, because
+`renderElevation.ts:38` calls `makeElevationLakes` directly and `elevationLakes()`
+calls it via `withCtxDefaults`.
 
-Decision (approved): computed positions become the default, not an opt-in flag - the
-faithful result is what every caller wants, and an explicit `[]` is still accepted
-for tests that need the old far-field behavior.
+To avoid the desync the two-owner approach risks, **`withCtxDefaults` stops forcing
+`startingLakePositions` to `[]`** (leaves it `undefined` when unset) so the single
+owner in `makeElevationLakes` always decides. This is a deliberate behavior change:
+`test/eval/ctx.spec.ts:10` currently asserts the default is `[]` and **must be
+updated** (a legitimate test change - not a fixture edit). Tests that need the old
+far-field behavior pass an explicit `[]`.
 
-Exact wiring point (single source of the default) is a Task-0/planning detail:
-either `withCtxDefaults` in `ctx.ts` or `makeElevationLakes` in `elevationLakes.ts`,
-whichever keeps one owner of the default so the two entry points cannot desync.
+The elevation tree itself is untouched.
 
-### 3. Oracle validation (`test/oracle/capture.ts` + fixture + spec)
+### 4. Oracle validation
 
-- New capture case dumping the game's real `starting_lake_positions` for the M1
-  fixture seed (123456) via the existing headless dumper-mod recipe.
-- Committed fixture `test/fixtures/oracle-starting-lakes.seed123456.json`
-  (read-only ground truth).
-- `test/startingLakes.spec.ts` asserts the TS port reproduces the dumped positions
-  exactly, and that near-spawn `elevation_lakes` parity now holds at points that M1
-  could only assert in the saturated far field.
+- New capture case in `test/oracle/capture.ts` dumping, for the M1 seed (123456),
+  **both** the input `starting_positions` and the output `starting_lake_positions`
+  from the headless dumper mod (dumping only the output would make an input mismatch
+  look like a port bug).
+- Fixture `test/fixtures/oracle-starting-lakes.seed123456.json` (read-only truth).
+- `test/startingLakes.spec.ts` feeds the **dumped input** to the port and asserts
+  integer-exact equality with the dumped output.
 
-### 4. Docs
+### 5. Docs
 
 Update the far-from-spawn caveat in `renderElevation.ts` and the `elevationLakes.ts`
 header, and the M1 memory, to record that near-spawn lakes are now faithful.
@@ -112,12 +147,13 @@ header, and the M1 memory, to record that near-spawn lakes are now faithful.
 ## Data flow
 
 ```
-seed0, startingPositions
+seed0, startingPositions (tiles)
         |
         v
-startingLakePositions(seed0, startingPositions)   <- the new RE'd function
+startingLakePositions(seed0, startingPositions)   <- new RE'd port
+   word=max(seed0,0x155); per pos: u*2pi angle, R=75, trunc->/256
         |
-        v  (as ctx.startingLakePositions default)
+        v  (makeElevationLakes default when unset)
 distanceFromNearestPoint(x, y, lakePts, max=1024)  <- starting_lake_distance
         |
         v
@@ -126,31 +162,46 @@ finish_elevation terms 2-4  ->  elevation_lakes  ->  water mask  ->  ImageData
 
 ## Risks and mitigations
 
-- **R1 - the placement algorithm is more involved than the head suggests** (e.g.
-  rejection/separation loop via `StartingAreaDistribution`). Mitigation: Task 0 is a
-  disasm-first de-risk spike (as in M1) that fully traces the function and its
-  callees before any port is written; the design does not commit to a placement
-  shape beyond "RNG-seeded polar offsets per starting position."
-- **R2 - fixed-point / coordinate convention mismatch** (tiles vs `/256`, integer
-  truncation). Mitigation: the oracle dump is the arbiter; the port matches the
-  dumped integer positions exactly, not a re-derived formula.
-- **R3 - multi-lake or count-dependent output.** Mitigation: the oracle fixture is
-  captured from the real game, so whatever count/shape the game produces is what the
-  test asserts; we do not assume one-lake-per-spawn.
+- **R1 (placement search / separation loop) - DISSOLVED.** The disasm shows no
+  `StartingAreaDistribution` calls and no rejection loop; it is a 1-in-1-out map.
+- **R2 - fast-sine bit-exactness.** The minimax poly + intermediate f32 round-trip
+  must be transcribed exactly, or points near half-integers flip a tile after
+  truncation. Mitigation: Task 0 captures every coefficient and the `fcvt` round-trip
+  from the disasm; the oracle fixture is the arbiter.
+- **R3 - truncation direction.** `fcvtzs` truncates toward zero; using `Math.floor`
+  would flip negative-coordinate tiles. Mitigation: spec mandates `Math.trunc`.
+- **R4 - double-scaling coordinates.** `Point` is already tiles; re-applying `/256`
+  on input would be wrong. Mitigation: convention stated in unit 2.
 
 ## Success criteria
 
-1. `startingLakePositions(123456, [{0,0}])` matches the game's dumped positions
-   exactly (integer-equal).
-2. Near-spawn `elevation_lakes` parity holds where M1's test could not assert it.
-3. The full suite stays green; the change is additive (no codec/model/UI-store
-   behavior change beyond the render default).
-4. Renderer output visibly shows the near-spawn lake(s) at the origin.
+1. `startingLakePositions(123456, <dumped starting_positions>)` equals the dumped
+   `starting_lake_positions` exactly (integer-equal).
+2. Each output lake is `R = 75.0` tiles from its spawn before truncation
+   (`toBeCloseTo(75)`) - an oracle-independent sanity guard.
+3. Near-spawn `elevation_lakes` parity holds where M1's test could not assert it;
+   the M1 far-field saturated points still saturate under the new default (a lake at
+   radius 75 leaves far points saturated - verify, don't assume).
+4. The full suite is green **after** the planned `ctx.spec.ts` update; the taus88
+   extraction is behavior-preserving (its existing bit-exact tests still pass). No
+   codec/model/store change (all edits live in the noise/preview layer).
+5. Renderer output visibly shows the near-spawn lake(s) at the origin.
 
-## Task 0 (de-risk, before any port)
+## Task 0 (de-risk, before the port) - rescoped
 
-Fully disassemble `getStartingLakePositions` (and any `StartingAreaDistribution`
-callees on the lake path), and dump the game's `starting_lake_positions` for seed
-123456 via the headless recipe. Deliverable: a written trace of the algorithm +
-the oracle fixture, sufficient to write the port with confidence. Only after Task 0
-is the TS port authored (test-first).
+The algorithm is already recovered (above), so Task 0 is narrow:
+1. Transcribe the fast-sine polynomial coefficients and the intermediate f32
+   round-trip exactly from the disasm (`lldb -b -o "disassemble -n
+   'MapGenSettings::getStartingLakePositions'"`).
+2. Capture the oracle fixture for seed 123456: both `starting_positions` (input) and
+   `starting_lake_positions` (output), via the headless dumper-mod recipe.
+
+Deliverable: the exact sine transcription + the oracle fixture. Only then is the
+port authored, test-first.
+
+## Edge cases to test
+
+- Empty `startingPositions` => empty output (the early-return path).
+- Multiple starting positions => N lakes off one continuous RNG stream, in order
+  (fixture worth adding if multi-spawn is ever supported).
+- Far-field regression on `elevationLakes.spec.ts` under the new default.
