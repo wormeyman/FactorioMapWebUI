@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import fixture from "./fixtures/oracle-multioctave.seed123456.json";
-import { fastLog2, fastPow2, multioctaveNoise } from "../src/noise/multioctaveNoise";
+import {
+  fastLog2,
+  fastPow2,
+  makeMultioctaveNoise,
+  multioctaveNoise,
+  type MultioctaveParams,
+} from "../src/noise/multioctaveNoise";
 
 describe("fastapprox helpers reproduce Factorio's Math::log2 / Math::exp2f", () => {
   it("fastPow2(fastLog2(x)) round-trips within the fastapprox floor", () => {
@@ -50,5 +56,48 @@ describe("multioctaveNoise reproduces the game", () => {
     }
     expect(worstNear, `worst near-field at ${worstNearLabel}`).toBeLessThan(5e-5);
     expect(worstFar, "worst far-field").toBeLessThan(2e-4);
+  });
+});
+
+describe("makeMultioctaveNoise (hoisted) matches multioctaveNoise exactly", () => {
+  const CONFIGS: MultioctaveParams[] = [
+    {
+      seed0: 123456,
+      seed1: 700,
+      octaves: 4,
+      persistence: 0.5,
+      inputScale: 1 / 150,
+      outputScale: 1,
+    },
+    { seed0: 123456, seed1: 900, octaves: 4, persistence: 0.5, inputScale: 1 / 90, outputScale: 1 },
+    {
+      seed0: 123456,
+      seed1: 1000,
+      octaves: 2,
+      persistence: 0.6,
+      inputScale: 1 / 1600,
+      outputScale: 1,
+    },
+    {
+      seed0: 123456,
+      seed1: 1100,
+      octaves: 1,
+      persistence: 0.6,
+      inputScale: 1 / 1600,
+      outputScale: 1,
+    },
+    { seed0: 42, seed1: 3, octaves: 6, persistence: 0.75, inputScale: 0.2, outputScale: 0.5 },
+  ];
+  it("is identical across a grid for every config", () => {
+    for (const cfg of CONFIGS) {
+      const made = makeMultioctaveNoise(cfg);
+      for (let gx = -2; gx <= 2; gx++) {
+        for (let gy = -2; gy <= 2; gy++) {
+          const x = gx * 37 + 0.5;
+          const y = gy * 41 + 0.25;
+          expect(made(x, y)).toBe(multioctaveNoise(x, y, cfg));
+        }
+      }
+    }
   });
 });
