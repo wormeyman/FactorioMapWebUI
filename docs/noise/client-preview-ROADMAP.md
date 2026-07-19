@@ -51,15 +51,15 @@ research-hard.
 Everything below is built test-first against the game, exactly as the primitives
 were. Commit the harness so every later layer has ground truth.
 
-- [ ] Commit a reusable headless oracle under `test/oracle/` (currently rebuilt
+- [x] Commit a reusable headless oracle under `test/oracle/` (currently rebuilt
       ad hoc each session): a mod that routes an arbitrary named noise expression
       onto `elevation`, reads `calculate_tile_properties({"elevation"}, positions)`
       in `on_init`, `write_file`s JSON, `error("DUMPED-OK")` to exit (~1.7 s/run).
       Recipe in `basis-noise-NOTES.md` / `noise-oracle-basis-measurements`.
       It needs a local Factorio install, so gate the tests on its presence.
-- [ ] A `sampleExpression(exprString, positions, {seed, ...}) -> number[]` helper
+- [x] A `sampleExpression(exprString, positions, {seed, ...}) -> number[]` helper
       that runs the oracle and returns game values, for use as fixtures.
-- [ ] Decide fixture policy: capture once, commit JSON (like the existing
+- [x] Decide fixture policy: capture once, commit JSON (like the existing
       `basis-noise*.json`), run the comparison in CI without Factorio.
 
 ## Milestone 1 - MVP: elevation land/water/coast
@@ -67,12 +67,12 @@ were. Commit the harness so every later layer has ground truth.
 The smallest recognizable preview. Proves the evaluator design before the big
 data port.
 
-- [ ] **Evaluator core** (`src/noise/eval/`): a per-pixel evaluator. Recommended
+- [x] **Evaluator core** (`src/noise/eval/`): a per-pixel evaluator. Recommended
       shape - compile each named expression to a JS closure `(ctx) => number`
       where `ctx = { x, y, seed, controls }`; the expression tree maps directly to
       nested calls. (The game compiles to a register program in `NoiseCache`; we
       do **not** need to replicate that - it is an internal batching optimization.)
-- [ ] **Remaining primitives needed for elevation** (RE against the oracle):
+- [x] **Remaining primitives needed for elevation** (RE against the oracle):
   - `MultioctaveNoise` / `VariablePersistenceMultioctaveNoise` - octave layering
     over `basis_noise`. Already partly measured (basis summed, ~RMS-normalized,
     std ratio 1.077x at octaves=4). Nail persistence/lacunarity/per-octave seed
@@ -89,9 +89,9 @@ data port.
       Lakes / Island variants are already captured as strings
       (`elevation_lakes` / `elevation_island`, see `src/model/mapType.ts` and
       `docs/mapexchangestrings/maptype-elevation-*`).
-- [ ] **Render**: `elevation < 0` -> water (deep vs shallow by threshold), else
+- [x] **Render**: `elevation < 0` -> water (deep vs shallow by threshold), else
       land; draw to a `<canvas>` at a chosen scale. Coastline falls out.
-- [ ] **Validate**: sample the game's `elevation` at a grid for a few seeds; diff
+- [x] **Validate**: sample the game's `elevation` at a grid for a few seeds; diff
       to ~1e-6; then eyeball the rendered coastline against a real
       `--generate-map-preview`.
 
@@ -141,7 +141,7 @@ Done = ore patches overlaid, responding to the frequency/size/richness sliders.
 ## Milestone 5 - integration
 
 - [ ] A `previewMap(preset, {width, height, scale}) -> ImageData` entry point.
-- [ ] Wire into the app UI next to / instead of the `preview-service` call. Keep
+- [x] Wire into the app UI next to / instead of the `preview-service` call. Keep
       the server path as a fallback and as a cross-check oracle.
 - [ ] Perf: evaluate off the main thread (Web Worker); tile the viewport; cache
       per-region spot lists and per-tile noise. Target interactive re-render on
