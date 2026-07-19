@@ -42,4 +42,29 @@ describe("elevationLakes reproduces the game's elevation_lakes tree (far from sp
     // Calibrated just above the observed worst (~7.37e-3).
     expect(worst, `worst ${worstLabel}`).toBeLessThan(8e-3);
   });
+
+  it("now matches near-spawn elevation too (computed starting lakes)", () => {
+    // evalAt uses the computed starting_lake_positions default, so the near-spawn
+    // band the M1 test could not assert (starting_lake_distance < 1024) is now
+    // faithful. This is the payoff of porting getStartingLakePositions.
+    let worst = 0;
+    let worstLabel = "";
+    let checked = 0;
+    for (let i = 0; i < fixture.positions.length; i++) {
+      if (SATURATED(i)) continue; // the previously-unassertable near-spawn band
+      const p = fixture.positions[i];
+      const err = Math.abs(evalAt(p.x, p.y) - fixture.elevation[i]);
+      checked++;
+      if (err > worst) {
+        worst = err;
+        worstLabel = `@(${p.x},${p.y})`;
+      }
+    }
+    expect(checked).toBeGreaterThanOrEqual(9);
+    // Same 8e-3 f32 floor as the far field (offset_x=10000 shifts the varPers
+    // sampling into the f32 regime everywhere). The point is that terms 2-4, which
+    // consume starting_lake_distance, now use the CORRECT near-spawn lakes - so
+    // near spawn stays within that floor instead of diverging as it did with [].
+    expect(worst, `worst ${worstLabel}`).toBeLessThan(8e-3);
+  });
 });
