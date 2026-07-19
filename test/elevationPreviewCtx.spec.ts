@@ -15,12 +15,22 @@ describe("elevationCtxFromPreset", () => {
     const r = elevationCtxFromPreset(lakesPreset());
     expect(r.supported).toBe(true);
     expect(r.mapTypeLabel).toBe("Lakes elevation");
+    expect(r.mapType).toBe("lakes");
   });
 
-  it("marks the default (Nauvis) preset unsupported", () => {
+  it("marks the default (Nauvis) preset supported with its label and map type", () => {
     const r = elevationCtxFromPreset(getBuiltinPreset("Default"));
-    expect(r.supported).toBe(false);
+    expect(r.supported).toBe(true);
     expect(r.mapTypeLabel).toBe("Nauvis elevation");
+    expect(r.mapType).toBe("nauvis");
+  });
+
+  it("marks an Island preset unsupported", () => {
+    const p = getBuiltinPreset("Default");
+    writeMapType(p.propertyExpressionNames, "island");
+    const r = elevationCtxFromPreset(p);
+    expect(r.supported).toBe(false);
+    expect(r.mapTypeLabel).toBe("Island elevation");
   });
 
   it("derives waterLevel = 10*log2(size) and segmentation = frequency", () => {

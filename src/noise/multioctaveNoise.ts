@@ -136,3 +136,36 @@ export function multioctaveNoise(
   }
   return outputScale * sum;
 }
+
+/**
+ * Build a closure that evaluates `multioctave_noise` for a fixed parameter set,
+ * with the basis tables, the RMS normalisation, and the per-octave input scales /
+ * amplitudes derived once up front (the common case for rendering a grid at one
+ * seed). Returns `(x, y) => number`, numerically identical to {@link multioctaveNoise}.
+ */
+export function makeMultioctaveNoise(params: MultioctaveParams): (x: number, y: number) => number {
+  const { seed0, seed1, octaves, persistence, inputScale, outputScale } = params;
+  const tables = basisNoiseTablesFromSeed(seed0, seed1);
+  const norm = normalization(persistence, octaves);
+  const invP = 1 / persistence;
+
+  const octaveScale: number[] = [];
+  const octaveAmp: number[] = [];
+  let scale = inputScale;
+  let amp = norm;
+  for (let k = 0; k < octaves; k++) {
+    octaveScale.push(scale);
+    octaveAmp.push(amp);
+    scale *= LACUNARITY;
+    amp *= invP;
+  }
+
+  return (x: number, y: number): number => {
+    let sum = 0;
+    for (let k = 0; k < octaves; k++) {
+      const s = octaveScale[k];
+      sum += octaveAmp[k] * basisNoise(x * s + k * OCTAVE_OFFSET_X, y * s, tables);
+    }
+    return outputScale * sum;
+  };
+}

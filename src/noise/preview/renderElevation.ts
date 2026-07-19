@@ -1,4 +1,5 @@
 import { makeElevationLakes, type ElevationLakesParams } from "../expressions/elevationLakes";
+import { makeElevationNauvis } from "../expressions/elevationNauvis";
 
 /** RGBA for water (elevation < 0) and land, as [r, g, b, a] byte tuples. */
 export const WATER_RGBA: [number, number, number, number] = [40, 90, 150, 255];
@@ -15,6 +16,8 @@ export interface RenderElevationOptions {
   readonly originY?: number;
   /** World tiles per pixel. Default 1. */
   readonly tilesPerPixel?: number;
+  /** Which elevation tree to render. Default "lakes". */
+  readonly mapType?: "lakes" | "nauvis";
   /** Non-seed tree params (waterLevel, segmentationMultiplier, spawn/lake points). */
   readonly ctx?: Omit<ElevationLakesParams, "seed0">;
 }
@@ -36,7 +39,8 @@ export function renderElevation(opts: RenderElevationOptions): ImageData {
   const originY = opts.originY ?? 0;
   const tpp = opts.tilesPerPixel ?? 1;
 
-  const evalAt = makeElevationLakes({ seed0: opts.seed0, ...opts.ctx });
+  const make = opts.mapType === "nauvis" ? makeElevationNauvis : makeElevationLakes;
+  const evalAt = make({ seed0: opts.seed0, ...opts.ctx });
   const data = new Uint8ClampedArray(width * height * 4);
 
   for (let py = 0; py < height; py++) {

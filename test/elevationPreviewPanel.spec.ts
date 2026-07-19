@@ -16,7 +16,7 @@ function stubCanvas() {
   return putImageData;
 }
 
-function setup(mapTypeId: "nauvis" | "lakes", renderer: ElevationRenderer) {
+function setup(mapTypeId: "nauvis" | "lakes" | "island", renderer: ElevationRenderer) {
   setActivePinia(createPinia());
   const store = usePresetsStore();
   store.createFromBuiltin("Default", "t");
@@ -48,6 +48,7 @@ describe("ElevationPreviewPanel", () => {
     const arg = (renderer.render as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(arg).toMatchObject({
       seed0: 123456,
+      mapType: "lakes",
       width: 512,
       height: 512,
       tilesPerPixel: 4,
@@ -58,10 +59,22 @@ describe("ElevationPreviewPanel", () => {
     expect(w.find('[data-test="preview-seed"]').text()).toContain("123456");
   });
 
-  it("shows a message and does not render for an unsupported map type", async () => {
+  it("renders a Nauvis preset to the canvas on Generate", async () => {
+    const putImageData = stubCanvas();
     const renderer = okRenderer();
     const w = setup("nauvis", renderer);
-    expect(w.find('[data-test="unsupported"]').text()).toContain("Nauvis elevation");
+    await w.find('[data-test="generate"]').trigger("click");
+    await flushPromises();
+    expect(renderer.render).toHaveBeenCalledOnce();
+    const arg = (renderer.render as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg).toMatchObject({ seed0: 123456, mapType: "nauvis" });
+    expect(putImageData).toHaveBeenCalledOnce();
+  });
+
+  it("shows a message and does not render for an unsupported map type", async () => {
+    const renderer = okRenderer();
+    const w = setup("island", renderer);
+    expect(w.find('[data-test="unsupported"]').text()).toContain("Island elevation");
     expect(w.find('[data-test="generate"]').attributes("disabled")).toBeDefined();
     await w.find('[data-test="generate"]').trigger("click");
     expect(renderer.render).not.toHaveBeenCalled();
