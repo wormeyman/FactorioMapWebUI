@@ -84,11 +84,15 @@ data port.
     one-liners; confirm signatures from the binary if in doubt.
   - `DistanceFromNearestPoint` (starting-area / spawn shaping) if the elevation
     tree uses it.
-- [ ] **The elevation expression**: port Nauvis `elevation` (the default) from
-      `data/base/prototypes/**/noise*.lua` + `planet/planet-map-gen.lua`. The
-      Lakes / Island variants are already captured as strings
-      (`elevation_lakes` / `elevation_island`, see `src/model/mapType.ts` and
-      `docs/mapexchangestrings/maptype-elevation-*`).
+- [x] **The elevation expression**: Nauvis `elevation` (the default) ported
+      2026-07-19 as `makeElevationNauvis` (`src/noise/expressions/elevationNauvis.ts`,
+      merged f95594f) - a 1:1 hand-port of `elevation_nauvis_function` from
+      `core/prototypes/noise-programs.lua`, validated against the oracle to the f32
+      floor (worst far-field 4.08e-3, near-spawn 2.87e-6). KEY finding: it needs NO
+      new primitive - `ridge`/`terrace` (rated "small" below) are used by NO
+      elevation tree (every apparent "ridge" was the `b`ridge`` substring). The
+      Island variant (`elevation_island`, a trivial `bias=-1000` lakes variant) is
+      still unported. Lakes shipped earlier; both dispatch via a `mapType` selector.
 - [x] **Render**: `elevation < 0` -> water (deep vs shallow by threshold), else
       land; draw to a `<canvas>` at a chosen scale. Coastline falls out.
 - [x] **Validate**: sample the game's `elevation` at a grid for a few seeds; diff
@@ -161,8 +165,8 @@ The binary defines exactly **14** `NoiseOperations::*::run` types. Status:
 | `QuickMultioctaveNoise` | climate (temp/moisture/aux) | DONE (`quickMultioctaveNoise.ts`) |
 | `VariablePersistenceMultioctaveNoise` | terrain (elevation) | DONE (`variablePersistenceMultioctaveNoise.ts`) |
 | `DistanceFromNearestPoint` | spawn/starting area | DONE (`distanceFromNearestPoint.ts`) - `min(maximum_distance, nearest euclidean dist to any point)`; points int/256 fixed-point. Geometry read off disasm; needs runtime point data (see below) so validates via the elevation tree, not standalone. |
-| `Terrace` | terrain banding | small |
-| `Ridge` | terrain | small |
+| `Terrace` | terrain banding | small - NOT used by any elevation tree (2026-07-19) |
+| `Ridge` | terrain | small - NOT used by any elevation tree; every "ridge" in noise-programs.lua is the `b`ridge`` substring (2026-07-19) |
 | `RandomPenalty` | jitter | small |
 | `Multisampling` | AA/quality | small |
 | `VoronoiNoise` | some terrains | medium (new primitive; not yet probed) |
