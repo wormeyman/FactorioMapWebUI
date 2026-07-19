@@ -184,8 +184,21 @@ export function quickMultioctaveNoisePersistence(
   y: number,
   params: QuickMultioctavePersistenceParams,
 ): number {
+  return makeQuickMultioctaveNoisePersistence(params)(x, y);
+}
+
+/**
+ * Build a closure that evaluates `quick_multioctave_noise_persistence` for a fixed
+ * parameter set, with the per-octave basis tables derived once up front (the common
+ * case for rendering a grid at one seed). Applies the same param transform as
+ * {@link quickMultioctaveNoisePersistence} but delegates to
+ * {@link makeQuickMultioctaveNoise} so the tables are hoisted. Returns `(x, y) => number`.
+ */
+export function makeQuickMultioctaveNoisePersistence(
+  params: QuickMultioctavePersistenceParams,
+): (x: number, y: number) => number {
   const { octaves, octaveInputScaleMultiplier: oism } = params;
-  return quickMultioctaveNoise(x, y, {
+  return makeQuickMultioctaveNoise({
     seed0: params.seed0,
     seed1: params.seed1,
     octaves,

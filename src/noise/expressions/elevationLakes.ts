@@ -3,7 +3,7 @@ import { distanceFromNearestPoint, type Point } from "../distanceFromNearestPoin
 import { basisNoiseExpr } from "../eval/primitives";
 import { clamp, max, min } from "../eval/math";
 import { withCtxDefaults, type EvalCtxInput } from "../eval/ctx";
-import { quickMultioctaveNoisePersistence } from "../quickMultioctaveNoise";
+import { makeQuickMultioctaveNoisePersistence } from "../quickMultioctaveNoise";
 import { startingLakePositions as computeStartingLakes } from "../startingLakes";
 import {
   amplitudeCorrectedMultioctaveNoise,
@@ -30,10 +30,9 @@ export interface ElevationLakesParams {
 
 /**
  * Compile the `elevation_lakes` tree for one seed into a `(x, y) => elevation`
- * evaluator. The two heavy variable-persistence octave stacks (8 and 6 octaves)
- * and the basis-123 tables are derived once here; the lighter amplitude-corrected
- * persistence field and the quick-persistence lake noise are evaluated per point
- * (hoisting their tables is a deferred perf follow-up). Mirrors
+ * evaluator. The two heavy variable-persistence octave stacks (8 and 6 octaves),
+ * the basis-123 tables, the amplitude-corrected persistence field, and the
+ * quick-persistence lake noise all derive their basis tables once here. Mirrors
  * core/prototypes/noise-programs.lua 1:1 - see the M1 design spec.
  */
 export function makeElevationLakes(params: ElevationLakesParams): (x: number, y: number) => number {
@@ -71,18 +70,37 @@ export function makeElevationLakes(params: ElevationLakesParams): (x: number, y:
   // finish_elevation's basis term (seed1 = 123): derive tables once.
   const basisTables123 = basisNoiseTablesFromSeed(seed0, 123);
 
+  // amplitude_corrected persistence field (seed1 = 1): derive tables once.
+  const ampTables = basisNoiseTablesFromSeed(seed0, 1);
+
+  // finish_elevation's starting_lake_noise (seed1 = 14): build the closure once.
+  const quickLakeNoise = makeQuickMultioctaveNoisePersistence({
+    seed0,
+    seed1: 14,
+    octaves: 5,
+    inputScale: 1 / 8,
+    outputScale: 1,
+    octaveInputScaleMultiplier: 0.5,
+    persistence: 0.75,
+  });
+
   const make0_12likeLakes = (x: number, y: number): number => {
     // persistence field: clamp(amplitude_corrected + 0.3, 0.1, 0.9), fed to BOTH branches.
     const p = clamp(
-      amplitudeCorrectedMultioctaveNoise(x, y, {
-        seed0,
-        seed1: 1,
-        octaves: terrainOctaves - 2,
-        inputScale,
-        offsetX,
-        persistence: 0.7,
-        amplitude: 0.5,
-      }) + 0.3,
+      amplitudeCorrectedMultioctaveNoise(
+        x,
+        y,
+        {
+          seed0,
+          seed1: 1,
+          octaves: terrainOctaves - 2,
+          inputScale,
+          offsetX,
+          persistence: 0.7,
+          amplitude: 0.5,
+        },
+        ampTables,
+      ) + 0.3,
       0.1,
       0.9,
     );
@@ -95,15 +113,7 @@ export function makeElevationLakes(params: ElevationLakesParams): (x: number, y:
 
   const finishElevation = (elevation: number, x: number, y: number): number => {
     const sld = distanceFromNearestPoint(x, y, startingLakePositions, 1024);
-    const sln = quickMultioctaveNoisePersistence(x, y, {
-      seed0,
-      seed1: 14,
-      octaves: 5,
-      inputScale: 1 / 8,
-      outputScale: 1,
-      octaveInputScaleMultiplier: 0.5,
-      persistence: 0.75,
-    });
+    const sln = quickLakeNoise(x, y);
     const term1 = (elevation - waterLevel) / seg;
     const term2 =
       basisNoiseExpr(

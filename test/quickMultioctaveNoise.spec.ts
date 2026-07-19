@@ -3,7 +3,9 @@ import { describe, expect, it } from "vite-plus/test";
 import fixture from "./fixtures/oracle-quick-multioctave.seed123456.json";
 import {
   makeQuickMultioctaveNoise,
+  makeQuickMultioctaveNoisePersistence,
   quickMultioctaveNoise,
+  quickMultioctaveNoisePersistence,
 } from "../src/noise/quickMultioctaveNoise";
 
 interface QuickCase {
@@ -74,6 +76,23 @@ describe("quickMultioctaveNoise reproduces the game", () => {
       for (const p of fixture.positions) {
         expect(fn(p.x, p.y)).toBe(quickMultioctaveNoise(p.x, p.y, params));
       }
+    }
+  });
+
+  it("makeQuickMultioctaveNoisePersistence (hoisted tables) agrees exactly with the point form", () => {
+    // The elevation tree's starting_lake_noise parameters (seed1: 14, octaves: 5).
+    const params = {
+      seed0: fixture.seed0,
+      seed1: 14,
+      octaves: 5,
+      inputScale: 1 / 8,
+      outputScale: 1,
+      octaveInputScaleMultiplier: 0.5,
+      persistence: 0.75,
+    };
+    const fn = makeQuickMultioctaveNoisePersistence(params);
+    for (const p of fixture.positions) {
+      expect(fn(p.x, p.y)).toBe(quickMultioctaveNoisePersistence(p.x, p.y, params));
     }
   });
 });
