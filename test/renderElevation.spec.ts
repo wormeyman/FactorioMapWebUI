@@ -73,4 +73,23 @@ describe("renderElevation map-type dispatch", () => {
     });
     expect(Array.from(a.data)).toEqual(Array.from(b.data));
   });
+
+  it("flips the pixel color with mapType at a point where lakes and nauvis disagree in sign", () => {
+    // World point (-1200, -1162), seed 123456: makeElevationNauvis = +2.34 (LAND),
+    // makeElevationLakes = -6.81 (WATER). Both magnitudes are well away from 0, so this
+    // point discriminates the dispatch - a broken or reversed ternary would fail here.
+    const request = {
+      seed0: 123456,
+      width: 1,
+      height: 1,
+      originX: -1200,
+      originY: -1162,
+      tilesPerPixel: 1,
+    };
+    const nauvisImg = renderElevation({ ...request, mapType: "nauvis" as const });
+    expect(Array.from(nauvisImg.data)).toEqual(LAND_RGBA);
+
+    const lakesImg = renderElevation({ ...request, mapType: "lakes" as const });
+    expect(Array.from(lakesImg.data)).toEqual(WATER_RGBA);
+  });
 });
