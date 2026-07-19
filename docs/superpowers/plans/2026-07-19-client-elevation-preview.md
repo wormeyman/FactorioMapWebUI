@@ -349,7 +349,7 @@ Claude-Session: https://claude.ai/code/session_01TWh8jqCio53zNagfGh3atv"
 **Interfaces:**
 - Consumes: `runRenderRequest`, `ElevationRenderRequest`, `ElevationRenderResult` from `../noise/preview/elevationRenderRequest`; `onBeforeUnmount` from `vue`.
 - Produces:
-  - `interface WorkerLike { postMessage(message: unknown, transfer?: Transferable[]): void; terminate(): void; onmessage: ((e: MessageEvent) => void) | null }`
+  - `interface WorkerLike { postMessage(message: unknown, transfer?: Transferable[]): void; terminate(): void; onmessage: ((e: MessageEvent) => void) | null; onerror: ((e: unknown) => void) | null }`
   - `interface ElevationRenderer { render(req: Omit<ElevationRenderRequest, "id">): Promise<ElevationRenderResult>; dispose(): void }`
   - `function createElevationRenderer(createWorker?: () => WorkerLike): ElevationRenderer`
   - `function useElevationPreview(createWorker?: () => WorkerLike): ElevationRenderer`
@@ -364,7 +364,7 @@ import { describe, it, expect, vi } from "vite-plus/test";
 import { createElevationRenderer, type WorkerLike } from "../src/components/useElevationPreview";
 
 function fakeWorker(): WorkerLike & { posted: unknown[] } {
-  return { posted: [], postMessage(m) { this.posted.push(m); }, terminate: vi.fn(), onmessage: null };
+  return { posted: [], postMessage(m) { this.posted.push(m); }, terminate: vi.fn(), onmessage: null, onerror: null };
 }
 
 const REQ = {
@@ -404,6 +404,14 @@ describe("createElevationRenderer", () => {
     createElevationRenderer(() => worker).dispose();
     expect(worker.terminate).toHaveBeenCalledOnce();
   });
+
+  it("rejects pending renders when the worker errors", async () => {
+    const worker = fakeWorker();
+    const r = createElevationRenderer(() => worker);
+    const p = r.render(REQ);
+    worker.onerror!(new Error("boom"));
+    await expect(p).rejects.toBeInstanceOf(Error);
+  });
 });
 ```
 
@@ -440,6 +448,7 @@ export interface WorkerLike {
   postMessage(message: unknown, transfer?: Transferable[]): void;
   terminate(): void;
   onmessage: ((e: MessageEvent) => void) | null;
+  onerror: ((e: unknown) => void) | null;
 }
 
 export interface ElevationRenderer {
@@ -462,23 +471,34 @@ export function createElevationRenderer(
   createWorker: () => WorkerLike = createRenderWorker,
 ): ElevationRenderer {
   const worker = createWorker();
-  const pending = new Map<number, (r: ElevationRenderResult) => void>();
+  const pending = new Map<
+    number,
+    { resolve: (r: ElevationRenderResult) => void; reject: (e: unknown) => void }
+  >();
   let nextId = 1;
 
   worker.onmessage = (e: MessageEvent) => {
     const result = e.data as ElevationRenderResult;
-    const resolve = pending.get(result.id);
-    if (resolve) {
+    const entry = pending.get(result.id);
+    if (entry) {
       pending.delete(result.id);
-      resolve(result);
+      entry.resolve(result);
     }
+  };
+
+  // A real worker crash would otherwise leave render()'s promise pending
+  // forever; reject every in-flight request so the panel's catch fires.
+  worker.onerror = () => {
+    const entries = [...pending.values()];
+    pending.clear();
+    for (const { reject } of entries) reject(new Error("Elevation render worker error"));
   };
 
   return {
     render(req) {
       const id = nextId++;
-      return new Promise<ElevationRenderResult>((resolve) => {
-        pending.set(id, resolve);
+      return new Promise<ElevationRenderResult>((resolve, reject) => {
+        pending.set(id, { resolve, reject });
         worker.postMessage({ ...req, id } satisfies ElevationRenderRequest);
       });
     },
@@ -502,7 +522,7 @@ export function useElevationPreview(
 - [ ] **Step 5: Run test to verify it passes**
 
 Run: `pnpm vp test test/useElevationPreview.spec.ts`
-Expected: PASS (3 tests).
+Expected: PASS (4 tests).
 
 - [ ] **Step 6: Lint**
 

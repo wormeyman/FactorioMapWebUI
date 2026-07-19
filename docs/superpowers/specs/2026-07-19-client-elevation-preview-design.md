@@ -209,13 +209,16 @@ conventions and Factorio styling (`f-bevel-in`, `image-rendering: pixelated`).
 - **Generate:** builds the fixed-view request, sets `loading`, awaits
   `renderer.render(req)`, then paints: `new ImageData(new Uint8ClampedArray(buffer),
   w, h)` -> `canvasCtx.putImageData(...)`. Errors set an error message.
-- **Testability seam:** an optional prop `renderer?: ElevationRenderer`. In the
-  app it is omitted, so the panel lazily builds the real worker-backed one on
-  first Generate (never at mount, so tests that pass a fake never spawn a
-  Worker). Tests pass a fake `renderer` returning a known buffer and assert the
-  canvas paint and the map-type gate, exactly as `previewPanel.spec.ts` stubs
-  `fetch`.
-- Disposes the renderer on `onBeforeUnmount`.
+- **Testability seam:** an optional prop `renderer?: ElevationRenderer`,
+  resolved once in setup as `props.renderer ?? useElevationPreview()`. In the app
+  the prop is omitted, so the panel builds the real worker-backed renderer when
+  the tab first mounts (the worker idles until the first `postMessage`). Tests
+  always pass a fake `renderer`, so the `??` short-circuits and no Worker is ever
+  constructed under Vitest. The fake returns a known buffer; the panel test
+  asserts the canvas paint and the map-type gate, exactly as
+  `previewPanel.spec.ts` stubs `fetch`.
+- Disposes the renderer on `onBeforeUnmount` (only when the panel owns it, i.e.
+  the real worker-backed path; an injected renderer is owned by the caller).
 
 ### `src/App.vue` (MODIFIED)
 
@@ -256,8 +259,10 @@ Because the sizes are named constants, tuning is a one-line change.
 - **`water.size <= 0`:** guarded in `elevationCtxFromPreset` (falls back to 1).
 - **Stale results:** dropped by request-`id` mismatch in the composable, so a
   second Generate never paints the first render's late result.
-- **Worker error / crash:** the composable rejects; the panel shows a generic
-  "Preview failed." message (same shape as `PreviewPanel`).
+- **Worker error / crash:** the composable's `worker.onerror` rejects every
+  in-flight `render()` promise (otherwise a crash would leave it pending
+  forever); the panel's `catch` shows a generic "Preview failed." message (same
+  shape as `PreviewPanel`).
 - **No active preset:** Generate is disabled (same guard as `PreviewPanel`).
 
 ## Testing plan (TDD)
@@ -276,17 +281,23 @@ Pure logic first, DOM/worker last, no real Worker ever under Vitest.
    - Returns a buffer of length `width*height*4`, echoes `id`, `width`, `height`.
    - Same `(seed0, view, ctx)` as a direct `renderElevation` call produces byte-
      identical pixels (parity with the existing renderer).
-3. `test/elevationPreviewPanel.spec.ts` - mount with a fake `renderer`:
+3. `test/useElevationPreview.spec.ts` - `createElevationRenderer` with a fake
+   `WorkerLike` (no real Worker):
+   - Posts a request with an incrementing `id`; resolves on the matching response.
+   - Ignores a response whose `id` has no pending request (stale drop, no throw).
+   - `dispose()` terminates the worker.
+   - `worker.onerror` rejects an in-flight `render()` promise.
+4. `test/elevationPreviewPanel.spec.ts` - mount with a fake `renderer`:
    - Lakes preset + click Generate => `renderer.render` called with the fixed
      view; canvas `putImageData` invoked (spy).
    - Nauvis preset => gate message shown, `render` never called, Generate
      disabled.
    - Rejecting fake `renderer` => error message shown.
-4. Existing `renderElevation.spec.ts` and the full suite stay green.
+5. Existing `renderElevation.spec.ts` and the full suite stay green.
 
-The `.worker.ts` adapter and `useElevationPreview`'s live Worker are covered only
-indirectly (their logic lives in the pure `runRenderRequest`); no attempt is made
-to run a real Worker in the test env.
+The `.worker.ts` adapter and the *live* `Worker` construction are the only
+untested surface (the composable's request/staleness/error logic is tested via
+the injected fake); no attempt is made to run a real Worker in the test env.
 
 ## Files touched
 
@@ -298,10 +309,12 @@ New:
 - `src/components/ElevationPreviewPanel.vue`
 - `test/elevationPreviewCtx.spec.ts`
 - `test/elevationRenderRequest.spec.ts`
+- `test/useElevationPreview.spec.ts`
 - `test/elevationPreviewPanel.spec.ts`
 
 Modified:
 - `src/App.vue` (add the Preview tab)
+- `test/app.spec.ts` (assert the Preview tab label renders)
 
 Unchanged (consumed as-is): `src/noise/preview/renderElevation.ts`,
 `src/model/mapType.ts`, `src/util/seed.ts`, the codec, the store.
