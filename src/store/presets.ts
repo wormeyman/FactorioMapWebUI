@@ -3,6 +3,7 @@ import { decodeExchangeString, encodeExchangeString } from "../codec/mapExchange
 import { getBuiltinPreset } from "../model/builtins";
 import { presetFromDecoded, presetToEncodable } from "../model/convert";
 import type { Preset } from "../model/types";
+import { randomU32 } from "../util/seed";
 
 export const STORAGE_KEY = "factorio-map-webui.presets.v1";
 
@@ -37,10 +38,13 @@ function seedState(): { userPresets: Preset[]; activeName: string | null } {
 export const usePresetsStore = defineStore("presets", {
   state: () => {
     const persisted = loadPersisted();
-    if (persisted) {
-      return { userPresets: persisted.userPresets, activeName: persisted.activeName };
-    }
-    return seedState();
+    const base = persisted
+      ? { userPresets: persisted.userPresets, activeName: persisted.activeName }
+      : seedState();
+    // Shared concrete seed for the previews when the active preset's seed is null
+    // ("random each new map"), so both preview panels render the same map. Transient
+    // (not persisted); see the previewSeed action.
+    return { ...base, rolledSeed: null as number | null };
   },
 
   getters: {
@@ -55,6 +59,19 @@ export const usePresetsStore = defineStore("presets", {
   },
 
   actions: {
+    /**
+     * The concrete seed the previews should render at, shared across both preview
+     * panels so they stay in sync. An explicit preset seed always wins; a null-seed
+     * ("random each new map") preset gets a sticky random seed, reused across
+     * renders and only replaced when `reroll` is true.
+     */
+    previewSeed(reroll = false): number {
+      const explicit = this.activePreset?.seed ?? null;
+      if (explicit !== null) return explicit;
+      if (reroll || this.rolledSeed === null) this.rolledSeed = randomU32();
+      return this.rolledSeed;
+    },
+
     uniqueName(base: string): string {
       const trimmed = base.trim() || "Preset";
       if (!this.userPresets.some((p) => p.name === trimmed)) return trimmed;
