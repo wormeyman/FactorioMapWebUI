@@ -29,9 +29,9 @@ function okRenderer(): ElevationRenderer {
   return {
     render: vi.fn(async () => ({
       id: 1,
-      buffer: new ArrayBuffer(512 * 512 * 4),
-      width: 512,
-      height: 512,
+      buffer: new ArrayBuffer(1024 * 1024 * 4),
+      width: 1024,
+      height: 1024,
     })),
     dispose: vi.fn(),
   };
@@ -49,11 +49,11 @@ describe("ElevationPreviewPanel", () => {
     expect(arg).toMatchObject({
       seed0: 123456,
       mapType: "lakes",
-      width: 512,
-      height: 512,
-      tilesPerPixel: 4,
-      originX: -1024,
-      originY: -1024,
+      width: 1024,
+      height: 1024,
+      tilesPerPixel: 1,
+      originX: -512,
+      originY: -512,
     });
     expect(putImageData).toHaveBeenCalledOnce();
     expect(w.find('[data-test="preview-seed"]').text()).toContain("123456");
@@ -69,6 +69,27 @@ describe("ElevationPreviewPanel", () => {
     const arg = (renderer.render as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(arg).toMatchObject({ seed0: 123456, mapType: "nauvis" });
     expect(putImageData).toHaveBeenCalledOnce();
+  });
+
+  it("centers the view on world origin (0,0), not the preset spawn point", async () => {
+    stubCanvas();
+    const renderer = okRenderer();
+    const w = setup("nauvis", renderer);
+    const store = usePresetsStore();
+    store.activePreset!.startingPoints = [{ x: 300, y: -400 }];
+    await w.find('[data-test="generate"]').trigger("click");
+    await flushPromises();
+    const arg = (renderer.render as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    // window recentred on origin ...
+    expect(arg).toMatchObject({
+      originX: -512,
+      originY: -512,
+      width: 1024,
+      height: 1024,
+      tilesPerPixel: 1,
+    });
+    // ... but the tree still gets the real spawn for its distance-gated terms
+    expect(arg.startingPositions).toEqual([{ x: 300, y: -400 }]);
   });
 
   it("shows a message and does not render for an unsupported map type", async () => {
