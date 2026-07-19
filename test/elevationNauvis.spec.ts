@@ -4,6 +4,8 @@ import { makeElevationNauvis } from "../src/noise/expressions/elevationNauvis";
 
 // Parity-test only where the game's own starting_lake_distance saturated at 1024;
 // near spawn is asserted separately (computed starting lakes make it faithful too).
+// (The fixture also carries a `distance` array as captured oracle context; the spec
+// keys purely off startingLakeDistance and does not assert `distance` directly.)
 const SATURATED = (i: number) => fixture.startingLakeDistance[i] >= 1024;
 
 describe("elevationNauvis reproduces the game's elevation_nauvis tree", () => {
@@ -37,8 +39,10 @@ describe("elevationNauvis reproduces the game's elevation_nauvis tree", () => {
     }
     // offset_x = 10000/nauvisSeg puts nauvis_detail's sampling in the f32 regime, so
     // the game's f32 coordinate pipeline diverges from our f64; nauvis amplifies that
-    // floor by ~20x (elevation_magnitude). Bound calibrated to just above the observed
-    // deep-field worst (see plan Task 3 Step 4). Start at 8e-3, then raise to fit.
+    // floor by ~20x (elevation_magnitude). This is the pure f32-floor divergence, NOT
+    // a knob to loosen: the observed worst is ~4.08e-3 (deep field), and 8e-3 is a
+    // fixed bound with ~2x headroom for platform f32 / fixture-regen jitter. A failure
+    // here is a real finding to debug, not a bound to raise.
     expect(worst, `worst ${worstLabel}`).toBeLessThan(8e-3);
   });
 
@@ -57,6 +61,11 @@ describe("elevationNauvis reproduces the game's elevation_nauvis tree", () => {
       }
     }
     expect(checked).toBeGreaterThanOrEqual(6);
-    expect(worst, `worst ${worstLabel}`).toBeLessThan(8e-3);
+    // Near spawn the coordinates are small, so the f32 floor is tiny (observed worst
+    // ~2.87e-6) - far below the far-field 8e-3. This band is the ONE seam this tree
+    // adds beyond lakes: it exercises the computed starting_lake_positions
+    // (startingLakes.ts). A tight 1e-4 bound (still ~35x headroom) makes this assertion
+    // actually guard that path - a drift in the computed lake positions would trip it.
+    expect(worst, `worst ${worstLabel}`).toBeLessThan(1e-4);
   });
 });
