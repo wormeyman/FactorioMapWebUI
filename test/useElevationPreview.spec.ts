@@ -73,4 +73,13 @@ describe("createElevationRenderer", () => {
     worker.onerror!(new Error("boom"));
     await expect(p).rejects.toBeInstanceOf(Error);
   });
+
+  it("rejects pending renders on dispose", async () => {
+    const worker = fakeWorker();
+    const r = createElevationRenderer(() => worker);
+    const p = r.render(REQ);
+    r.dispose();
+    await expect(p).rejects.toBeInstanceOf(Error);
+    expect(worker.terminate).toHaveBeenCalledOnce();
+  });
 });

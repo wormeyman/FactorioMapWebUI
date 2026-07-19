@@ -42,6 +42,12 @@ export function createElevationRenderer(
   >();
   let nextId = 1;
 
+  function rejectAllPending(message: string) {
+    const entries = [...pending.values()];
+    pending.clear();
+    for (const { reject } of entries) reject(new Error(message));
+  }
+
   worker.onmessage = (e: MessageEvent) => {
     const result = e.data as ElevationRenderResult;
     const entry = pending.get(result.id);
@@ -53,11 +59,7 @@ export function createElevationRenderer(
 
   // A real worker crash would otherwise leave render()'s promise pending
   // forever; reject every in-flight request so the panel's catch fires.
-  worker.onerror = () => {
-    const entries = [...pending.values()];
-    pending.clear();
-    for (const { reject } of entries) reject(new Error("Elevation render worker error"));
-  };
+  worker.onerror = () => rejectAllPending("Elevation render worker error");
 
   return {
     render(req) {
@@ -68,7 +70,7 @@ export function createElevationRenderer(
       });
     },
     dispose() {
-      pending.clear();
+      rejectAllPending("Elevation renderer disposed");
       worker.terminate();
     },
   };
