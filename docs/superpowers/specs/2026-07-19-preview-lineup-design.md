@@ -33,26 +33,26 @@ This is a fidelity spot-check of coastline shape/position, not a color match.
 
 ## Approach - three alignments (client-only)
 
-### 1. World extent (zoom) - measure, then match
+### 1. World extent (zoom) - MEASURED
 
-Measure the server preview's world extent (tiles across a 1024px preview, offset
-0,0, Nauvis) and hardcode it as a constant `SERVER_PREVIEW_TILES`.
+**`SERVER_PREVIEW_TILES = 1024` (1 tile per pixel).** Measured 2026-07-19 and
+confirmed, so this is a known constant, not an open task:
+- Rendering the server preview locally
+  (`factorio --generate-map-preview out.png --map-gen-settings
+  test/fixtures/map-gen-settings.default-nauvis.dump.json --map-preview-planet
+  nauvis --map-gen-seed 123456 --map-preview-size 1024`, with the isolated
+  `--config` `read-data=__PATH__executable__/../data`) logs:
+  `Initializing map preview generator: 1048576 pixels: 0,0...0,0; 1 meter per pixel`.
+  1 meter = 1 tile, so a size-1024 preview spans exactly 1024 tiles (world
+  -512..+512), centered on origin. The preview-service pins `size` to 1024, so this
+  is fixed.
+- Cross-checked visually: a client `makeElevationNauvis` render (seed 123456,
+  default water = level 0 / seg 1) over the same window (1024px, 1 tile/px, origin
+  -512..+512) overlays the server preview's water bodies faithfully - every lake at
+  the edges, and the small near-center starting lake, coincide.
 
-Measurement (offline, one-time, with the local Factorio + the committed
-`test/fixtures/map-gen-settings.default-nauvis.dump.json`):
-- Render a server preview: `factorio --generate-map-preview out.png --map-gen-settings
-  <default-nauvis> --map-preview-planet nauvis --map-gen-seed 123456
-  --map-preview-size 1024`. (macOS bundle needs the isolated `--config` with
-  `read-data=../data`, as the oracle harness already does.)
-- Determine tiles-across. Primary method (exact): render a second preview at
-  `--map-preview-offset D,0` for a known D tiles; the image shifts horizontally by
-  `D / tiles_per_pixel` pixels, so `tiles_per_pixel = D / pixel_shift` and
-  `SERVER_PREVIEW_TILES = tiles_per_pixel * 1024`. A rough render-both-and-eyeball
-  cross-check (server PNG vs a client render at the candidate extent) confirms it;
-  precision to a few percent is sufficient for eyeballing coastlines.
-
-Then set the client to the same world square: with `PREVIEW_PX = 1024`,
-`TILES_PER_PIXEL = SERVER_PREVIEW_TILES / 1024`.
+So the client is set to the same world square with `PREVIEW_PX = 1024` and
+`TILES_PER_PIXEL = 1` (a pixel-and-world 1:1 match to the server).
 
 ### 2. Center on world origin (0,0)
 
@@ -91,9 +91,11 @@ value so they cannot drift apart.
 ## Files
 
 - `src/components/ElevationPreviewPanel.vue`: `PREVIEW_PX 512 -> 1024`,
-  `TILES_PER_PIXEL 4 -> SERVER_PREVIEW_TILES/1024`, recenter the window on (0,0),
-  add the shared display-size class/var to the canvas. A short comment records
-  `SERVER_PREVIEW_TILES` and how it was measured.
+  `TILES_PER_PIXEL 4 -> 1` (so the 1024px window spans 1024 tiles = the server's
+  extent), recenter the window on (0,0) (`originX = originY = -512`, i.e.
+  `-SERVER_PREVIEW_TILES / 2`, independent of spawn), add the shared display-size
+  class/var to the canvas. A short comment records that the server preview is 1
+  tile/pixel at size 1024 (measured from the game's log; see this spec).
 - `src/components/PreviewPanel.vue`: add the same shared display-size
   class/var to the `<img>` (no behavior change).
 - A shared CSS value (custom property in `factorio.css` or a tiny shared class) for
@@ -102,10 +104,9 @@ value so they cannot drift apart.
 ## Testing
 
 - Unit: the panel builds a render request whose window is centered on (0,0) and
-  spans `SERVER_PREVIEW_TILES` (`originX = originY = -SERVER_PREVIEW_TILES/2`,
-  `width = height = 1024`, `tilesPerPixel = SERVER_PREVIEW_TILES/1024`). This
-  guards the extent/center wiring (the existing panel spec already asserts the
-  request shape - update its expected origin/size).
+  spans 1024 tiles (`originX = originY = -512`, `width = height = 1024`,
+  `tilesPerPixel = 1`). This guards the extent/center wiring (the existing panel
+  spec already asserts the request shape - update its expected origin/size).
 - The measurement itself is an offline derivation, not a CI test (it needs
   Factorio); the derived constant is committed with a comment citing the method.
 - Visual confirmation in the app: on the Preview tab with the side panel set to
