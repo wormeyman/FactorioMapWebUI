@@ -49,14 +49,16 @@ Scalars / vars:
 - `starting_lake_positions` = runtime spawn/lake points, reused from the lakes port
   (`startingLakes.ts`), capped at 1024 in `starting_lake_distance`.
 
-Noise nodes (all at `seed0 = map_seed`):
-- `nauvis_bridge_billows` = `abs(multioctave{seed1=700, octaves=4, persistence=0.5, input_scale=seg/150})`
+Noise nodes (all at `seed0 = map_seed`). **Every one scales by `nauvis_seg`
+(= 1.5*seg), NOT plain `seg`, and offsets by `10000/nauvis_seg`** - only
+`starting_island` below uses plain `seg`:
+- `nauvis_bridge_billows` = `abs(multioctave{seed1=700, octaves=4, persistence=0.5, input_scale=nauvis_seg/150})`
 - `nauvis_bridges` = `1 - 0.1*bb - 0.9*max(0, -0.1 + bb)` (bb = bridge_billows)
-- `nauvis_persistance` = `clamp(amplitude_corrected_multioctave{seed1=500, octaves=5, input_scale=seg/2, offset_x=10000/seg, persistence=0.7, amplitude=0.5} + 0.55, 0.5, 0.65)`
-- `nauvis_detail` = `variable_persistence_multioctave{seed1=600, input_scale=seg/14, output_scale=0.03, offset_x=10000/seg, octaves=5, persistence=nauvis_persistance}`
-- `nauvis_macro` = `multioctave{seed1=1000, octaves=2, persistence=0.6, input_scale=seg/1600} * max(0, multioctave{seed1=1100, octaves=1, persistence=0.6, input_scale=seg/1600})`
-- `nauvis_hills` = `abs(multioctave{seed1=900, octaves=4, persistence=0.5, input_scale=seg/90})`
-- `nauvis_hills_cliff_level` = `clamp(0.65 + basis_noise{seed1=99584, input_scale=seg/500, output_scale=0.6}, 0.15, 1.15)`
+- `nauvis_persistance` = `clamp(amplitude_corrected_multioctave{seed1=500, octaves=5, input_scale=nauvis_seg/2, offset_x=10000/nauvis_seg, persistence=0.7, amplitude=0.5} + 0.55, 0.5, 0.65)`
+- `nauvis_detail` = `variable_persistence_multioctave{seed1=600, input_scale=nauvis_seg/14, output_scale=0.03, offset_x=10000/nauvis_seg, octaves=5, persistence=nauvis_persistance}`
+- `nauvis_macro` = `multioctave{seed1=1000, octaves=2, persistence=0.6, input_scale=nauvis_seg/1600} * max(0, multioctave{seed1=1100, octaves=1, persistence=0.6, input_scale=nauvis_seg/1600})`
+- `nauvis_hills` = `abs(multioctave{seed1=900, octaves=4, persistence=0.5, input_scale=nauvis_seg/90})`
+- `nauvis_hills_cliff_level` = `clamp(0.65 + basis_noise{seed1=99584, input_scale=nauvis_seg/500, output_scale=0.6}, 0.15, 1.15)`
 - `nauvis_plateaus` = `0.5 + clamp((nauvis_hills - nauvis_hills_cliff_level)*10, -0.5, 0.5)`
 - `nauvis_hills_plateaus` = `0.1*nauvis_hills + 0.8*nauvis_plateaus`
 

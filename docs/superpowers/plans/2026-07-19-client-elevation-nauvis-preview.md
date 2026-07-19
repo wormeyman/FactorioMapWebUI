@@ -298,8 +298,10 @@ describe("elevationNauvis reproduces the game's elevation_nauvis tree", () => {
         worstLabel = `@(${p.x},${p.y})`;
       }
     }
-    // offset_x = 10000/seg puts nauvis_detail's sampling in the f32 regime, so the
-    // game's f32 coordinate pipeline diverges from our f64 - same bound as lakes.
+    // offset_x = 10000/nauvisSeg puts nauvis_detail's sampling in the f32 regime, so
+    // the game's f32 coordinate pipeline diverges from our f64; nauvis amplifies that
+    // floor by ~20x (elevation_magnitude). Bound calibrated to just above the observed
+    // deep-field worst (see plan Task 3 Step 4). Start at 8e-3, then raise to fit.
     expect(worst, `worst ${worstLabel}`).toBeLessThan(8e-3);
   });
 
@@ -380,25 +382,27 @@ export function makeElevationNauvis(
   const startingLakePositions =
     params.startingLakePositions ?? computeStartingLakes(seed0, startingPositions);
 
-  // nauvis_segmentation_multiplier = 1.5 * control:water:frequency (distinct from seg).
+  // nauvis_segmentation_multiplier = 1.5 * control:water:frequency. EVERY noise
+  // sub-node scales/offsets by THIS, not by the plain `seg` (= segmentation_multiplier);
+  // only starting_island uses plain seg (see below). See noise-programs.lua.
   const nauvisSeg = 1.5 * seg;
-  const offsetX = 10000 / seg;
+  const offsetX = 10000 / nauvisSeg;
 
   // Hoisted noise closures / tables (persistence field still varies per tile).
   const bridgeBillows = makeMultioctaveNoise({
-    seed0, seed1: 700, octaves: 4, persistence: 0.5, inputScale: seg / 150, outputScale: 1,
+    seed0, seed1: 700, octaves: 4, persistence: 0.5, inputScale: nauvisSeg / 150, outputScale: 1,
   });
   const detail = makeVariablePersistenceMultioctaveNoise({
-    seed0, seed1: 600, octaves: 5, inputScale: seg / 14, outputScale: 0.03, offsetX,
+    seed0, seed1: 600, octaves: 5, inputScale: nauvisSeg / 14, outputScale: 0.03, offsetX,
   });
   const macroA = makeMultioctaveNoise({
-    seed0, seed1: 1000, octaves: 2, persistence: 0.6, inputScale: seg / 1600, outputScale: 1,
+    seed0, seed1: 1000, octaves: 2, persistence: 0.6, inputScale: nauvisSeg / 1600, outputScale: 1,
   });
   const macroB = makeMultioctaveNoise({
-    seed0, seed1: 1100, octaves: 1, persistence: 0.6, inputScale: seg / 1600, outputScale: 1,
+    seed0, seed1: 1100, octaves: 1, persistence: 0.6, inputScale: nauvisSeg / 1600, outputScale: 1,
   });
   const hills = makeMultioctaveNoise({
-    seed0, seed1: 900, octaves: 4, persistence: 0.5, inputScale: seg / 90, outputScale: 1,
+    seed0, seed1: 900, octaves: 4, persistence: 0.5, inputScale: nauvisSeg / 90, outputScale: 1,
   });
   const cliffLevelTables: BasisNoiseTables = basisNoiseTablesFromSeed(seed0, 99584);
   const persistanceTables: BasisNoiseTables = basisNoiseTablesFromSeed(seed0, 500);
@@ -412,7 +416,7 @@ export function makeElevationNauvis(
     const persistence = clamp(
       amplitudeCorrectedMultioctaveNoise(
         x, y,
-        { seed0, seed1: 500, octaves: 5, inputScale: seg / 2, offsetX, persistence: 0.7, amplitude: 0.5 },
+        { seed0, seed1: 500, octaves: 5, inputScale: nauvisSeg / 2, offsetX, persistence: 0.7, amplitude: 0.5 },
         persistanceTables,
       ) + 0.55,
       0.5, 0.65,
@@ -431,7 +435,7 @@ export function makeElevationNauvis(
     const cliffLevel = clamp(
       0.65 + basisNoiseExpr(
         x, y,
-        { seed0, seed1: 99584, inputScale: seg / 500, outputScale: 0.6 },
+        { seed0, seed1: 99584, inputScale: nauvisSeg / 500, outputScale: 0.6 },
         cliffLevelTables,
       ),
       0.15, 1.15,
@@ -475,10 +479,16 @@ export function elevationNauvis(ctx: EvalCtxInput): number {
 }
 ```
 
-- [ ] **Step 4: Run the parity spec**
+- [ ] **Step 4: Run the parity spec and calibrate the f32-floor bound**
 
 Run: `pnpm vp test test/elevationNauvis.spec.ts`
-Expected: PASS. If the far-field or near-spawn `worst` exceeds `8e-3`: **do not raise the bound reflexively.** First confirm it is the f32 coordinate floor (the error grows with |coordinate|; the deep-field point `@(12345.75,6789.125)` should be worst). If instead a near/mid point is worst, or the error is orders larger, it is a port bug - re-read the offending node against `noise-programs.lua` (common slips: `nauvisSeg` vs `seg`, `octaves` count, `abs` placement, `offsetX` only on `detail`/`persistance`). Only after confirming the floor may the bound be set just above the observed worst, with a comment stating the value and that it is the f32 floor.
+
+The `8e-3` starting bound is inherited from the lakes port, but nauvis multiplies its noise by `elevation_magnitude = 20` (and the lerp amplifies `added_cliff_elevation` by up to ~2x), so the f32 coordinate-floor error is amplified roughly proportionally. **Expect the first run to fail the numeric bound at the deep-field point** `@(12345.75,6789.125)` - that is legitimate, not a bug. Calibrate:
+
+- **If the worst point is the deep-field one** and the near/mid points sit near the basis floor (error grows with |coordinate|), it is the f32 floor: raise the two bounds (far-field and near-spawn) to just above the observed worst, with a comment stating the value and that it is the amplified f32 floor (`~20x` the raw primitive). This is calibration, not loosening-to-pass.
+- **If instead a near/mid point is worst, or the error is orders larger than ~0.2, it is a port bug** - do NOT touch the bound. Re-read the offending node against `noise-programs.lua`. Highest-probability slips: a `seg` that should be `nauvisSeg` (every noise input scale + both `offset_x` use `nauvisSeg`; only `starting_island` uses plain `seg`), an `octaves` count, `abs` placement, or `offsetX` wired to a node that shouldn't have it (only `detail` and `persistance` do).
+
+After calibration, re-run: `pnpm vp test test/elevationNauvis.spec.ts` -> PASS.
 
 - [ ] **Step 5: Lint, run the full suite, and commit**
 
@@ -767,7 +777,7 @@ In `src/components/ElevationPreviewPanel.vue`, inside `generate()`, add `mapType
 
 In `test/elevationPreviewPanel.spec.ts`:
 - Widen `setup`'s parameter type to `mapTypeId: "nauvis" | "lakes" | "island"`.
-- In the existing lakes test, add `mapType: "nauvis"` -> no; instead add `mapType: "lakes"` to the `toMatchObject`:
+- In the existing lakes test, add `mapType: "lakes"` to the `toMatchObject` assertion:
 
 ```ts
     expect(arg).toMatchObject({
