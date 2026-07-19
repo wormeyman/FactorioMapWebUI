@@ -14,6 +14,7 @@
  * NOT wired into the app. This is the building block a client-side map preview
  * would need; the editor itself does not evaluate noise.
  */
+import { seededState, taus88Next } from "./taus88";
 
 /** Number of gradient directions, and the period of the hash on each axis. */
 const TABLE_SIZE = 256;
@@ -97,24 +98,6 @@ export function basisNoise(x: number, y: number, tables: BasisNoiseTables): numb
  */
 const MIN_SEED_WORD = 0x155;
 
-interface Taus88State {
-  s1: number;
-  s2: number;
-  s3: number;
-}
-
-/**
- * One canonical L'Ecuyer taus88 step (output after the update). Identical to the
- * generator in `spotCandidates.ts`; the game runs it vectorized (components z2/z3
- * in NEON lanes, z1 scalar) but the sequence is the same.
- */
-function taus88Next(st: Taus88State): number {
-  st.s1 = ((((st.s1 & 0xfffffffe) << 12) >>> 0) ^ ((((st.s1 << 13) >>> 0) ^ st.s1) >>> 19)) >>> 0;
-  st.s2 = ((((st.s2 & 0xfffffff8) << 4) >>> 0) ^ ((((st.s2 << 2) >>> 0) ^ st.s2) >>> 25)) >>> 0;
-  st.s3 = ((((st.s3 & 0xfffffff0) << 17) >>> 0) ^ ((((st.s3 << 3) >>> 0) ^ st.s3) >>> 11)) >>> 0;
-  return (st.s1 ^ st.s2 ^ st.s3) >>> 0;
-}
-
 /**
  * A backward (Durstenfeld) Fisher-Yates shuffle of `identity[0..255]`, drawing
  * 255 values from the stream: for `pos` from 255 down to 1, swap slot `pos` with
@@ -149,7 +132,7 @@ function shuffleIdentity(next: () => number): number[] {
 export function basisNoiseTablesFromSeed(seed0: number, seed1: number): BasisNoiseTables {
   const word = Math.max((seed0 + 7 * (seed1 >>> 8)) >>> 0, MIN_SEED_WORD);
   const saltIndex = seed1 & (TABLE_SIZE - 1);
-  const st: Taus88State = { s1: word, s2: word, s3: word };
+  const st = seededState(word);
   const next = () => taus88Next(st);
 
   const scratch = shuffleIdentity(next);

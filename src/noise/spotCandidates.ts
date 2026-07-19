@@ -15,6 +15,7 @@
  * NOT wired into the app - like basisNoise.ts, it is a building block for a
  * client-side map preview.
  */
+import { seededState, taus88Next } from "./taus88";
 
 const M32 = 0x100000000;
 
@@ -37,20 +38,6 @@ export interface SpotRegionKey {
   /** Region index. Regions are *centred* on multiples of region_size. */
   regionX: number;
   regionY: number;
-}
-
-interface Taus88State {
-  s1: number;
-  s2: number;
-  s3: number;
-}
-
-/** One canonical taus88 step (output taken after the update). */
-function taus88Next(st: Taus88State): number {
-  st.s1 = ((((st.s1 & 0xfffffffe) << 12) >>> 0) ^ ((((st.s1 << 13) >>> 0) ^ st.s1) >>> 19)) >>> 0;
-  st.s2 = ((((st.s2 & 0xfffffff8) << 4) >>> 0) ^ ((((st.s2 << 2) >>> 0) ^ st.s2) >>> 25)) >>> 0;
-  st.s3 = ((((st.s3 & 0xfffffff0) << 17) >>> 0) ^ ((((st.s3 << 3) >>> 0) ^ st.s3) >>> 11)) >>> 0;
-  return (st.s1 ^ st.s2 ^ st.s3) >>> 0;
 }
 
 /**
@@ -88,7 +75,7 @@ export function spotCandidatePoints(
   count: number,
 ): Array<{ x: number; y: number }> {
   const word = spotSeedWord(key);
-  const st: Taus88State = { s1: word, s2: word, s3: word };
+  const st = seededState(word);
   const half = Math.floor(regionSize / 2);
   const points: Array<{ x: number; y: number }> = [];
   for (let i = 0; i < count; i++) {
