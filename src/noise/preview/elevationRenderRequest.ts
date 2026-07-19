@@ -15,6 +15,8 @@ export interface ElevationRenderRequest {
   startingPositions: Point[];
   /** Omitted => the game's real lake positions are computed inside the render. */
   startingLakePositions?: Point[];
+  /** Which elevation tree to render. Default "lakes". */
+  mapType?: "lakes" | "nauvis";
 }
 
 /** The rendered pixels, with `buffer` posted back as a transferable. */
@@ -37,6 +39,7 @@ export function runRenderRequest(req: ElevationRenderRequest): ElevationRenderRe
     originX: req.originX,
     originY: req.originY,
     tilesPerPixel: req.tilesPerPixel,
+    mapType: req.mapType,
     ctx: {
       waterLevel: req.waterLevel,
       segmentationMultiplier: req.segmentationMultiplier,

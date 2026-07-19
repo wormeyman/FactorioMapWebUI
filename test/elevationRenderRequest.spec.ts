@@ -44,4 +44,24 @@ describe("runRenderRequest", () => {
     const got = new Uint8ClampedArray(runRenderRequest(REQ).buffer);
     expect(Array.from(got)).toEqual(Array.from(direct.data));
   });
+
+  it("dispatches mapType 'nauvis' to renderElevation's nauvis factory", () => {
+    const nauvisReq: ElevationRenderRequest = { ...REQ, mapType: "nauvis" };
+    const direct = renderElevation({
+      seed0: REQ.seed0,
+      width: REQ.width,
+      height: REQ.height,
+      originX: REQ.originX,
+      originY: REQ.originY,
+      tilesPerPixel: REQ.tilesPerPixel,
+      mapType: "nauvis",
+      ctx: {
+        waterLevel: REQ.waterLevel,
+        segmentationMultiplier: REQ.segmentationMultiplier,
+        startingPositions: REQ.startingPositions,
+      },
+    });
+    const got = new Uint8ClampedArray(runRenderRequest(nauvisReq).buffer);
+    expect(Array.from(got)).toEqual(Array.from(direct.data));
+  });
 });
