@@ -187,17 +187,22 @@ finish_elevation terms 2-4  ->  elevation_lakes  ->  water mask  ->  ImageData
    codec/model/store change (all edits live in the noise/preview layer).
 5. Renderer output visibly shows the near-spawn lake(s) at the origin.
 
-## Task 0 (de-risk, before the port) - rescoped
+## Task 0 (de-risk, before the port) - DONE during planning
 
-The algorithm is already recovered (above), so Task 0 is narrow:
-1. Transcribe the fast-sine polynomial coefficients and the intermediate f32
-   round-trip exactly from the disasm (`lldb -b -o "disassemble -n
-   'MapGenSettings::getStartingLakePositions'"`).
-2. Capture the oracle fixture for seed 123456: both `starting_positions` (input) and
-   `starting_lake_positions` (output), via the headless dumper-mod recipe.
+Both de-risk steps were completed while writing the plan:
+1. The full function (incl. the fast-sine minimax poly + f32 round-trip) was
+   transcribed from the arm64 disasm; all constants are in the plan's reference
+   table. A literal port matches `cos`/`sin` to 6e-9.
+2. **No new headless capture is needed.** The existing
+   `test/fixtures/oracle-elevation-lakes.seed123456.json` already holds the game's
+   real `startingLakeDistance[]` at 26 points (9 near-spawn). Trilaterating those 9
+   distances yields lake `(45,-59)` with zero residual, and the recovered algorithm
+   independently computes `(45,-59)` for seed 123456 - reproducing all 9 distances
+   to 0.000. That fixture is a sufficient, independent oracle, so the port is
+   validated against data already in the repo. (The single origin spawn is
+   confirmed by `distance[0] == hypot`.)
 
-Deliverable: the exact sine transcription + the oracle fixture. Only then is the
-port authored, test-first.
+The port is authored test-first against that fixture; see the implementation plan.
 
 ## Edge cases to test
 
