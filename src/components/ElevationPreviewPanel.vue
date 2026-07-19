@@ -3,7 +3,6 @@
 import { computed, ref } from "vue";
 import { elevationCtxFromPreset } from "../model/elevationPreviewCtx";
 import { usePresetsStore } from "../store/presets";
-import { randomU32 } from "../util/seed";
 import FButton from "../ui/FButton.vue";
 import { useElevationPreview, type ElevationRenderer } from "./useElevationPreview";
 
@@ -25,7 +24,6 @@ const loading = ref(false);
 const error = ref<string | null>(null);
 const seed = ref<number | null>(null);
 const hasRendered = ref(false);
-const rolledSeed = ref<number | null>(null);
 
 const preview = computed(() =>
   store.activePreset ? elevationCtxFromPreset(store.activePreset) : null,
@@ -37,8 +35,7 @@ async function generate() {
   const info = preview.value;
   if (!preset || !info || !info.supported || loading.value) return;
 
-  if (preset.seed === null && rolledSeed.value === null) rolledSeed.value = randomU32();
-  const seed0 = preset.seed ?? (rolledSeed.value as number);
+  const seed0 = store.previewSeed();
   seed.value = seed0;
 
   const half = (PREVIEW_PX * TILES_PER_PIXEL) / 2; // 512

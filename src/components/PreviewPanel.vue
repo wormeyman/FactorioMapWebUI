@@ -3,7 +3,6 @@ import { ref } from "vue";
 import { PLANET_LABELS, PLANETS, type Planet } from "../model/planets";
 import { usePresetsStore } from "../store/presets";
 import { buildPreviewRequest, postPreview, PreviewError } from "../io/previewClient";
-import { randomU32 } from "../util/seed";
 import FButton from "../ui/FButton.vue";
 import FDropdown from "../ui/FDropdown.vue";
 
@@ -18,20 +17,12 @@ const seed = ref<number | null>(null);
 const loading = ref(false);
 const error = ref<string | null>(null);
 
-// A concrete random seed for presets whose seed is null ("random each new map").
-// Picked once and reused so repeated Generate clicks show the same map; only the
-// re-roll control changes it.
-const rolledSeed = ref<number | null>(null);
-
 async function generate(reroll = false) {
   const preset = store.activePreset;
   if (!preset || loading.value) return;
-  // Resolve a stable, concrete seed. An explicit preset seed always wins; for a
-  // null-seed preset, pick a random seed once (or a fresh one on re-roll).
-  if (reroll || (preset.seed === null && rolledSeed.value === null)) {
-    rolledSeed.value = randomU32();
-  }
-  const useSeed = preset.seed ?? (rolledSeed.value as number);
+  // Resolve a stable, concrete seed from the store, shared with the client preview
+  // panel so both render the same map (re-roll updates the shared seed).
+  const useSeed = store.previewSeed(reroll);
   loading.value = true;
   error.value = null;
   try {

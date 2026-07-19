@@ -200,3 +200,39 @@ describe("presets store", () => {
     expect(decoded.tail["pollution.diffusionRatio"]).toBeCloseTo(0.02, 9);
   });
 });
+
+describe("presets store previewSeed (shared between preview panels)", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    setActivePinia(createPinia());
+  });
+
+  it("returns the explicit preset seed when one is set", () => {
+    const store = usePresetsStore();
+    store.activePreset!.seed = 42;
+    expect(store.previewSeed()).toBe(42);
+    expect(store.previewSeed(true)).toBe(42); // reroll cannot override an explicit seed
+    expect(store.rolledSeed).toBeNull(); // and it never rolls one
+  });
+
+  it("rolls one sticky random seed for a null-seed preset and reuses it", () => {
+    const store = usePresetsStore();
+    store.activePreset!.seed = null;
+    const first = store.previewSeed();
+    expect(typeof first).toBe("number");
+    // Repeated calls (e.g. both panels rendering) return the SAME seed - the sync.
+    expect(store.previewSeed()).toBe(first);
+    expect(store.previewSeed()).toBe(first);
+    expect(store.rolledSeed).toBe(first);
+  });
+
+  it("re-roll replaces the shared seed", () => {
+    const store = usePresetsStore();
+    store.activePreset!.seed = null;
+    const first = store.previewSeed();
+    const rerolled = store.previewSeed(true);
+    expect(rerolled).not.toBe(first);
+    // ... and the new seed is now the sticky shared one for both panels.
+    expect(store.previewSeed()).toBe(rerolled);
+  });
+});
