@@ -80,7 +80,7 @@ async function generate(reroll = false) {
       <img
         v-if="imageUrl"
         data-test="preview-image"
-        class="preview-image"
+        class="preview-image f-preview-media"
         :src="imageUrl"
         :alt="`Map preview for ${PLANET_LABELS[planet]}`"
       />
@@ -121,12 +121,6 @@ async function generate(reroll = false) {
   justify-content: center;
   background: var(--f-inset);
   padding: 8px;
-}
-
-.preview-image {
-  max-width: 100%;
-  max-height: 100%;
-  image-rendering: pixelated;
 }
 
 .error {

@@ -7,10 +7,12 @@ import { randomU32 } from "../util/seed";
 import FButton from "../ui/FButton.vue";
 import { useElevationPreview, type ElevationRenderer } from "./useElevationPreview";
 
-// Fixed spawn view (tunable constants; no UI yet). A 2048-tile window (the
-// starting-lake distance cap is 1024) centered on the primary spawn.
-const PREVIEW_PX = 512;
-const TILES_PER_PIXEL = 4;
+// Fixed view matched to the server --generate-map-preview: 1024 tiles across at
+// 1 tile/pixel (the game renders size-1024 previews at 1 meter/pixel), rendered at
+// 1024px and centered on world origin (0,0) so the two previews overlay. See
+// docs/superpowers/specs/2026-07-19-preview-lineup-design.md.
+const PREVIEW_PX = 1024;
+const TILES_PER_PIXEL = 1;
 
 const props = defineProps<{ renderer?: ElevationRenderer }>();
 // In the app no renderer is passed -> build the real worker-backed one (which
@@ -39,8 +41,7 @@ async function generate() {
   const seed0 = preset.seed ?? (rolledSeed.value as number);
   seed.value = seed0;
 
-  const s0 = info.ctx.startingPositions[0] ?? { x: 0, y: 0 };
-  const half = (PREVIEW_PX * TILES_PER_PIXEL) / 2;
+  const half = (PREVIEW_PX * TILES_PER_PIXEL) / 2; // 512
 
   loading.value = true;
   error.value = null;
@@ -50,8 +51,8 @@ async function generate() {
       mapType: info.mapType,
       width: PREVIEW_PX,
       height: PREVIEW_PX,
-      originX: s0.x - half,
-      originY: s0.y - half,
+      originX: -half,
+      originY: -half,
       tilesPerPixel: TILES_PER_PIXEL,
       waterLevel: info.ctx.waterLevel,
       segmentationMultiplier: info.ctx.segmentationMultiplier,
@@ -96,7 +97,7 @@ async function generate() {
         v-show="supported && hasRendered && !error"
         ref="canvas"
         data-test="preview-canvas"
-        class="preview-canvas"
+        class="preview-canvas f-preview-media"
       />
       <p v-if="!supported" class="dim" data-test="unsupported">
         Client preview is not available for {{ preview?.mapTypeLabel ?? "this map type" }} yet.
@@ -134,11 +135,6 @@ async function generate() {
   justify-content: center;
   background: var(--f-inset);
   padding: 8px;
-}
-.preview-canvas {
-  max-width: 100%;
-  max-height: 100%;
-  image-rendering: pixelated;
 }
 .error {
   color: var(--f-red);
