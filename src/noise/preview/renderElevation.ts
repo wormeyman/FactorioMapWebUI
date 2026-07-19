@@ -25,9 +25,10 @@ export interface RenderElevationOptions {
  * {@link LAND_RGBA} otherwise. The tree evaluator is compiled once (heavy octave
  * closures built up front) and reused across pixels.
  *
- * Far-from-spawn fidelity: the render uses the EvalCtx spawn/lake defaults unless
- * overridden via `ctx`. Near the starting area the game's actual spawn/lake points
- * would shift the coastline; see the M1 design spec for the fidelity limit.
+ * Near-spawn fidelity: the render computes the game's real starting lake positions
+ * (see startingLakes.ts) by default, so the coastline is faithful near spawn as
+ * well as far out. Callers may still pass an explicit `ctx.startingLakePositions`
+ * (including `[]`) to override.
  */
 export function renderElevation(opts: RenderElevationOptions): ImageData {
   const { width, height } = opts;

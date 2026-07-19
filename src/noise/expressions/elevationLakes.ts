@@ -19,7 +19,12 @@ export interface ElevationLakesParams {
   readonly segmentationMultiplier?: number;
   /** Spawn points for `distance` (uncapped). Default single origin spawn. */
   readonly startingPositions?: Point[];
-  /** Lake points for `starting_lake_distance` (capped at 1024). Default empty. */
+  /**
+   * Lake points for `starting_lake_distance` (capped at 1024). When omitted, the
+   * game's real positions are computed from `(seed0, startingPositions)` via
+   * `startingLakePositions` (startingLakes.ts). Pass `[]` for the old far-field-only
+   * behavior.
+   */
   readonly startingLakePositions?: Point[];
 }
 

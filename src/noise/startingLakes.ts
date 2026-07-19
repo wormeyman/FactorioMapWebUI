@@ -43,10 +43,7 @@ function sinlike(t: number): number {
  * The game's `starting_lake_positions`: one lake per starting position, computed
  * from `(seed0, startingPositions)` alone. Positions are world tiles.
  */
-export function startingLakePositions(
-  seed0: number,
-  startingPositions: readonly Point[],
-): Point[] {
+export function startingLakePositions(seed0: number, startingPositions: readonly Point[]): Point[] {
   const word = Math.max(seed0 >>> 0, MIN_SEED_WORD);
   const st = seededState(word);
   const lakes: Point[] = [];
