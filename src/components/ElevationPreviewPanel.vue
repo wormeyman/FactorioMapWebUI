@@ -97,7 +97,7 @@ async function generate() {
         v-show="supported && hasRendered && !error"
         ref="canvas"
         data-test="preview-canvas"
-        class="preview-canvas"
+        class="preview-canvas f-preview-media"
       />
       <p v-if="!supported" class="dim" data-test="unsupported">
         Client preview is not available for {{ preview?.mapTypeLabel ?? "this map type" }} yet.
@@ -135,11 +135,6 @@ async function generate() {
   justify-content: center;
   background: var(--f-inset);
   padding: 8px;
-}
-.preview-canvas {
-  max-width: 100%;
-  max-height: 100%;
-  image-rendering: pixelated;
 }
 .error {
   color: var(--f-red);
