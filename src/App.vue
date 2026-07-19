@@ -2,6 +2,7 @@
 import { ref } from "vue";
 import ActionBar from "./components/ActionBar.vue";
 import AdvancedTab from "./components/AdvancedTab.vue";
+import ElevationPreviewPanel from "./components/ElevationPreviewPanel.vue";
 import EnemyTab from "./components/EnemyTab.vue";
 import ImportPanel from "./components/ImportPanel.vue";
 import PresetBar from "./components/PresetBar.vue";
@@ -11,7 +12,7 @@ import TerrainTab from "./components/TerrainTab.vue";
 import type { Planet } from "./model/planets";
 import FTabs from "./ui/FTabs.vue";
 
-const TABS = ["Resources", "Terrain", "Enemy", "Advanced"];
+const TABS = ["Resources", "Terrain", "Enemy", "Advanced", "Preview"];
 const activeTab = ref("Resources");
 const selectedPlanet = ref<Planet>("nauvis");
 const showImport = ref(false);
@@ -29,6 +30,7 @@ const showImport = ref(false);
           <ResourcesTab v-if="activeTab === 'Resources'" />
           <TerrainTab v-else-if="activeTab === 'Terrain'" />
           <EnemyTab v-else-if="activeTab === 'Enemy'" />
+          <ElevationPreviewPanel v-else-if="activeTab === 'Preview'" />
           <AdvancedTab v-else />
         </div>
       </div>

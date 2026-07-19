@@ -103,4 +103,9 @@ describe("App shell", () => {
     await w.find('button[data-test="import-confirm"]').trigger("click");
     expect(w.find('[data-test="import-error"]').text()).toContain("envelope");
   });
+
+  it("offers a Preview tab", () => {
+    const w = mountApp();
+    expect(w.text()).toContain("Preview");
+  });
 });
