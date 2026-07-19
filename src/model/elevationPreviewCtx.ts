@@ -2,11 +2,11 @@ import type { Point } from "../noise/distanceFromNearestPoint";
 import { readMapType } from "./mapType";
 import type { Preset } from "./types";
 
-const LAKES_ELEVATION = "elevation_lakes";
-
 export interface ElevationPreviewCtx {
   /** false => the active map type has no client renderer yet (Nauvis/Island/unknown). */
   supported: boolean;
+  /** Which client renderer to use when supported. */
+  mapType: "lakes" | "nauvis";
   /** Resolved map-type label, for the "not available for <label>" message. */
   mapTypeLabel: string;
   /** Non-seed free variables for renderElevation (Omit<..., "seed0">-compatible). */
@@ -18,14 +18,15 @@ export interface ElevationPreviewCtx {
 }
 
 /**
- * Map the active preset onto the free variables the elevation_lakes renderer
- * needs. waterLevel = 10*log2(control:water:size), segmentation =
- * control:water:frequency; an absent water control collapses to the renderer's
- * own defaults (waterLevel 0, seg 1). A disabled control (size <= 0) is guarded
- * to size 1 rather than emitting -Infinity.
+ * Map the active preset onto the free variables the elevation renderer needs,
+ * and report which client tree (nauvis or lakes) renders it. waterLevel =
+ * 10*log2(control:water:size), segmentation = control:water:frequency; an
+ * absent water control collapses to the renderer's own defaults (waterLevel 0,
+ * seg 1). A disabled control (size <= 0) is guarded to size 1 rather than
+ * emitting -Infinity.
  */
 export function elevationCtxFromPreset(preset: Preset): ElevationPreviewCtx {
-  const mapType = readMapType(preset.propertyExpressionNames);
+  const mt = readMapType(preset.propertyExpressionNames);
   const water = preset.autoplaceControls.water;
   const size = water && water.size > 0 ? water.size : 1;
   const startingPositions: Point[] =
@@ -33,9 +34,11 @@ export function elevationCtxFromPreset(preset: Preset): ElevationPreviewCtx {
       ? preset.startingPoints.map((p) => ({ x: p.x, y: p.y }))
       : [{ x: 0, y: 0 }];
 
+  const supported = mt.id === "nauvis" || mt.id === "lakes";
   return {
-    supported: mapType.writeValue === LAKES_ELEVATION,
-    mapTypeLabel: mapType.label,
+    supported,
+    mapType: mt.id === "nauvis" ? "nauvis" : "lakes",
+    mapTypeLabel: mt.label,
     ctx: {
       waterLevel: 10 * Math.log2(size),
       segmentationMultiplier: water?.frequency ?? 1,

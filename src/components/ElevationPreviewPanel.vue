@@ -47,6 +47,7 @@ async function generate() {
   try {
     const result = await renderer.render({
       seed0,
+      mapType: info.mapType,
       width: PREVIEW_PX,
       height: PREVIEW_PX,
       originX: s0.x - half,
