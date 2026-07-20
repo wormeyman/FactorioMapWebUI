@@ -49,6 +49,7 @@ describe("ElevationPreviewPanel", () => {
     expect(arg).toMatchObject({
       seed0: 123456,
       mapType: "lakes",
+      view: "elevation",
       width: 1024,
       height: 1024,
       tilesPerPixel: 1,
@@ -99,6 +100,53 @@ describe("ElevationPreviewPanel", () => {
     expect(w.find('[data-test="generate"]').attributes("disabled")).toBeDefined();
     await w.find('[data-test="generate"]').trigger("click");
     expect(renderer.render).not.toHaveBeenCalled();
+  });
+
+  it("passes view:'terrain' after selecting the Terrain toggle on a Nauvis preset", async () => {
+    const putImageData = stubCanvas();
+    const renderer = okRenderer();
+    const w = setup("nauvis", renderer);
+    expect(w.find('[data-test="view-terrain"]').attributes("disabled")).toBeUndefined();
+
+    await w.find('[data-test="view-terrain"]').trigger("click");
+    await w.find('[data-test="generate"]').trigger("click");
+    await flushPromises();
+
+    expect(renderer.render).toHaveBeenCalledOnce();
+    const arg = (renderer.render as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg).toMatchObject({ view: "terrain", mapType: "nauvis" });
+    expect(putImageData).toHaveBeenCalledOnce();
+  });
+
+  it("disables the Terrain toggle for a Lakes preset (renderTerrain is Nauvis-only)", async () => {
+    const renderer = okRenderer();
+    const w = setup("lakes", renderer);
+    expect(w.find('[data-test="view-terrain"]').attributes("disabled")).toBeDefined();
+    expect(w.find('[data-test="view-elevation"]').attributes("disabled")).toBeUndefined();
+  });
+
+  it("disables the Terrain toggle for an Island preset", async () => {
+    const renderer = okRenderer();
+    const w = setup("island", renderer);
+    expect(w.find('[data-test="view-terrain"]').attributes("disabled")).toBeDefined();
+  });
+
+  it("falls back to Elevation view when switching to a preset whose map type disables Terrain", async () => {
+    const putImageData = stubCanvas();
+    const renderer = okRenderer();
+    const w = setup("nauvis", renderer);
+    const store = usePresetsStore();
+
+    await w.find('[data-test="view-terrain"]').trigger("click");
+    writeMapType(store.activePreset!.propertyExpressionNames, "lakes");
+    await w.vm.$nextTick();
+    expect(w.find('[data-test="view-terrain"]').attributes("disabled")).toBeDefined();
+
+    await w.find('[data-test="generate"]').trigger("click");
+    await flushPromises();
+    const arg = (renderer.render as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg).toMatchObject({ view: "elevation", mapType: "lakes" });
+    expect(putImageData).toHaveBeenCalledOnce();
   });
 
   it("shows an error when the render rejects", async () => {

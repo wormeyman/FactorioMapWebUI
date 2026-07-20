@@ -1,6 +1,6 @@
 <!-- src/components/ElevationPreviewPanel.vue -->
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { elevationCtxFromPreset } from "../model/elevationPreviewCtx";
 import { usePresetsStore } from "../store/presets";
 import FButton from "../ui/FButton.vue";
@@ -30,6 +30,16 @@ const preview = computed(() =>
 );
 const supported = computed(() => preview.value?.supported ?? false);
 
+// The terrain render (renderTerrain, Task 11) always evaluates the Nauvis
+// climate + tile catalog, regardless of the active preset's actual map type -
+// it is only faithful for mapType "nauvis". Gate the toggle on that rather
+// than rendering a Lakes/Island preset with the wrong climate.
+const view = ref<"elevation" | "terrain">("elevation");
+const terrainAvailable = computed(() => preview.value?.mapType === "nauvis");
+watch(terrainAvailable, (available) => {
+  if (!available) view.value = "elevation";
+});
+
 async function generate() {
   const preset = store.activePreset;
   const info = preview.value;
@@ -46,6 +56,7 @@ async function generate() {
     const result = await renderer.render({
       seed0,
       mapType: info.mapType,
+      view: view.value,
       width: PREVIEW_PX,
       height: PREVIEW_PX,
       originX: -half,
@@ -79,6 +90,26 @@ async function generate() {
   <div class="elevation-preview">
     <div class="preview-toolbar">
       <span v-if="seed !== null" class="seed" data-test="preview-seed">Seed: {{ seed }}</span>
+      <div class="view-toggle" role="group" aria-label="Preview view">
+        <FButton
+          data-test="view-elevation"
+          :variant="view === 'elevation' ? 'tool' : 'default'"
+          @click="view = 'elevation'"
+        >
+          Elevation
+        </FButton>
+        <FButton
+          data-test="view-terrain"
+          :variant="view === 'terrain' ? 'tool' : 'default'"
+          :disabled="!terrainAvailable"
+          :title="
+            terrainAvailable ? undefined : 'Terrain view is only available for the Nauvis map type'
+          "
+          @click="view = 'terrain'"
+        >
+          Terrain
+        </FButton>
+      </div>
       <span class="spacer" />
       <FButton
         data-test="generate"
@@ -119,6 +150,10 @@ async function generate() {
 }
 .spacer {
   flex: 1;
+}
+.view-toggle {
+  display: flex;
+  gap: 4px;
 }
 .seed {
   font-size: 12px;
