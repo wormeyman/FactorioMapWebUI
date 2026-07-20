@@ -83,13 +83,32 @@ as noted in `noise-oracle-basis-measurements`). Key instructions:
   seed const `+0x18`, amplitude const `+0x1c` (matches `ComplexExpression<...,3,2,0>`:
   3 register inputs + 2 constants).
 
-## Open for M3 (composition, not the primitive)
+## Composition inside spot selection - RESOLVED (2026-07-19, M3a Task 4)
 
-The primitive is fully solved. What M3a/M3b must still pin empirically is **how the
-game batches `random_penalty` inside the spot expressions** - `spot_quantity`
-(`random_penalty_between(0.25, 2, 1) * ...`) and `spot_favorability`
-(`... + random_penalty_at(0.5, 1)`) are evaluated at spot positions during spot
-selection, so the batch = the spot list and the order = the game's spot-evaluation
-order. That order determines each spot's `U`, and thus which spots survive the trim.
-Determine it against the probability/richness oracle when wiring
-`resource_autoplace_all_patches`.
+How the game batches `random_penalty` inside the spot expressions is now pinned
+against the pure-regular oracle (`test/fixtures/oracle-resource-regular...`). For
+`regular_spot_quantity_expression = random_penalty_between(0.25, 2, 1) * quantityBase`:
+
+- The batch = **all skip-set accepted spots** of the region, in **acceptance order**
+  (the order `generatePoints` produced them), evaluated as ONE `random_penalty`
+  batch BEFORE the favorability sort/trim (matches the spot-noise NOTES order of
+  operations: generatePoints -> skip set -> evaluate expressions -> sort -> place).
+- So per `RandomPenalty::run`: the stream is seeded from the FIRST accepted spot and
+  consumed last-spot-first across that batch. Each spot's `U` therefore depends on
+  the whole spot list, NOT on the spot's own position (the "singleton per spot"
+  guess was close - uranium cones ~2% off - but wrong; the batch form is right).
+
+Implemented via a new `quantityBatch` option on `selectSpots`
+(`src/noise/spotSelection.ts`) that evaluates the spot quantities over the skip set
+at once; `src/noise/resources/regularPatches.ts` supplies it with
+`randomPenaltyBatch(spots, ...)`. This dropped the oracle error from **3e-1 to
+~2e-3**.
+
+Residual (~1e-3, up to ~5e-2 at one cone edge): the game's noise register machine
+is **f32** throughout the selection math (density -> regional target -> trim
+accumulation -> per-spot quantity -> cone peak/slope), so the last-kept spot at the
+trim boundary and the exact cone-edge zero-crossings differ from an f64 port by a
+precision-amplified amount. Closing to the ~1e-5 floor needs f32 emulation of that
+math (a partial `Math.fround` of just the cone step did NOT help - it must be the
+whole selection/quantity chain). Deferred as an M3a refinement; the field is already
+render-adequate (the >=0.5 probability footprint shifts by <1px).

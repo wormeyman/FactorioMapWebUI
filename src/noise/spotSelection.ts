@@ -37,6 +37,15 @@ export interface SpotExpressions {
   density: (x: number, y: number) => number;
   quantity: (x: number, y: number) => number;
   favorability: (x: number, y: number) => number;
+  /**
+   * Optional batched spot quantity, evaluated over ALL skip-set accepted spots at
+   * once (in acceptance order), before the sort/trim. Overrides `quantity` when
+   * present. Needed for `spot_quantity_expression`s that contain a `random_penalty`
+   * (a batch op whose per-spot value depends on the whole spot list + its order -
+   * the game evaluates these expressions at the skip-set spots as one batch). The
+   * returned array aligns with the input spots.
+   */
+  quantityBatch?: (spots: readonly { x: number; y: number }[]) => number[];
 }
 
 export interface SpotSelectParams extends SpotExpressions {
@@ -104,6 +113,10 @@ export function selectSpots(key: SpotRegionKey, p: SpotSelectParams): SelectedSp
       ? 0
       : (mine.reduce((s, a) => s + p.density(a.x, a.y), 0) / mine.length) * rs * rs;
 
+  // Spot quantities: batched over the whole skip set (in acceptance order) when a
+  // quantityBatch is given (for random_penalty-bearing expressions), else per-spot.
+  const qBatch = p.quantityBatch ? p.quantityBatch(mine) : null;
+
   // phase 4: stable sort by favorability desc, accumulate to target
   const ranked = mine
     .map((a, j) => ({ ...a, j, fav: p.favorability(a.x, a.y) }))
@@ -112,7 +125,7 @@ export function selectSpots(key: SpotRegionKey, p: SpotSelectParams): SelectedSp
   let acc = 0;
   for (const s of ranked) {
     if (acc >= target) break;
-    let q = p.quantity(s.x, s.y);
+    let q = qBatch ? qBatch[s.j] : p.quantity(s.x, s.y);
     let coneScale = 1;
     if (p.hardRegionTargetQuantity && acc + q > target) {
       const q2 = target - acc;
