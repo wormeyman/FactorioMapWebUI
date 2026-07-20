@@ -48,6 +48,30 @@ normalize(a, b, bias)     = a / sqrt(bias + a^2 + b^2)          -- bias 0.001
 nauvis_hills_offset_normalized_x = normalize(raw_x, raw_y, 0.001)   -- and _y swaps the args
 ```
 
+### String-seed resolution (`'nauvis_offset_x'` / `'nauvis_offset_y'`) - SOLVED
+
+Factorio hashes a **string** `basis_noise` `seed1` to a u32 with **standard zlib/ANSI
+CRC32** (polynomial `0xEDB88320`) - bit-identical to the app's existing
+`src/codec/crc32.ts`. Confirmed two ways (2026-07-20 spike):
+
+- Binary: the shipped arm64 slice carries Stephan Brumme's "Fast CRC32" suite
+  (`crc32_fast/_1byte/_4bytes/...`) and a `_Crc32Lookup` table at vmaddr
+  `0x102f24490` whose first entries (`0, 0x77073096, 0xee0e612c, ...`) are the
+  standard zlib table.
+- Oracle: `basisNoise(x, y, basisNoiseTablesFromSeed(seed0, crc32(name)))` matches
+  the game's `basis_noise{seed1='<name>'}` to ~1e-7 (the fastapprox floor) at 12
+  points x 2 seeds; alternative hashes (djb2/fnv1a/sdbm) were fully uncorrelated.
+
+So `seed1(name) = crc32(utf8Bytes(name))`, seed0-independent:
+
+```
+crc32("nauvis_offset_x") = 593691028   (0x2360A1D4)
+crc32("nauvis_offset_y") = 1415852290  (0x5460AAC2)
+```
+
+The port computes these via the existing `crc32` (or hardcodes the two constants
+with this note as the source).
+
 Already ported (reuse `src/noise/expressions/nauvisShared.ts`): `nauvis_hills`,
 `nauvis_hills_cliff_level`, `forest_path_billows`, `nauvis_bridge_billows`. New:
 `elevation_nauvis_no_cliff` (= `elevation_nauvis_function(0)`, i.e. the elevation
