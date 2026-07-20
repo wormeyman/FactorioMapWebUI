@@ -54,27 +54,34 @@ export interface QuickMultioctaveParams {
 }
 
 /**
- * The `seed0` to feed {@link basisNoiseTablesFromSeed} for octave `k`. Octaves pair
- * up: 0 and 1 share a seed word, 2 and 3 the next, etc. - the disassembly shows a
- * per-octave `seed += const` accumulator, and the oracle pins the cadence to +2 per
- * pair of octaves.
+ * The `seed0` to feed {@link basisNoiseTablesFromSeed} for octave `k`: a simple
+ * per-octave `+1` on top of the map seed, `seed0 + k` (`>>> 0` keeps it an
+ * unsigned 32-bit word). `seed1` is not part of this derivation - it is only
+ * `basisNoiseTablesFromSeed`'s own `+ 7*(seed1>>8)` term (applied once there)
+ * that folds `seed1` into the final basis word.
  *
- * The subtlety is a low-bit interaction. Factorio's basis seed *word* is
- * `seed0 + 7*(seed1>>8)` (see {@link basisNoiseTablesFromSeed}); the per-octave +2
- * lands on that combined word, and its parity - `phase = (7*(seed1>>8)) & 1` - shifts
- * which octave in each pair the +2 falls on. Written in terms of the `seed0` we pass
- * (so the game's `+ 7*(seed1>>8)` re-adds inside the derivation):
- *
- *   seed0_k = seed0 - phase + 2*floor((k + phase) / 2)
- *
- * For the common case `seed1 < 256` (all base-game quick usages: seed1 = 5,6,7,123),
- * `phase = 0` and this reduces to `seed0 + 2*floor(k/2)`. Verified against the game
- * for phase 0 and 1 across seven seed1 values. `>>> 0` keeps it an unsigned 32-bit
- * word.
+ * An earlier version of this function derived a `phase = (7*(seed1>>8)) & 1`
+ * and a "+2 every pair of octaves" cadence instead of a flat `+1`. That was a
+ * mistaken over-fit: `taus88`'s `s1` update masks its input with
+ * `0xfffffffe` (clears the low bit) before the first left-shift, so for an
+ * EVEN starting word `W`, `basisNoiseTablesFromSeed(W, seed1)` and
+ * `basisNoiseTablesFromSeed(W + 1, seed1)` happen to produce byte-identical
+ * tables - which makes "+2 per pair" and "+1 per octave" numerically
+ * indistinguishable whenever the pair's base word is even. Every prior oracle
+ * capture used `seed0 = 123456` (even), so the coincidence was never exposed.
+ * Task 10's tile-resolver parity test (3 seeds, one of them ODD - 654321)
+ * caught it: per-octave isolation against the live game (quick_multioctave_noise
+ * sampled at octaves=1..4 and differenced) showed octave 0 and 2 matching the
+ * old formula but octaves 1 and 3 diverging by ~0.02-0.05 - exactly the two
+ * octaves the old formula reused an even-derived word for, when the true word
+ * for an ODD seed0 is one higher (odd) and does NOT collide. The flat `+1`
+ * reproduces the live game to the basis floor for both parities, and remains
+ * bit-identical to the old formula's output at seed 123456 (validated against
+ * the full `oracle-quick-multioctave` fixture, including its one phase>=1
+ * case, seed1=999).
  */
-function octaveSeed0(seed0: number, seed1: number, k: number): number {
-  const phase = (7 * (seed1 >>> 8)) & 1;
-  return (seed0 - phase + 2 * Math.floor((k + phase) / 2)) >>> 0;
+function octaveSeed0(seed0: number, _seed1: number, k: number): number {
+  return (seed0 + k) >>> 0;
 }
 
 /**
