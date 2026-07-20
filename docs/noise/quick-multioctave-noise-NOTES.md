@@ -110,3 +110,49 @@ over this op (pre-scaling input/output scale and mapping persistence ->
 `octave_output_scale_multiplier`); it needs no new RE, just porting the wrapper. The
 `variable_persistence_multioctave_noise` op (used by the elevation tree) is a
 *different* primitive - see `multioctave-noise-NOTES.md` "Still open".
+
+## Correction (2026-07-19, M2 Task 10): the "+2 per pair" rule was a masked over-fit
+
+The "per-octave seed" section above (`seed0_k = seed0 - phase + 2*floor((k +
+phase) / 2)`, i.e. the basis seed word stepping by +2 every *pair* of octaves)
+is **wrong** - or more precisely, it is numerically indistinguishable from the
+truth for every seed this doc's own oracle captures ever used, which is why it
+went undetected for as long as it did.
+
+The actual rule is a flat **`seed0_k = seed0 + k`** - a distinct basis seed
+word for every single octave, no pairing at all.
+
+**Why the old rule looked right:** `taus88`'s `s1` state update masks its input
+with `& 0xfffffffe` (clears the low bit) before the first left-shift. That
+means `basisNoiseTablesFromSeed(W)` and `basisNoiseTablesFromSeed(W + 1)`
+produce byte-identical tables whenever `W` is **even** - the odd successor's
+low bit gets thrown away before it can affect anything. So for an even base
+word, "+1 every octave" and "+2 every pair" agree exactly: octaves 0 and 1
+both hash to the same table either way (`W` and `W+1` collide), and so do
+octaves 2 and 3, etc. Every fixture and hand-derived experiment in the
+sections above used `seed0 = 123456`, which is even - so the pairing artifact
+was baked into every oracle capture and never had a chance to show up.
+
+**What exposed it:** Task 10's tile-resolver parity test exercises the
+temperature/moisture/aux trees at three seeds, one of them **odd - 654321**.
+For an odd base word, `W` and `W+1` are genuinely different tables (no
+low-bit collision), so "+2 per pair" and "+1 per octave" diverge starting at
+octave 1. Per-octave isolation against the live game (sampling
+`quick_multioctave_noise` at `octaves = 1..4` and differencing consecutive
+results, the same prefix-sum trick used above) showed octave 0 and 2 matching
+the old formula but octaves 1 and 3 off by roughly 0.02-0.05 - precisely the
+two octaves the old formula reused an even-derived word for, when the true
+per-octave word for an odd `seed0` is one higher and does not collide.
+
+The flat `seed0 + k` reproduces the live game to the basis floor at both
+parities, and is bit-identical to the old formula's output at the historical
+`seed0 = 123456` fixture (including its one `phase >= 1` case, `seed1 =
+999`) - so nothing in this document's existing oracle evidence is
+contradicted, it was just never sufficient to distinguish the two rules. See
+`src/noise/quickMultioctaveNoise.ts`'s `octaveSeed0` doc for the code-level
+version of this note.
+
+This is left in place above (not deleted) as a worked example of how an
+even/odd-masking RNG detail can hide a wrong derivation behind a coincidence -
+worth remembering the next time a new op is pinned against a single seed
+fixture.

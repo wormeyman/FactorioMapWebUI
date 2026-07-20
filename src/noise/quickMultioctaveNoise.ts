@@ -16,9 +16,9 @@
  * op there is NO RMS normalisation (it is the "raw" building block; the
  * `quick_multioctave_noise_persistence` Lua wrapper pre-scales `input_scale` and
  * `output_scale` to compensate) and NO per-octave x offset in noise space - octaves
- * are decorrelated by re-seeding instead: the basis seed word steps by +2 every pair
- * of octaves (so octaves 0,1 share a seed word, 2,3 the next, ...); see
- * {@link octaveSeed0} for the exact per-octave seed and its low-bit subtlety.
+ * are decorrelated by re-seeding instead: each octave gets its own distinct basis
+ * seed word, a flat `seed0 + k`; see {@link octaveSeed0} for the exact derivation
+ * and the low-bit subtlety that once masked this.
  * `offset_x` is a single world-space x translation applied to every octave
  * (`(x + offset_x)` before scaling), NOT the k*17.17/offset_x per-octave shift the
  * plain / variable-persistence ops use.
@@ -85,11 +85,14 @@ function octaveSeed0(seed0: number, _seed1: number, k: number): number {
 }
 
 /**
- * Evaluate `quick_multioctave_noise` at world coordinates `(x, y)`. Because each
- * octave uses a distinct seed word (every second octave), a per-call `tables` cache
- * would only help within an octave pair; the derivation is cheap, so this recomputes
- * per octave. Sweeping many points at one seed still benefits from caching the tables
- * by octave - see {@link makeQuickMultioctaveNoise}.
+ * Evaluate `quick_multioctave_noise` at world coordinates `(x, y)`. Every octave now
+ * gets its own distinct seed word (flat `seed0 + k`), so the `s0 !== prevSeed0`
+ * cache below is effectively dead - consecutive octaves never share a word, and the
+ * branch is always taken. It is left in place (cheap, harmless, and a safety net if
+ * the derivation ever changes back to something that repeats a word) rather than
+ * removed. The derivation itself is cheap either way. Sweeping many points at one
+ * seed still benefits from caching the tables by octave - see
+ * {@link makeQuickMultioctaveNoise}.
  */
 export function quickMultioctaveNoise(
   x: number,
