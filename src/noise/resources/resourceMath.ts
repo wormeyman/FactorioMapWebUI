@@ -14,7 +14,7 @@ import type { ResourceParams } from "./resourceCatalog";
 
 export const DOUBLE_DENSITY_DISTANCE = 1300;
 export const REGULAR_PATCH_FADE_IN_DISTANCE = 300;
-export const STARTING_RESOURCE_PLACEMENT_RADIUS = 120;
+export const STARTING_RESOURCE_PLACEMENT_RADIUS = 150;
 /** (params.regular_blob_amplitude_multiplier or 1) / 8 - constant for the 6 base resources. */
 const REGULAR_BLOB_AMPLITUDE_MULTIPLIER = 1 / 8;
 /** (params.starting_blob_amplitude_multiplier or 1) / 8. */
@@ -145,20 +145,28 @@ export function startingSpotRadius(params: ResourceParams, controls: ResourceCon
 /**
  * starting_favorability_base_at(distance, elevation_lakes): the non-random part of the
  * starting-area spot favorability. The `random_penalty_at(0.5, 1)` batch term (Task 3)
- * is added to this by the caller.
+ * is added to this by the caller. The game's spot_favorability_expression is:
+ *
+ *   starting_resources_lake_mask * starting_modulation * origin_excluder * 2
+ *     - min(1, distance / starting_resource_placement_radius)
+ *
+ * where starting_resources_lake_mask = clamp((elevation - 1)/10, 0, 1) (elevation =
+ * elevation_lakes on Nauvis), origin_excluder = distance > 40 (avoid the crash site),
+ * and starting_modulation = starting_resource_placement_radius > distance.
  */
 // _params/_controls: unused today (this is purely the distance/elevation term), but kept
 // in the signature for a stable (distance, elevationLakes, params, controls) shape across
-// the starting-patch local functions - random_penalty_at (Task 3) will need them here too.
+// the starting-patch local functions.
 export function startingFavorabilityBaseAt(
   distance: number,
   elevationLakes: number,
   _params: ResourceParams,
   _controls: ResourceControls,
 ): number {
+  const originExcluder = distance > 40 ? 1 : 0;
   return (
-    clamp((elevationLakes - 1) / 10, 0, 1) * startingModulation(distance) * 2 -
-    distance / STARTING_RESOURCE_PLACEMENT_RADIUS
+    clamp((elevationLakes - 1) / 10, 0, 1) * startingModulation(distance) * originExcluder * 2 -
+    Math.min(1, distance / STARTING_RESOURCE_PLACEMENT_RADIUS)
   );
 }
 
