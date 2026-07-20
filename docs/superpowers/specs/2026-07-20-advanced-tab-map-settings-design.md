@@ -57,9 +57,15 @@ import stays byte-exact.
 Defaults confirmed from `test/fixtures/map-settings.example.json`.
 
 **Inferred pieces that the oracle pass must confirm:** the "Absorption modifier"
--> `ageing` mapping, and whether each modifier is displayed as a percentage
-(x100) versus raw. Slider ranges/steps and the verbatim tooltip strings also come
-from the game. See "Oracle verification" below.
+-> `ageing` mapping; the display scale of each field (see the display-scaling
+section for the specifically-suspect cases); and "Absorbed per damaged tree" ->
+`pollutionPerTreeDamage` (50) versus the sibling `pollutionRestoredPerTreeDamage`
+(10). The chosen reading ("absorbed" = pollution consumed on damage; "restored"
+is tree-regrowth) is the more likely one but is not resolvable from repo files -
+it needs the game/locale oracle. **Failure mode to note:** a wrong label still
+round-trips byte-exact, so no test catches a mislabel; only in-game reading does.
+Slider ranges/steps and the verbatim tooltip strings also come from the game. See
+"Oracle verification" below.
 
 ## Components
 
@@ -81,10 +87,33 @@ Generalize `writeEnemyToTail` into `writeMapSettingsToTail(tail, mapSettings)`:
 - Does NOT write the other pollution/difficulty/asteroids/unitGroup/pathFinder
   keys; those remain carried opaquely via `opaqueTailB64`.
 
-`src/model/convert.ts:50` swaps the `writeEnemyToTail(...)` call for
-`writeMapSettingsToTail(tail, preset.mapSettings)`. The `Preset.mapSettings`
-docstring in `src/model/types.ts` is updated to reflect that pollution,
-difficulty, and asteroids are now (partially) round-trip editable.
+Renaming `writeEnemyToTail` touches **four** references that all must be updated
+in lockstep (verified by review):
+
+- `src/model/convert.ts:8` - the import.
+- `src/model/convert.ts:50` - the call site, swapped for
+  `writeMapSettingsToTail(tail, preset.mapSettings)`.
+- `test/mapSettings.spec.ts:3` (import) and `:231-259` - two tests call
+  `writeEnemyToTail(tail, evolution, expansion)` directly; update to the new
+  `(tail, mapSettings)` signature.
+- The function's own docstring at `src/model/mapSettings.ts:289-300` (currently
+  describes enemy-only behavior) plus the `Preset.mapSettings` docstring in
+  `src/model/types.ts:49-56`.
+
+The new docstring MUST keep the "writes only these specific keys" contract
+prominent (the old `writeEnemyToTail` doc does this well): the function writes
+enemy in full plus the hand-picked pollution/difficulty/asteroids subset below,
+and deliberately does NOT touch unitGroup, pathFinder, or the other
+pollution/difficulty keys - so a future dev wiring, say, a unitGroup control is
+not misled by the "map settings" name into assuming it is already handled.
+
+Note on the `put()` undefined-guard: optional tail fields decode to `null` when
+absent (not `undefined`), and the tail is pre-populated from `opaqueTailB64`, so
+`mapSettings.X` is always a number/bool or `null` here - never `undefined`. The
+guard stays as harmless defense, but it is effectively inert for these fields; an
+absent optional arrives as `null`, `put` copies it (`null !== undefined`), and
+`writeFields` re-emits presence-byte 0 - still byte-exact. Do not over-invest
+test effort in the `undefined` path; no fixture exercises it.
 
 **Invariant preserved:** for an untouched preset every overlaid value equals the
 decoded one, so all 9 builtin fixtures still re-encode byte-for-byte. This is the
@@ -92,18 +121,38 @@ hard test gate.
 
 ### 2. Display scaling - `AdvancedTab.vue`
 
-A small `DISPLAY_SCALE` map mirroring `EVO_DISPLAY_SCALE`: percentage fields
-(`ageing`, attack-cost modifier, `diffusionRatio`, `spawningRate`,
-`spoilTimeModifier`) show `wire * 100` with a `%` suffix; tree thresholds and the
-tech price multiplier show raw. A computed getter/setter per field applies the
-scale only on set, matching the EnemyTab discipline. Round away float-multiply
-noise in the getter (as EnemyTab does).
+A small per-field `DISPLAY_SCALE` map mirroring `EVO_DISPLAY_SCALE`. A computed
+getter/setter per field applies the scale only on set, matching the EnemyTab
+discipline; round away float-multiply noise in the getter (as EnemyTab does).
+
+**Each field's scale is independently unverified** and must be confirmed by the
+oracle pass rather than by applying one uniform x100 rule (review finding - the
+x100 "percent" idea has no in-repo precedent; EnemyTab only ever scales by
+1e7/1e5). Working hypotheses, each flagged in code for verification:
+
+- Likely percent (x100): `ageing`, attack-cost modifier, `spawningRate`.
+- Likely raw: `minPollutionToDamageTrees`, `pollutionPerTreeDamage`,
+  `technologyPriceMultiplier`.
+- **Explicitly suspect, must be resolved in-game:**
+  - `technologyPriceMultiplier` (raw) vs `spoilTimeModifier` (percent) - both are
+    `difficulty_settings` multipliers defaulting to 1, so treating them
+    differently is a red flag; one is probably wrong.
+  - `diffusionRatio` (default 0.02, a genuine ratio, not a unit-multiplier) - the
+    game may show it as `2`, `0.02`, or `2%`; do not assume it shares the
+    modifier x100 rule.
+
+The no-op boundary matters: whatever scale is chosen, re-setting the displayed
+value of an untouched field must write back the exact decoded f64 (e.g. display
+`2` -> `0.02`) so re-encoding stays byte-exact. This is locked in by a test
+(below).
 
 ### 3. UI sections - `AdvancedTab.vue`
 
 Reuse `EnemyValueRow`, `FCheckbox`, `FInfo`. Sections in order:
 
-- **Map size** - existing Width/Height (`FNumberInput`); tidy only.
+- **Map size** - existing Width/Height (`FNumberInput`); tidy only. MUST keep the
+  `map-width` / `map-height` `data-test` hooks (asserted by
+  `test/advancedTab.spec.ts`).
 - **Technology** - Price Multiplier.
 - **Pollution** - `enabled` checkbox, then the 5 value rows; each child row
   `:disabled` when `pollution.enabled` is false (mirrors enemy-section gating).
@@ -119,11 +168,22 @@ tooltip.
 
 - For each new editable field: decode a preset -> set the field -> encode ->
   decode, and assert the value round-trips.
-- Untouched-preset byte-exactness: extend / rely on the existing builtin-fixture
-  re-encode assertions to prove the generalized overlay changed no bytes.
-- Component: bindings write the wire value at the correct scale (e.g. setting the
-  displayed `2` for diffusion writes `0.02`); pollution gating disables the child
-  rows when `enabled` is false.
+- Untouched-preset byte-exactness: the existing `presetToEncodable round-trips`
+  test over all 9 builtin fixtures (`test/encode.spec.ts:96-102`) already gates
+  this - confirm it still passes after the overlay generalization (it is the real
+  regression net; the fixtures may not all contain e.g. asteroids keys, but the
+  structural no-op guarantee plus this test covers the sections they do contain).
+- **Falsy / no-op edits** (mirroring the existing `enemyExpansion` guards at
+  `test/convert.spec.ts:26-38`):
+  - `pollution.enabled = false` round-trips as **present-false**, not absent
+    (the `{ optional: "bool" }` path writes presence=1/value=0 -
+    `fieldSchema.ts:70-77` - it does not collapse `false` to absent).
+  - a numeric pollution field set to `0` survives the round-trip.
+  - a display-scale no-op boundary: re-setting the displayed value of an
+    untouched percent field writes back the exact decoded f64 and re-encodes
+    byte-identically (e.g. diffusion displayed `2` -> `0.02`).
+- Component: bindings write the wire value at the correct scale; pollution gating
+  disables the child rows when `enabled` is false.
 
 ## Oracle verification
 
