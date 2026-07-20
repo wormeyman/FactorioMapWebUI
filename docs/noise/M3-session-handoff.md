@@ -28,9 +28,36 @@ hypothesis: singleton-per-spot (U = draw0 seeded from the spot's own x,y, fits
 selectSpots' per-spot closure); fallback = batch all region spots. Resolve against
 the oracle in Task 4, record the winner in random-penalty-NOTES.md.
 
-### NEXT / IN PROGRESS
-Executing M3a task-by-task on `feat/m3-resources` (see the plan). Progress tracked
-below as tasks land.
+### M3a EXECUTION PROGRESS (on feat/m3-resources)
+- **Task 1 DONE** (commit 4e7c4d8): `src/noise/resources/resourceCatalog.ts` - 6 param sets.
+- **Task 2 DONE** (103e45f): `src/noise/resources/resourceMath.ts` - distance/amplitude
+  local functions + basement_value; added `startingRqFactor` to the catalog.
+- **Task 3 DONE** (5b1d879): pure-regular oracle fixture
+  `test/fixtures/oracle-resource-regular.seed123456.json` +
+  `captureResourceRegular`. Samples the WHOLE of region (1,1) at stride 16 (patches
+  are sparse - a handful per 1024^2 region - so a local window sampled only basement).
+- **Task 4 CORE DONE, WIP** (238acd7): `src/noise/resources/regularPatches.ts`
+  (`makeRegularPatches`). **The M3a unknown is RESOLVED**: random_penalty inside
+  spot selection is a BATCH over all skip-set accepted spots in acceptance order
+  (seeded from spot[0], streamed) - NOT per-spot. Added `quantityBatch` to
+  `selectSpots`. Oracle error dropped 3e-1 -> ~2e-3.
+  - **REMAINING on Task 4**: a ~1e-3 residual (up to ~5e-2 at one cone edge). Cause:
+    the game's noise register machine is **f32** through the whole selection math
+    (density -> regional target -> trim accumulation -> per-spot quantity -> cone
+    peak/slope), so the last-kept spot at the trim boundary and the cone-edge
+    zero-crossings differ from the f64 port. `test/regularPatches.spec.ts` is
+    `describe.skip` (branch stays green). **NEXT: f32-emulate the selection math**
+    (wrap the density/target/trim/quantity/cone chain in Math.fround following the
+    register program - a partial fround of just the cone step did NOT help, so it
+    must be the whole chain, likely starting at quantityBase/density/target), re-run
+    the spec, tighten to ~1e-5, un-skip. If f32 emulation stalls, the field is
+    already render-adequate (>=0.5 footprint shifts <1px) - could ship M3a on the
+    ~2e-3 field and revisit.
+- **Tasks 5-10 TODO** (plan has full concrete steps): resolveResource (order-priority
+  overlay winner), resourceReads (controls from preset), renderResources (overlay),
+  worker `view:"resources"` wiring, UI Resources toggle, eyeball.
+
+Full suite: 642 passed / 4 skipped. `vp check` clean. Nothing pushed/deployed.
 
 ## Decisions locked (in the spec)
 
