@@ -56,4 +56,32 @@ describe("expressionInRange reproduces the native builtin", () => {
     }
     expect(worst, "worst 2-D residual").toBeLessThan(FLOOR);
   });
+
+  // Formula-consistency guard for sand-1's real production call:
+  //   expression_in_range(5, inf, elevation, aux, -1.5, 0.5, 1.5, 1)
+  // Every oracle sweep above uses symmetric ranges [-0.5, 0.5] on both axes; sand-1
+  // uses asymmetric, wider-than-1 ranges and pmax=inf. This is NOT an oracle test
+  // (no fixture covers this shape) - it asserts the implementation against the
+  // derived formula computed by hand:
+  //   m = min(min(elev - (-1.5), 1.5 - elev), min(aux - 0.5, 1 - aux))
+  //   result = min(inf, 5 * m)  ==  5 * m  (never clamped)
+  it("matches the hand-derived formula for sand-1's asymmetric, unbounded 2-D shape", () => {
+    // Inside both ranges: elev=0 (edge dist 1.5), aux=0.75 (edge dist 0.25).
+    // m = min(1.5, 0.25) = 0.25 -> result = 5 * 0.25 = 1.25 (exceeds 1, not clamped).
+    expect(expressionInRange(5, Infinity, [0, 0.75], [-1.5, 0.5], [1.5, 1])).toBeCloseTo(1.25, 10);
+
+    // Outside on the aux axis only: elev=0 (edge dist 1.5, still inside),
+    // aux=1.2 (edge dist min(0.7, -0.2) = -0.2, outside the high edge).
+    // m = min(1.5, -0.2) = -0.2 -> result = 5 * -0.2 = -1.0, driven by aux via min.
+    expect(expressionInRange(5, Infinity, [0, 1.2], [-1.5, 0.5], [1.5, 1])).toBeCloseTo(-1.0, 10);
+
+    // Outside on the elev axis only: elev=2 (edge dist min(3.5, -0.5) = -0.5,
+    // outside the high edge), aux=0.75 (edge dist 0.25, still inside).
+    // m = min(-0.5, 0.25) = -0.5 -> result = 5 * -0.5 = -2.5, driven by elev via min.
+    expect(expressionInRange(5, Infinity, [2, 0.75], [-1.5, 0.5], [1.5, 1])).toBeCloseTo(-2.5, 10);
+
+    // The in-range point must NOT be clamped to 1 - that's the whole point of
+    // pmax=inf letting sand-1's coastal term win over land tiles topping out near 1.
+    expect(expressionInRange(5, Infinity, [0, 0.75], [-1.5, 0.5], [1.5, 1])).toBeGreaterThan(1);
+  });
 });

@@ -55,10 +55,38 @@ in-range max exceeds 1.
 
 ### 2-D combination, `(pm=20, pmax=1)`, both ranges `[-0.5, 0.5]`
 
-Hold `expr1 = x/1000 = 0.2` (intermediate, in range) and sweep `expr2 = y/1000`
-across and beyond its range; plus a diagonal `x=y` sweep. This distinguishes the
-combination rule decisively. Against the held-`x` family, the three candidates
-predict (before the `pmax` clamp):
+The fixture's `twoD` sweep (`test/fixtures/oracle-expression-in-range.seed123456.json`)
+has two families: hold `expr1 = x/1000 = 0.2` (intermediate, in range) and sweep
+`expr2 = y/1000` across and beyond its range; plus a diagonal `x = y` sweep where
+both axes vary together. Only the diagonal is decisive - the held-`x` family is
+confirmatory but does NOT by itself distinguish the candidates, because `x = 0.2`
+saturates: its per-dim raw peak is `20 * 0.3 = 6`, clamped to `peak_maximum = 1`
+before it can combine with anything, so at that saturation `min` and a
+"product-of-clamped-per-dim-peaks" rule happen to agree.
+
+The diagonal points (both dims at the same, non-saturated, intermediate edge
+distance) are what actually pin the rule. Reading the fixture at `x = y = 475` and
+`x = y = 525` (edge distance `±0.025`, well inside the linear, unclamped region):
+
+| `x = y` | edge distance | oracle (fixture)      | `min` | `product` | `sum`  |
+|---------|----------------|-----------------------|-------|-----------|--------|
+| 475     | +0.025         | `0.5000001192092896`  | 0.5   | 0.25      | 1.0    |
+| 525     | -0.025         | `-0.4999995231628418` | -0.5  | +0.25     | -1.0   |
+
+(`product` and `sum` here are `(pm * ed_x) * (pm * ed_y)` and `(pm * ed_x) + (pm *
+ed_y)` respectively, evaluated before any `pmax` clamp - the same construction as
+the held-`x` table below.)
+
+`min` matches both points; `sum` is wrong at both. `product` is wrong at `x=475`
+and, decisively, at `x=525` it produces a **sign flip**: two symmetric
+out-of-range edge distances (`-0.025` on each axis) multiply to a *positive*
+`+0.25`, while the oracle stays negative (`~-0.5`). No product-style rule can
+reproduce a value that stays negative when both inputs are negative - this single
+point eliminates every product variant. `sum` is separately falsified by its own
+magnitude mismatch throughout.
+
+Against the held-`x` family (confirmatory only, since `x` saturates), the three
+candidates predict (before the `pmax` clamp):
 
 | `ey`   | oracle | `min` | `product` | `sum` |
 |--------|--------|-------|-----------|-------|
@@ -66,8 +94,9 @@ predict (before the `pmax` clamp):
 | -0.750 |  -5.0  |  -5.0 | -30.0     |  1.0  |
 | -0.525 |  -0.5  |  -0.5 |  -3.0     |  1.0  |
 
-`min` matches exactly; `product` and `sum` diverge by wide margins. The N-D rule is
-`min` across dimensions.
+`min` matches exactly here too; `product` and `sum` diverge by wide margins. The
+N-D rule is `min` across dimensions, and the diagonal `x=525` sign flip is the
+single strongest piece of evidence for it.
 
 ## Residuals
 
