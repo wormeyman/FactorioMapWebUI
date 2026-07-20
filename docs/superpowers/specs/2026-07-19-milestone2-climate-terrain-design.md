@@ -111,7 +111,13 @@ refactored to consume them.
 
 **Hard invariant:** `test/elevationNauvis.spec.ts` oracle parity must stay byte-identical
 (worst far-field 4.08e-3, near-spawn 1e-4 bound). This is a pure extraction with zero
-numeric change; a drift is a real regression.
+numeric change; a drift (e.g. from float re-association) is a real regression.
+
+**offset_x hazard (review N5):** in `elevationNauvis.ts`, `offsetX = 10000/nauvisSeg` is
+applied to `detail`/`persistance` but NOT to `hills`/`bridgeBillows`. The new
+`forest_path_billows` (seed 1800, `input_scale=nauvisSeg/100`) also has NO offset_x in the
+game. The shared billow builders must keep `offsetX: 0` and must not inherit the elevation
+module's `offsetX`.
 
 ### Layer 2 - climate expressions
 
@@ -125,6 +131,16 @@ Control reads come from the preset's `property_expression_names` / autoplace con
 `control:aux:{frequency,bias}`, `control:starting_area_moisture:{size,frequency}`,
 `control:water:frequency`. A climate-control read helper (mirroring `climateControls.ts`)
 resolves these with the game's defaults when absent.
+
+**Model gap (review S4):** `climateControls.ts` today only models moisture + aux (terrain
+type). `control:temperature:*` and `control:starting_area_moisture:*` are NOT in the app
+model and not UI-editable. The read helper must supply the game defaults explicitly:
+temperature `frequency=1, bias=0`; starting_area_moisture `size=1, frequency=1`. Useful
+consequence: at `starting_area_moisture:size=1`, `slider_to_linear(1,-0.5,0.5)=0`, so
+`moisture_adjusted_bias` collapses to `base_bias` everywhere and the entire
+`distance`/`starting_bias_region` path is degenerate at defaults. Port `distance` for
+faithfulness, but do not over-invest in validating a starting-area-moisture path no current
+UI control can exercise.
 
 ### Layer 3 - tile helpers
 
@@ -146,19 +162,44 @@ pixel, evaluates elevation + aux + moisture once, resolves the winning tile, and
 its `map_color`. A "Terrain" view toggle alongside the current elevation water/land view
 on the preview panel. Reuses the Web Worker + canvas plumbing.
 
+**Performance (review S3 - the milestone's real feasibility risk).** The 19 land tiles each
+carry a `noise_layer_noise` = a 4-octave `multioctave_noise` (~4 basis evals each), so ~76
+basis evaluations per pixel for jitter alone, plus 3 climate `quick_multioctave` (~12) and
+the elevation tree - a large multiple over today's elevation-only render, at 1024². Bake in
+from the start:
+- **Water early-out:** where `water_base >= ~1.67`, water/deepwater necessarily wins argmax
+  (land tops out at `peak_maximum(1) + noise_layer_noise(±~0.67)`), so skip all 19 land
+  noise layers for open-water pixels - most of a typical Nauvis preview. Concretely: compute
+  elevation first; if `elevation <= -~1.67/... ` (i.e. deepwater/water clearly dominate),
+  emit the water color without evaluating land.
+- Measure the render time as an explicit task deliverable before any further optimization
+  (tiling / progressive downsample / per-region caching). The render already runs in a Web
+  Worker so the UI will not freeze, but a multi-second terrain render should be a measured,
+  accepted number, not a surprise.
+
 ## The one unknown: reverse-engineering `expression_in_range`
 
 `expression_in_range(peak_multiplier, peak_maximum, expr_1..N, from_1..N, to_1..N)` is a
 native builtin with no published formula. RE it via the oracle exactly as the primitives
-were:
+were. The harness supports it directly: an arbitrary probe expression is embedded and
+routed onto `elevation`, so `expression_in_range(20, 1, x/1000, -0.5, 0.5)` (etc.) is
+samplable over a swept input.
 
-1. Route `expression_in_range(pm, pmax, <controlled expr>, from, to)` onto `elevation`
-   and sample over a swept input (e.g. expr = `x/1000`) for the 1-D case: recover the
-   peak shape (value inside `[from,to]`, falloff slope outside, role of `peak_multiplier`
-   and `peak_maximum`).
-2. Then the N-D combination (how multiple expr/range pairs combine - hypothesis: min-like
-   AND across dimensions) with a 2-D sweep.
-3. Port as `expressionInRange`, validate against the oracle to the noise floor.
+1. **1-D peak shape**, `(pm=20, pmax=1)`: sweep `expr=x/1000` across and beyond `[from,to]`;
+   recover the value inside the range, the falloff slope outside, and how `peak_multiplier`
+   sets the slope and `peak_maximum` caps the peak.
+2. **The unbounded case (review S1 - REQUIRED, not optional):** also sweep `(pm=5, pmax=inf)`
+   - `sand-1`'s coastal term is `expression_in_range(5, inf, elevation, aux, -1.5, 0.5, 1.5, 1)`.
+   With `peak_maximum=inf` this term is unbounded (evaluates to ~`peak_multiplier` ≈ 5 in
+   range), which is precisely what lets sand win on beaches over land tiles that top out
+   near 1. An RE that hard-clamps to 1 silently kills sand-1's coastal boost. The fixture
+   MUST include a `pmax=inf` sweep and confirm the no-clamp branch.
+3. **N-D combination**, explicitly distinguish `min` vs `product` vs `sum` across dimensions:
+   a 2-D sweep holding one axis at an intermediate (NOT saturated) in-range value while
+   sweeping the other partially out of range - `min(a,b)` and `a*b` predict different curves
+   there. Both production parametrizations use 2 expr/range pairs.
+4. Port as `expressionInRange` (handling finite and `inf` `peak_maximum`), validate against
+   the oracle to the noise floor for both `(20,1)` and `(5,inf)`.
 
 **This is the critical-path task and is sequenced FIRST.** If the formula proves more
 involved than a clamped triangular peak, that is a real finding to resolve before the
@@ -166,16 +207,34 @@ tile layer can be faithful - not a step to approximate past.
 
 ## Validation
 
+Three decoupled checks (review S2 - do not conflate them into one fuzzy "visual" bar):
+
 - **Climate values:** oracle-sample `temperature`, `moisture`, `aux` at a grid for
-  seed 123456 (near-origin + far rings), assert `makeTemperature/Moisture/Aux` match to
-  the f32 floor (like elevation). Fixtures under `test/fixtures/`.
-- **`expression_in_range`:** oracle fixture of the swept peak; parity test to the floor.
-- **Tile assignment (end-to-end):** compare the client terrain render against the server
-  `--generate-map-preview` for the default preset at a fixed seed. The preview-service
-  already produces that reference image. Agreement bar: visually faithful, with
-  per-pixel color matching away from tile-boundary jitter (the `noise_layer_noise` seams
-  are where small numeric drift flips a tile - expected, matches the elevation coastline
-  caveat).
+  seed 123456 (near-origin + far rings) via the existing `calculate_tile_properties`
+  route-onto-elevation path, assert `makeTemperature/Moisture/Aux` match to the f32 floor
+  (like elevation). Fixtures under `test/fixtures/`.
+- **`expression_in_range`:** oracle fixture of the swept peaks (both `(20,1)` and
+  `(5,inf)`); parity test to the floor.
+- **Tile selection (PRIMARY, exact - review S2):** the existing harness `calculate_tile_properties`
+  returns noise property values only, NOT the placed tile. Add a NEW oracle path that
+  generates chunks (`request_to_generate_chunks` + `force_generate_chunk_requests`) and
+  reads `surface.get_tile(pos).name`, dumping the actual placed tile per position. Assert
+  `resolveTile` argmax matches `get_tile().name` per point. This is an exact,
+  lighting-independent per-pixel check and also settles empirically the order/layer/threshold
+  question (review N3: tiles carry a `layer` field; do not rely on the docs claim that
+  `order` is irrelevant - let `get_tile` be the arbiter).
+- **Palette:** static exact lookup from `tiles.lua` `map_color` (verified correct); no
+  oracle needed.
+- **Compositing sanity (secondary):** compare the final client terrain image against the
+  server `--generate-map-preview`. The preview-service produces that reference, but it may
+  apply lighting/shading the raw `map_color` does not, so this only sanity-checks
+  compositing - the exact correctness gate is the `get_tile` check above.
+
+**Coastline note (review N2):** under argmax, land (max ≈ `1 + noise_layer_noise` ≈ 1.67)
+beats `water_base(0,100)` until `elevation < ~ -0.017`, and deepwater beats water at
+`elevation < ~ -2.5`. So the water/land line sits near `elevation ≈ -0.017`, not exactly 0
+- a slight shift from the M1 binary mask's threshold. This is faithful to the game; the
+validation task should expect it, not treat a ~1-pixel coastline shift as a bug.
 
 ## Out of scope
 
@@ -199,9 +258,19 @@ tile layer can be faithful - not a step to approximate past.
 ## Open risks
 
 - **`expression_in_range` shape** - the only true unknown; mitigated by sequencing it
-  first. If N-D combination is not simple min, the tile faithfulness depends on getting
-  it right.
-- **`--generate-map-preview` color exactness** - the server may apply lighting/shading
-  the raw `map_color` doesn't capture; the comparison bar is visual faithfulness, and we
-  may need to compare against raw tile IDs (if the oracle can dump the placed tile) as a
-  stricter check. Flagged for the plan's validation task.
+  first and by RE'ing both the `(20,1)` and unbounded `(5,inf)` parametrizations. If the
+  N-D combination is not a simple min, tile faithfulness depends on getting it right.
+- **Render performance** - the review's assessment is that the 19x `noise_layer_noise`
+  cost is a larger feasibility risk than `expression_in_range`. The water early-out plus an
+  explicit render-time measurement task mitigate it; further optimization is deferred until
+  measured.
+- **Tile selection edge cases** - `order`/`layer`/threshold behavior is settled empirically
+  by the `get_tile` oracle rather than by the docs, so the argmax model is validated against
+  ground truth, not assumed.
+
+## Dependency graph (for the plan's sequencing / possible parallelism)
+
+Climate ports (Layer 2) depend on the Layer-1 refactor but NOT on `expression_in_range`, so
+they can proceed alongside the RE. The critical path is: RE `expression_in_range` -> tile
+helpers -> tile catalog + `resolveTile` -> terrain render. The `get_tile` oracle path is
+independent and can be built early.
