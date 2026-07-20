@@ -71,4 +71,32 @@ describe("elevationCtxFromPreset", () => {
     p.startingPoints = [];
     expect(elevationCtxFromPreset(p).ctx.startingPositions).toEqual([{ x: 0, y: 0 }]);
   });
+
+  it("defaults the climate fields (freq 1, bias 0, starting-area size/freq 1) when the pen is empty", () => {
+    const r = elevationCtxFromPreset(lakesPreset());
+    expect(r.ctx.moistureFrequency).toBe(1);
+    expect(r.ctx.moistureBias).toBe(0);
+    expect(r.ctx.auxFrequency).toBe(1);
+    expect(r.ctx.auxBias).toBe(0);
+    expect(r.ctx.startingAreaMoistureSize).toBe(1);
+    expect(r.ctx.startingAreaMoistureFrequency).toBe(1);
+  });
+
+  it("reads control:aux/moisture/starting_area_moisture:* off the preset's property_expression_names", () => {
+    const p = lakesPreset();
+    p.propertyExpressionNames["control:aux:frequency"] = "4.000000";
+    p.propertyExpressionNames["control:aux:bias"] = "-0.300000";
+    p.propertyExpressionNames["control:moisture:frequency"] = "0.500000";
+    p.propertyExpressionNames["control:moisture:bias"] = "0.450000";
+    p.propertyExpressionNames["control:starting_area_moisture:size"] = "2.000000";
+    p.propertyExpressionNames["control:starting_area_moisture:frequency"] = "3.000000";
+
+    const r = elevationCtxFromPreset(p);
+    expect(r.ctx.auxFrequency).toBe(4);
+    expect(r.ctx.auxBias).toBeCloseTo(-0.3, 6);
+    expect(r.ctx.moistureFrequency).toBe(0.5);
+    expect(r.ctx.moistureBias).toBeCloseTo(0.45, 6);
+    expect(r.ctx.startingAreaMoistureSize).toBe(2);
+    expect(r.ctx.startingAreaMoistureFrequency).toBe(3);
+  });
 });

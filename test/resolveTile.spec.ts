@@ -89,3 +89,67 @@ describe("makeTileResolver reproduces the game's get_tile ground truth", () => {
     }
   });
 });
+
+// Task 12b: prove the new climate params actually thread through to the
+// resolver's argmax, and that supplying them at their game defaults is a
+// no-op (byte-identical to the Task 10 default-only call above).
+describe("makeTileResolver threads climate controls through to the argmax", () => {
+  const seed0 = 123456;
+  // A grid of points wide enough that a strong aux/moisture bias shift is
+  // certain to flip at least one tile's argmax winner (aux/moisture drive
+  // most of the 21-tile catalog's expression_in_range boxes - see catalog.ts).
+  const SAMPLE_POINTS: Array<{ x: number; y: number }> = [];
+  for (let x = -2000; x <= 2000; x += 200) {
+    for (let y = -2000; y <= 2000; y += 200) {
+      SAMPLE_POINTS.push({ x, y });
+    }
+  }
+
+  it("a strongly shifted aux bias changes the resolved tile at some sample point", () => {
+    const defaultResolve = makeTileResolver({ seed0 });
+    const shiftedResolve = makeTileResolver({ seed0, auxBias: 0.5 });
+
+    const anyDifferent = SAMPLE_POINTS.some(
+      ({ x, y }) => defaultResolve(x, y).name !== shiftedResolve(x, y).name,
+    );
+    expect(anyDifferent).toBe(true);
+  });
+
+  it("a strongly shifted moisture bias changes the resolved tile at some sample point", () => {
+    const defaultResolve = makeTileResolver({ seed0 });
+    const shiftedResolve = makeTileResolver({ seed0, moistureBias: 0.5 });
+
+    const anyDifferent = SAMPLE_POINTS.some(
+      ({ x, y }) => defaultResolve(x, y).name !== shiftedResolve(x, y).name,
+    );
+    expect(anyDifferent).toBe(true);
+  });
+
+  it("a shifted aux frequency changes the resolved tile at some sample point", () => {
+    const defaultResolve = makeTileResolver({ seed0 });
+    const shiftedResolve = makeTileResolver({ seed0, auxFrequency: 4 });
+
+    const anyDifferent = SAMPLE_POINTS.some(
+      ({ x, y }) => defaultResolve(x, y).name !== shiftedResolve(x, y).name,
+    );
+    expect(anyDifferent).toBe(true);
+  });
+
+  it("passing the climate params at their game defaults is a no-op (matches the bare call)", () => {
+    const bare = makeTileResolver({ seed0 });
+    const explicitDefaults = makeTileResolver({
+      seed0,
+      moistureFrequency: 1,
+      moistureBias: 0,
+      auxFrequency: 1,
+      auxBias: 0,
+      startingAreaMoistureSize: 1,
+      startingAreaMoistureFrequency: 1,
+      startingPositions: [{ x: 0, y: 0 }],
+    });
+
+    for (const { x, y } of SAMPLE_POINTS) {
+      expect(explicitDefaults(x, y).name).toBe(bare(x, y).name);
+    }
+  });
+});

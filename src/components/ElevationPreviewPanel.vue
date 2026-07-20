@@ -65,6 +65,12 @@ async function generate() {
       waterLevel: info.ctx.waterLevel,
       segmentationMultiplier: info.ctx.segmentationMultiplier,
       startingPositions: info.ctx.startingPositions,
+      moistureFrequency: info.ctx.moistureFrequency,
+      moistureBias: info.ctx.moistureBias,
+      auxFrequency: info.ctx.auxFrequency,
+      auxBias: info.ctx.auxBias,
+      startingAreaMoistureSize: info.ctx.startingAreaMoistureSize,
+      startingAreaMoistureFrequency: info.ctx.startingAreaMoistureFrequency,
     });
     const el = canvas.value;
     const g = el?.getContext("2d");

@@ -79,6 +79,7 @@ export function renderTerrain(opts: RenderTerrainOptions): ImageData {
   const elevationAt = makeElevationNauvis({
     seed0,
     segmentationMultiplier: opts.ctx?.segmentationMultiplier,
+    startingPositions: opts.ctx?.startingPositions,
   });
   const catalog = makeTileCatalog(seed0);
   const deepwaterTile = catalog.find((t) => t.name === "deepwater")!;

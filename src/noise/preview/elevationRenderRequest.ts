@@ -16,6 +16,17 @@ export interface ElevationRenderRequest {
   startingPositions: Point[];
   /** Omitted => the game's real lake positions are computed inside the render. */
   startingLakePositions?: Point[];
+  /**
+   * Climate controls (Task 12b) - consumed only when `view: "terrain"`; the
+   * elevation renderers ignore these. Each defaults to the game's default
+   * (freq 1, bias 0, starting-area size/frequency 1) when omitted.
+   */
+  moistureFrequency?: number;
+  moistureBias?: number;
+  auxFrequency?: number;
+  auxBias?: number;
+  startingAreaMoistureSize?: number;
+  startingAreaMoistureFrequency?: number;
   /** Which elevation tree to render. Default "lakes". */
   mapType?: "lakes" | "nauvis" | "island";
   /**
@@ -51,7 +62,16 @@ export function runRenderRequest(req: ElevationRenderRequest): ElevationRenderRe
           originX: req.originX,
           originY: req.originY,
           tilesPerPixel: req.tilesPerPixel,
-          ctx: { segmentationMultiplier: req.segmentationMultiplier },
+          ctx: {
+            segmentationMultiplier: req.segmentationMultiplier,
+            startingPositions: req.startingPositions,
+            moistureFrequency: req.moistureFrequency,
+            moistureBias: req.moistureBias,
+            auxFrequency: req.auxFrequency,
+            auxBias: req.auxBias,
+            startingAreaMoistureSize: req.startingAreaMoistureSize,
+            startingAreaMoistureFrequency: req.startingAreaMoistureFrequency,
+          },
         })
       : renderElevation({
           seed0: req.seed0,
