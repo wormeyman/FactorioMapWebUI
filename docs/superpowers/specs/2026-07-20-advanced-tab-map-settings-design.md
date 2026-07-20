@@ -39,33 +39,65 @@ display-scaling (`EVO_DISPLAY_SCALE`) where the map GUI shows a scaled value
 while the wire stays raw - the scale is applied only on set so an untouched
 import stays byte-exact.
 
-## Field mapping (GUI label -> wire key)
+## Field mapping (GUI label -> wire key) - ORACLE VERIFIED 2026-07-20
 
-| GUI label | wire key | default | display |
-|---|---|---|---|
-| Width / Height | `Preset.width` / `Preset.height` | 2000 | raw (already wired) |
-| Technology > Price Multiplier | `difficulty.technologyPriceMultiplier` | 1 | raw multiplier |
-| Pollution > Pollution | `pollution.enabled` | true | checkbox |
-| Absorption modifier | `pollution.ageing` | 1 | percent (x100) |
-| Attack cost modifier | `pollution.enemyAttackPollutionConsumptionModifier` | 1 | percent (x100) |
-| Minimum to damage trees | `pollution.minPollutionToDamageTrees` | 60 | raw |
-| Absorbed per damaged tree | `pollution.pollutionPerTreeDamage` | 50 | raw |
-| Diffusion ratio | `pollution.diffusionRatio` | 0.02 | percent (x100) |
-| Asteroids > Spawning rate | `asteroids.spawningRate` | 1 | percent (x100) |
-| Spoiling > Spoiling rate | `difficulty.spoilTimeModifier` | 1 | percent (x100) |
+Verified in-game (Factorio 2.1.9): labels + tooltips from the core locale
+`[gui-map-generator]` section; display scales and slider ranges by reading the
+map-gen Advanced GUI; the label->wire-field mapping by importing a sentinel
+exchange string (one unique value per field) and reading each control.
 
-Defaults confirmed from `test/fixtures/map-settings.example.json`.
+| GUI label | wire key | control | scale | range (display) |
+|---|---|---|---|---|
+| Width / Height | `Preset.width` / `Preset.height` | number box | raw | (already wired) |
+| Technology > Price multiplier | `difficulty.technologyPriceMultiplier` | number box | raw | 1 - 100000 |
+| Pollution (enable) | `pollution.enabled` | checkbox | - | - |
+| Absorption modifier | `pollution.ageing` | slider+box | percent (x100) | 10 - 400% |
+| Attack cost modifier | `pollution.enemyAttackPollutionConsumptionModifier` | slider+box | percent (x100) | 10 - 400% |
+| Minimum to damage trees | `pollution.minPollutionToDamageTrees` | slider+box | raw | 0 - 9999 |
+| Absorbed per damaged tree | `pollution.pollutionRestoredPerTreeDamage` | slider+box | raw | 0 - 9999 |
+| Diffusion ratio | `pollution.diffusionRatio` | slider+box | percent (x100) | 0 - 25% |
+| Asteroids > Spawning rate | `asteroids.spawningRate` | slider+box | percent (x100) | 10 - 400% |
+| Spoiling > Spoiling rate | `difficulty.spoilTimeModifier` | slider+box | percent INVERSE (100/wire) | 10 - 1000% |
 
-**Inferred pieces that the oracle pass must confirm:** the "Absorption modifier"
--> `ageing` mapping; the display scale of each field (see the display-scaling
-section for the specifically-suspect cases); and "Absorbed per damaged tree" ->
-`pollutionPerTreeDamage` (50) versus the sibling `pollutionRestoredPerTreeDamage`
-(10). The chosen reading ("absorbed" = pollution consumed on damage; "restored"
-is tree-regrowth) is the more likely one but is not resolvable from repo files -
-it needs the game/locale oracle. **Failure mode to note:** a wrong label still
-round-trips byte-exact, so no test catches a mislabel; only in-game reading does.
-Slider ranges/steps and the verbatim tooltip strings also come from the game. See
-"Oracle verification" below.
+Two findings overturned the pre-oracle guesses:
+
+- **"Absorbed per damaged tree" is `pollutionRestoredPerTreeDamage`, NOT
+  `pollutionPerTreeDamage`.** Sentinel had per=44 / restored=10 (default); the GUI
+  field showed 10, i.e. it tracks our `restored` field. The overlay and UI target
+  `pollutionRestoredPerTreeDamage`; `pollutionPerTreeDamage` stays carried opaquely.
+- **Spoiling rate is displayed as the INVERSE of the wire value:**
+  `display% = round(100 / spoilTimeModifier)` (wire is spoil *time*, GUI shows
+  *rate*). Sentinel `spoilTimeModifier=0.77` displayed 130% (100/0.77). Setting
+  rate R% writes `wire = 100 / R`. This field does NOT use the linear `scaled()`
+  helper; it needs its own inverse getter/setter.
+
+The other seven mappings/scales read exactly as predicted on sentinel import
+(Absorption 11%, Attack 22%, Diffusion 5%, Min-to-damage 33, Price 3, Spawning
+66%, and the Absorbed/Spoiling above).
+
+Verbatim tooltip strings (core locale, use as `FInfo` text):
+
+- Price multiplier: (no dedicated map-gen tooltip; omit `info` or leave empty)
+- Pollution: `Controls whether pollution is enabled.\nNote: Disabled pollution will disable some achievements.`
+- Absorption modifier: `Modifier of how much pollution is absorbed by trees and tiles.\nNote: A value higher than 100% will disable some achievements.`
+- Attack cost modifier: `Modifier of how much pollution is consumed to send a biter to attack.\nNote: A value higher than 100% will disable some achievements.`
+- Minimum to damage trees: `Trees have 4 different progressive stages toward being destroyed by pollution. Any pollution above this amount starts the process of moving a tree toward a more damaged stage.` (drop the achievement note - its threshold is a runtime placeholder)
+- Absorbed per damaged tree: `Trees have 4 different progressive stages toward being destroyed by pollution. This value specifies how much pollution is absorbed when moving to a more damaged stage.`
+- Diffusion ratio: `The amount of pollution diffused into neighboring chunks per second.`
+- Spawning rate: `Rate at which asteroids spawn in space.`
+- Spoiling rate: `Rate at which spoilable items spoil.`
+
+Defaults (from `test/fixtures/map-settings.example.json`): ageing 1,
+enemy_attack...modifier 1, min_pollution_to_damage_trees 60,
+pollution_restored_per_tree_damage 10, diffusion_ratio 0.02, spawning_rate 1,
+technology_price_multiplier 1, spoil_time_modifier 1.
+
+**(Historical) pre-oracle inferences:** "Absorption modifier" -> `ageing`
+(CONFIRMED); "Absorbed per damaged tree" -> `pollutionPerTreeDamage` (WRONG - the
+oracle proved it is `pollutionRestoredPerTreeDamage`); all display scales assumed
+linear x100 (WRONG for Spoiling rate, which is inverse). These are why the oracle
+pass mattered: a wrong label/scale still round-trips byte-exact, so no unit test
+catches it - only in-game reading does.
 
 ## Components
 
@@ -80,8 +112,9 @@ Generalize `writeEnemyToTail` into `writeMapSettingsToTail(tail, mapSettings)`:
 - Adds overlays for the newly-editable keys only:
   - `pollution.enabled`, `pollution.ageing`,
     `pollution.enemyAttackPollutionConsumptionModifier`,
-    `pollution.minPollutionToDamageTrees`, `pollution.pollutionPerTreeDamage`,
-    `pollution.diffusionRatio`
+    `pollution.minPollutionToDamageTrees`,
+    `pollution.pollutionRestoredPerTreeDamage` (the "Absorbed per damaged tree"
+    GUI field - oracle-verified), `pollution.diffusionRatio`
   - `difficulty.technologyPriceMultiplier`, `difficulty.spoilTimeModifier`
   - `asteroids.spawningRate`
 - Does NOT write the other pollution/difficulty/asteroids/unitGroup/pathFinder
