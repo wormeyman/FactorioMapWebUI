@@ -67,6 +67,18 @@ the oracle in Task 4, record the winner in random-penalty-NOTES.md.
 **M3a COMPLETE.** Remaining M3: M3b (starting patches + `max(starting,regular)`), M3.5 (per-tile
 stipple). Branch `feat/m3-resources` still unmerged/unpushed.
 
+- **Post-M3a bug FIXED (2026-07-20, commit d0cc0e3): crescent-shaped patches near spawn.** Eric
+  spotted a lake-sized iron crescent at seed 2883961880. Root cause (systematic-debugging, decomposed
+  field into spotField+blob): `selectSpots` emitted spots with quantity <= 0, which the game skips
+  (spot-noise-NOTES.md line 320 "non-positive quantity or radius is skipped"). Near spawn, regular
+  density fades to 0 inside the 120-tile fade-in, so those spots have q=0; rendering one is
+  catastrophic because `radius = rq*fastCbrt(0)` is a tiny positive -> `peak = 3*0/(pi*r^2) = 0`,
+  `slope = 0` -> a FLAT cone=0 disk across the whole 128-tile cull radius, which beats the deep
+  basement, so the blob term lifts parts of it >0.5 -> crescent. Fix: skip `q <= 0` in selectSpots'
+  trim loop (before accumulation - not emitted, not counted toward target). Generic spot_noise, so
+  it also protects M3b/enemies. Oracle unaffected (region 1,1 is far from spawn). 3 regression tests
+  in spotSelection.spec. Iron footprint at that seed dropped 16462px crescent -> 2855px compact blobs.
+
 Perf note: the 1024² resources render took ~60s headless (single-threaded node); in-app it runs
 in the worker so it won't block the UI, but it's slow - a candidate for later optimisation
 (the terrain resolver dominates; the 6 resource fields add region-cached spot work on top).
