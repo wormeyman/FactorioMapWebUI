@@ -2,6 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import { renderElevation, WATER_RGBA, LAND_RGBA } from "../src/noise/preview/renderElevation";
 import { makeElevationLakes } from "../src/noise/expressions/elevationLakes";
 import { makeElevationNauvis } from "../src/noise/expressions/elevationNauvis";
+import { makeElevationIsland } from "../src/noise/expressions/elevationIsland";
 
 describe("renderElevation", () => {
   it("produces an ImageData of the requested size", () => {
@@ -91,5 +92,27 @@ describe("renderElevation map-type dispatch", () => {
 
     const lakesImg = renderElevation({ ...request, mapType: "lakes" as const });
     expect(Array.from(lakesImg.data)).toEqual(WATER_RGBA);
+  });
+
+  it("uses the island factory when mapType is 'island'", () => {
+    const img = renderElevation({
+      seed0: 123456,
+      width,
+      height,
+      originX,
+      originY,
+      tilesPerPixel,
+      mapType: "island",
+    });
+    const evalAt = makeElevationIsland({ seed0: 123456 });
+    for (let py = 0; py < height; py++) {
+      for (let px = 0; px < width; px++) {
+        const wx = originX + px * tilesPerPixel;
+        const wy = originY + py * tilesPerPixel;
+        const expected = evalAt(wx, wy) < 0 ? WATER_RGBA : LAND_RGBA;
+        const o = (py * width + px) * 4;
+        expect([img.data[o], img.data[o + 1], img.data[o + 2], img.data[o + 3]]).toEqual(expected);
+      }
+    }
   });
 });
