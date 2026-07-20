@@ -65,7 +65,16 @@ the oracle in Task 4, record the winner in random-penalty-NOTES.md.
   - ROADMAP M3a marked done. Full suite 661/661, `vp check` clean, all committed.
 
 **M3a COMPLETE.** Remaining M3: M3b (starting patches + `max(starting,regular)`), M3.5 (per-tile
-stipple). Branch `feat/m3-resources` still unmerged/unpushed.
+stipple).
+
+> **STATUS UPDATE (2026-07-20, late): M3a + M3b are MERGED to `main`, pushed to
+> `origin/main`, and DEPLOYED live** (Cloudflare Pages -> `map.factorygamefan.com` /
+> `factorygamefan.com`). The `feat/m3-resources` branch was fast-forwarded into
+> `main` (tip `0131aa8`). References below to the branch being "unmerged/unpushed"
+> or "nothing pushed/deployed" are superseded by this. Next work: **M3.5** (per-tile
+> placement stipple - un-RE'd entity-placement RNG) + the oil `random_probability`
+> follow-up (see the ROADMAP for the caveat that the oil probability factor alone
+> regresses the render without M3.5's roll).
 
 ### M3b (starting patches) COMPLETE (2026-07-20, tip 4cf6675)
 
@@ -138,7 +147,9 @@ Perf note: the 1024² resources render took ~60s headless (single-threaded node)
 in the worker so it won't block the UI, but it's slow - a candidate for later optimisation
 (the terrain resolver dominates; the 6 resource fields add region-cached spot work on top).
 
-Full suite: 646 passed / 0 skipped. `vp check` clean. Nothing pushed/deployed.
+Full suite: 646 passed / 0 skipped. `vp check` clean. (Later merged + pushed +
+deployed - see the STATUS UPDATE banner above; this line reflects the point in time
+before the merge.)
 The 2026-07-20 fastCbrt precision fix (fastApprox.ts + resourceMath.ts + regularPatches.ts
 + resourceMath.spec.ts + regularPatches.spec.ts un-skip) is **uncommitted** on the branch.
 
@@ -205,17 +216,23 @@ is the two build plans (M3a regular, M3b starting) - start at writing-plans for 
 ## Ground truth / recipes
 
 - Factorio bin present: `~/Library/Application Support/Steam/steamapps/common/Factorio/factorio.app/Contents/MacOS/factorio` (non-stripped, has NoiseOperations symbols).
-- **Authoritative 2.1.11 Lua source (use this one): the Steam app's own bundled
-  data**, `~/Library/Application Support/Steam/steamapps/common/Factorio/factorio.app/Contents/data/{core,base}/prototypes/*.lua`
-  (`resources.lua`, `noise-functions.lua`, `resource-autoplace.lua`, ...). It is
-  guaranteed to match the oracle binary's version since it ships alongside it.
+- **Authoritative Lua source (use this one): `~/GitHub/factorio-data`** - a local
+  clone of the official `wube/factorio-data` GitHub repo, with per-version git tags.
+  `git -C ~/GitHub/factorio-data checkout 2.1.11` gives the game Lua data exactly
+  matching the oracle binary's version; `git pull` fetches newer versions. Key files:
+  `core/prototypes/{noise-functions,noise-programs}.lua`,
+  `core/lualib/resource-autoplace.lua`, `base/prototypes/entity/resources.lua`.
+  Verify `base/info.json`'s `"version"` matches the binary (`factorio --version`)
+  before trusting it - `master` may sit a few commits past the latest tag.
+  (Secondary, also version-correct: the Steam app's bundled
+  `.../factorio.app/Contents/data/{core,base}/prototypes/*.lua`.)
 - **`~/Downloads/factorio 4/data` is STALE (Factorio 2.0.77, confirmed via its
   `base/info.json` `"version"` field) - do NOT treat it as ground truth for 2.1.11
   RE.** `starting_patches` changed between 2.0.77 and 2.1.11 (see the M3b section
   above); this dump caused the M3b plan to specify wrong starting-patch constants.
   `regular_patches` happened not to change, so M3a was unaffected - but that was
   luck, not a property of the dump. Always check `base/info.json`'s version before
-  trusting any non-Steam data dump, and prefer the Steam path above outright.
+  trusting any downloaded data dump, and prefer `~/GitHub/factorio-data` outright.
   API JSON: `~/Downloads/factorioluaapi/`.
 - Oracle harness: `test/oracle/oracle.ts` (`sampleExpression`), captures via `node --experimental-strip-types test/oracle/capture.ts`.
 - Disasm a symbol: `lldb -b -o "disassemble --name '<mangled>'" "$BIN"`.

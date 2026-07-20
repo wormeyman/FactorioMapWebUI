@@ -149,7 +149,8 @@ game's tile placement at the default preset.
 
 `spot_noise` is fully solved; this is wiring, not research.
 
-**M3a (regular whole-map patches) - DONE** (branch `feat/m3-resources`, unmerged).
+**M3a (regular whole-map patches) - DONE** (merged to `main`, pushed, deployed live
+2026-07-20).
 Spec `docs/superpowers/specs/2026-07-19-milestone3-resources-design.md`, plan
 `docs/superpowers/plans/2026-07-19-milestone3a-regular-patches.md`.
 
@@ -176,8 +177,9 @@ Spec `docs/superpowers/specs/2026-07-19-milestone3-resources-design.md`, plan
       renderTerrain's exact water decision (no re-derivation), so the ore edge lines
       up with the drawn coastline.
 
-**M3b (starting patches, near-spawn guaranteed ore) - DONE** (branch
-`feat/m3-resources`, tip 4cf6675, unmerged). Plan
+**M3b (starting patches, near-spawn guaranteed ore) - DONE** (merged to `main`,
+pushed, deployed live 2026-07-20; branch `feat/m3-resources` fast-forwarded in,
+tip `0131aa8`). Plan
 `docs/superpowers/plans/2026-07-20-milestone3b-starting-patches.md`.
 
 - [x] Ported `starting_patches` (`src/noise/resources/startingPatches.ts`) for the
@@ -232,9 +234,26 @@ M3a follow-ups (known, deferred by priority - 2026-07-20):
       `spot_size 1..1`), so it is individual wells, not a contiguous field - the
       `>= 0.5` solid footprint just makes each spot ~1 tile. Two sub-items if we
       ever want it to read as a patch: (a) our `regularPatches.probability()` does
-      NOT yet apply oil's `* (1/random_probability)` factor from the spec (so oil's
-      probability is currently the bare field, not the game's amplified-then-rolled
-      value); (b) a faithful oil look needs the M3.5 per-tile placement stipple.
+      NOT yet apply oil's probability factor from the spec; (b) a faithful oil look
+      needs the M3.5 per-tile placement stipple.
+      - **2026-07-20 finding (from `~/GitHub/factorio-data` @ 2.1.11,
+        `resource-autoplace.lua:103-105`):** for `random_probability < 1` the game
+        appends `* random_penalty{x=x, y=y, source=1, amplitude=1/random_probability}`
+        to the probability expression (and `/ random_probability` to richness - the
+        richness half is ALREADY done in `regularPatches.ts`). The `random_penalty`
+        factor is `1 - (1/rp)*U`, i.e. it is itself a per-tile ~`rp` Bernoulli baked
+        into the probability. **Applying (a) alone, with the current `>= 0.5`
+        threshold render, makes oil sparser or vanish** (the factor is `>= 0.5` for
+        only ~`rp/2` of tiles, and oil's spots are already ~1 tile), so it is NOT a
+        standalone visual win - it only pays off combined with M3.5's roll (place if
+        roll < probability). So (a) is really M3.5-prep, or wants a per-resource
+        render rule (e.g. render oil where probability `> 0`, ~`rp` density, using
+        only the already-validated `randomPenalty` primitive - a cheap approximation
+        that skips the un-RE'd placement RNG). **Decision (2026-07-20, Eric):
+        FOLD INTO M3.5** - apply the probability factor together with the RE'd
+        placement roll (place if roll < probability), validated tile-for-tile
+        against `find_entities`. Oil stays as-is (tiny dots) until M3.5; no
+        standalone change.
 
 Done = ore patches overlaid on land, responding to the frequency/size/richness sliders.
 

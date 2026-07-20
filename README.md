@@ -1,8 +1,8 @@
 # Factorio Map WebUI
 
-A static SPA for authoring and exchanging Factorio 2.1.9 (experimental) map
-generation presets. The core editor has no backend - everything runs in the
-browser. An optional, opt-in map preview service (the app's only outbound call)
+A static SPA for authoring and exchanging Factorio 2.1.x map generation presets
+(exchange-string codec format `2.1.9.3`). The core editor has no backend -
+everything runs in the browser. An optional, opt-in map preview service (the app's only outbound call)
 renders real Factorio previews via Cloudflare; the editor stays fully functional
 offline without it. See [Map preview service](#map-preview-service).
 
@@ -33,14 +33,41 @@ evolution and expansion - with the game's own display scaling (evolution factors
 shown scaled up from the tiny wire floats, cooldowns in minutes), linked min/max
 expansion distance, and in-game tooltip text on every field.
 
-The **map preview service** (`preview-service/`) is code-complete and validated
-end to end locally: clicking "Generate preview" POSTs the active preset's
-`map-gen-settings` to a Cloudflare Worker, which serves a cached PNG from R2 or
-renders one with the real Factorio 2.1.9 headless engine in a container. Only
-the live Cloudflare deploy remains as a hand-off.
+The app is **deployed and live** on Cloudflare Pages at
+[`factorygamefan.com`](https://factorygamefan.com) /
+[`map.factorygamefan.com`](https://map.factorygamefan.com), with the map preview
+service deployed alongside it.
 
-Design and phase history live in `docs/superpowers/specs/` and
-`docs/superpowers/plans/` (point-in-time records, not living docs).
+### Client-side map preview
+
+Beyond the codec editor, the app renders Factorio **2.1.11** map previews
+**entirely in the browser** - no server round-trip - by hand-porting the game's
+noise/autoplace expressions to TypeScript and validating each one point-by-point
+against a headless-Factorio oracle (`test/oracle/`). Shipped so far:
+
+- **Terrain / elevation** (M1-M2): land/water/coastline plus colored Nauvis
+  terrain tiles (grass/sand/dirt/desert variants), matching the game's tile
+  placement. All three base map types (Nauvis, Lakes, Island) render.
+- **Resources** (M3): all six Nauvis resources (iron, copper, coal, stone,
+  uranium, crude-oil) as a solid-footprint overlay - both the whole-map
+  `regular_patches` and the near-spawn guaranteed `starting_patches`
+  (`max(starting, regular)`), responding to the frequency/size/richness sliders
+  and excluded from water. Next: M3.5 (per-tile placement stipple).
+
+The two reverse-engineered noise primitives that make this possible (`basis_noise`,
+`spot_noise`, plus `random_penalty` and the multioctave family) are documented in
+`docs/noise/`. This is an offline/instant alternative to the headless preview
+service below; the service remains as a cross-check oracle.
+
+The **map preview service** (`preview-service/`) renders real Factorio previews
+server-side: clicking "Generate preview" POSTs the active preset's
+`map-gen-settings` to a Cloudflare Worker, which serves a cached PNG from R2 or
+renders one with the real Factorio headless engine in a container. It is deployed
+and live.
+
+Design and phase history live in `docs/superpowers/specs/`,
+`docs/superpowers/plans/`, and `docs/noise/` (point-in-time records, not living
+docs).
 
 ## Development
 
@@ -83,10 +110,12 @@ to develop or test the feature:
 The container image build and render are also covered by a Docker integration
 test: `pnpm --filter @fmw/preview-container test:integration`.
 
-### Deploy (hand-off)
+### Deploy
 
-Deploying to Cloudflare is the one step not yet done. It needs a Cloudflare
-account and Workers Paid ($5/mo, required for Containers):
+The app and preview service are already deployed (Cloudflare Pages +
+Workers/Containers on the `wormeyman` account; `pnpm run deploy` builds and
+publishes the app). The one-time setup, for reference, needs a Cloudflare account
+and Workers Paid ($5/mo, required for Containers):
 
 ```
 pnpm --filter @fmw/preview-worker exec wrangler r2 bucket create fmw-preview-cache

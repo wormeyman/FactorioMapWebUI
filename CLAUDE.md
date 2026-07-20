@@ -23,6 +23,20 @@ Useful entry points:
 
 Only fall back to WebFetch if something genuinely is not in this mirror.
 
+### Game _data_ (prototype Lua) for noise/autoplace RE - use `~/GitHub/factorio-data`
+
+The `factorioLuaAPI/` mirror above is the API _docs_. For the actual base-game
+map-gen **source** (the noise expression trees, autoplace utils, resource
+prototypes) that the client-side preview ports, use **`~/GitHub/factorio-data`** -
+a local clone of the official `wube/factorio-data` repo with per-version git tags.
+Check out the tag matching the oracle binary before reading:
+`git -C ~/GitHub/factorio-data checkout 2.1.11` (verify `base/info.json`'s
+`"version"` matches `factorio --version`; `master` may sit a few commits ahead).
+Key files: `core/prototypes/{noise-functions,noise-programs}.lua`,
+`core/lualib/resource-autoplace.lua`, `base/prototypes/entity/resources.lua`.
+**Do NOT use `~/Downloads/factorio 4/data` - it is Factorio 2.0.77 (stale)** and
+`starting_patches` changed materially by 2.1.11. `git pull` fetches newer versions.
+
 ### Automate with the Factorio headless CLI
 
 A lot can be driven from the command line - see
