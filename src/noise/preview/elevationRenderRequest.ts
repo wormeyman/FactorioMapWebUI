@@ -49,8 +49,9 @@ export interface ElevationRenderResult {
 }
 
 /**
- * Pure render step shared by the worker and its tests: run renderElevation and
- * hand back the transferable RGBA buffer. No Worker or DOM canvas involved.
+ * Pure render step shared by the worker and its tests: run renderElevation or
+ * renderTerrain (per `req.view`) and hand back the transferable RGBA buffer. No
+ * Worker or DOM canvas involved.
  */
 export function runRenderRequest(req: ElevationRenderRequest): ElevationRenderResult {
   const image =

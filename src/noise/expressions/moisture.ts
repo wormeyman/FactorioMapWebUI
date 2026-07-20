@@ -12,9 +12,9 @@ export interface MoistureParams {
   readonly moistureFrequency?: number;
   /** control:moisture:bias; default 0. */
   readonly moistureBias?: number;
-  /** control:moisture:starting_area_size (starting-area bias lever); default 1 (degenerate - see below). */
+  /** control:starting_area_moisture:size (starting-area bias lever); default 1 (degenerate - see below). */
   readonly startingAreaMoistureSize?: number;
-  /** control:moisture:starting_area_frequency (starting-area falloff lever); default 1. */
+  /** control:starting_area_moisture:frequency (starting-area falloff lever); default 1. */
   readonly startingAreaMoistureFrequency?: number;
   /** Spawn points for the starting-area bias region distance (uncapped). Default single origin spawn. */
   readonly startingPositions?: Point[];
