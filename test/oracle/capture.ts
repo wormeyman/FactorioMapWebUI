@@ -777,6 +777,59 @@ async function captureTileNames(): Promise<void> {
   await captureTileNamesForSeed(424242, 2.6);
 }
 
+/**
+ * random_penalty ground truth. It is a BATCH op (seeded from the first position,
+ * streamed last->first, source<=0 skips a draw), so each config is ONE batch and
+ * the fixture stores the exact ordered position list + the game's output. Sources
+ * are simple functions of (x,y) so the spec can recompute source[i] and validate
+ * randomPenaltyBatch. Includes odd seeds (even-only masked the quickMultioctave
+ * bug last session) and a source=x config to exercise the source<=0 guard.
+ */
+async function captureRandomPenalty(): Promise<void> {
+  const seed = 123456; // map_seed; random_penalty is map_seed-independent, but pin it.
+  // A scattered ordered batch: fractional, negatives (x<=0 for the guard), far points.
+  const positions: Position[] = [
+    { x: 0, y: 0 },
+    { x: 1, y: 0 },
+    { x: -3, y: 2 },
+    { x: 5.5, y: 7.25 },
+    { x: -10, y: -10 },
+    { x: 40, y: 13 },
+    { x: 0, y: -1 },
+    { x: 1000, y: -2000 },
+  ];
+  // sourceKind: how the spec reconstructs source[i] from the position.
+  const configs = [
+    { rpSeed: 1, amplitude: 1, sourceExpr: "1", sourceKind: "const1" },
+    { rpSeed: 1, amplitude: 2, sourceExpr: "1", sourceKind: "const1" },
+    { rpSeed: 7, amplitude: 1, sourceExpr: "1", sourceKind: "const1" }, // odd seed
+    { rpSeed: 13, amplitude: 0.5, sourceExpr: "1", sourceKind: "const1" }, // odd seed
+    { rpSeed: 1, amplitude: 1, sourceExpr: "x", sourceKind: "x" }, // source<=0 guard
+  ];
+  const cases = [];
+  for (const c of configs) {
+    const expression = `random_penalty{x = x, y = y, seed = ${c.rpSeed}, source = ${c.sourceExpr}, amplitude = ${c.amplitude}}`;
+    const workDir = await mkdtemp(join(tmpdir(), "oracle-capture-"));
+    try {
+      const values = await sampleExpression(expression, positions, { workDir, seed });
+      cases.push({ ...c, values });
+      console.log(`  captured rpSeed=${c.rpSeed} amp=${c.amplitude} source=${c.sourceExpr}`);
+    } finally {
+      await rm(workDir, { recursive: true, force: true });
+    }
+  }
+  const fixture = {
+    _comment:
+      "Ground truth from Factorio 2.1.11 via the test/oracle harness. random_penalty routed onto elevation. BATCH op: seeded from positions[0], streamed last->first, source<=0 passes through with no draw. Regenerate: node --experimental-strip-types test/oracle/capture.ts random-penalty",
+    seed0: seed,
+    positions,
+    cases,
+  };
+  const out = join(FIXTURES, "oracle-random-penalty.seed123456.json");
+  await writeFile(out, JSON.stringify(fixture, null, 2) + "\n");
+  console.log(`wrote ${out} (${configs.length} configs x ${positions.length} points)`);
+}
+
 if (!oracleAvailable()) {
   console.error("No Factorio binary found (set FACTORIO_BIN). Cannot capture fixtures.");
   process.exit(1);
@@ -799,4 +852,5 @@ if (want("temperature")) await captureTemperature();
 if (want("aux")) await captureAux();
 if (want("moisture")) await captureMoisture();
 if (want("expression-in-range")) await captureExpressionInRange();
+if (want("random-penalty")) await captureRandomPenalty();
 if (want("tile-names")) await captureTileNames();
