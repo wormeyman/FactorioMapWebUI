@@ -26,6 +26,11 @@ export interface ElevationLakesParams {
    * behavior.
    */
   readonly startingLakePositions?: Point[];
+  /**
+   * make_0_12like_lakes `bias` (branch 1's additive term). Default 20 (elevation_lakes).
+   * elevation_island passes -1000. Branch 2's literal 20 is independent of this.
+   */
+  readonly bias?: number;
 }
 
 /**
@@ -44,7 +49,7 @@ export function makeElevationLakes(params: ElevationLakesParams): (x: number, y:
     params.startingLakePositions ?? computeStartingLakes(seed0, startingPositions);
 
   // make_0_12like_lakes locals (bias = 20, terrain_octaves = 8).
-  const bias = 20;
+  const bias = params.bias ?? 20;
   const terrainOctaves = 8;
   const inputScale = seg / 2;
   const offsetX = 10000 / seg;
@@ -106,7 +111,8 @@ export function makeElevationLakes(params: ElevationLakesParams): (x: number, y:
     );
     const distance = distanceFromNearestPoint(x, y, startingPositions);
     const branch1 = bias + varPers1(x, y, p);
-    // NOTE: literal 20, not `bias` (they coincide at elevation_lakes).
+    // NOTE: literal 20, not `bias` (they coincide at elevation_lakes; elevation_island
+    // sets bias = -1000 so branch 2 keeps 20 while branch 1 collapses).
     const branch2 = 20 + waterLevel - 0.1 * seg * distance + varPers2(x, y, p);
     return max(branch1, branch2);
   };

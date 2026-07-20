@@ -420,6 +420,62 @@ async function captureElevationNauvis(): Promise<void> {
   console.log(`wrote ${out} (${positions.length} points)`);
 }
 
+/**
+ * The full `elevation_island` tree routed onto `elevation`, plus the two free-var
+ * distances. Same grid as captureElevationLakes/Nauvis (near-origin band, far rings
+ * at r=2200/3300, one deep-field point). elevation_island = elevation_lakes with
+ * bias=-1000 and segmentation_multiplier/4.
+ */
+async function captureElevationIsland(): Promise<void> {
+  const seed = 123456;
+  const positions: Position[] = [];
+  for (let gy = 0; gy < 3; gy++) {
+    for (let gx = 0; gx < 3; gx++) {
+      positions.push({ x: gx * 11 - 11 + 0.5, y: gy * 13 - 13 + 0.25 });
+    }
+  }
+  for (const r of [2200, 3300]) {
+    for (let k = 0; k < 8; k++) {
+      const a = (k * Math.PI) / 4;
+      positions.push({ x: r * Math.cos(a) + 0.5, y: r * Math.sin(a) + 0.25 });
+    }
+  }
+  positions.push({ x: 12345.75, y: 6789.125 });
+
+  const sample = async (expression: string): Promise<number[]> => {
+    const workDir = await mkdtemp(join(tmpdir(), "oracle-capture-"));
+    try {
+      return await sampleExpression(expression, positions, { workDir, seed });
+    } finally {
+      await rm(workDir, { recursive: true, force: true });
+    }
+  };
+
+  const elevation = await sample("elevation_island");
+  console.log("  captured elevation_island tree");
+  const distance = await sample(
+    "distance_from_nearest_point{x = x, y = y, points = starting_positions}",
+  );
+  console.log("  captured distance (starting_positions)");
+  const startingLakeDistance = await sample(
+    "distance_from_nearest_point{x = x, y = y, points = starting_lake_positions, maximum_distance = 1024}",
+  );
+  console.log("  captured starting_lake_distance");
+
+  const fixture = {
+    _comment:
+      "Ground truth from Factorio 2.1.11 via the test/oracle harness. elevation_island (and the two free-var distances) routed onto elevation. Regenerate: node --experimental-strip-types test/oracle/capture.ts elevation-island",
+    seed0: seed,
+    positions,
+    elevation,
+    distance,
+    startingLakeDistance,
+  };
+  const out = join(FIXTURES, "oracle-elevation-island.seed123456.json");
+  await writeFile(out, JSON.stringify(fixture, null, 2) + "\n");
+  console.log(`wrote ${out} (${positions.length} points)`);
+}
+
 if (!oracleAvailable()) {
   console.error("No Factorio binary found (set FACTORIO_BIN). Cannot capture fixtures.");
   process.exit(1);
@@ -437,3 +493,4 @@ if (want("variable-persistence")) await captureVariablePersistenceMultioctave();
 if (want("multioctave-wrappers")) await captureMultioctaveWrappers();
 if (want("elevation-lakes")) await captureElevationLakes();
 if (want("elevation-nauvis")) await captureElevationNauvis();
+if (want("elevation-island")) await captureElevationIsland();

@@ -91,8 +91,12 @@ data port.
       floor (worst far-field 4.08e-3, near-spawn 2.87e-6). KEY finding: it needs NO
       new primitive - `ridge`/`terrace` (rated "small" below) are used by NO
       elevation tree (every apparent "ridge" was the `b`ridge`` substring). The
-      Island variant (`elevation_island`, a trivial `bias=-1000` lakes variant) is
-      still unported. Lakes shipped earlier; both dispatch via a `mapType` selector.
+      Island variant (`elevation_island`, a trivial `bias=-1000` lakes variant)
+      shipped 2026-07-19 as `makeElevationIsland` (`src/noise/expressions/elevationIsland.ts`)
+      - a thin wrapper over `makeElevationLakes` with `bias=-1000` and
+      `segmentation_multiplier/4`, validated against the oracle to the f32 floor
+      (worst far-field 6.66e-3, near-spawn 5.2e-7). All three base map types
+      (Nauvis, Lakes, Island) now render client-side; they dispatch via a `mapType` selector.
 - [x] **Render**: `elevation < 0` -> water (deep vs shallow by threshold), else
       land; draw to a `<canvas>` at a chosen scale. Coastline falls out.
 - [x] **Validate**: sample the game's `elevation` at a grid for a few seeds; diff

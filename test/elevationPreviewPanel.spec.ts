@@ -16,7 +16,7 @@ function stubCanvas() {
   return putImageData;
 }
 
-function setup(mapTypeId: "nauvis" | "lakes" | "island", renderer: ElevationRenderer) {
+function setup(mapTypeId: string, renderer: ElevationRenderer) {
   setActivePinia(createPinia());
   const store = usePresetsStore();
   store.createFromBuiltin("Default", "t");
@@ -94,8 +94,8 @@ describe("ElevationPreviewPanel", () => {
 
   it("shows a message and does not render for an unsupported map type", async () => {
     const renderer = okRenderer();
-    const w = setup("island", renderer);
-    expect(w.find('[data-test="unsupported"]').text()).toContain("Island elevation");
+    const w = setup("elevation_modded_x", renderer);
+    expect(w.find('[data-test="unsupported"]').text()).toContain("elevation_modded_x");
     expect(w.find('[data-test="generate"]').attributes("disabled")).toBeDefined();
     await w.find('[data-test="generate"]').trigger("click");
     expect(renderer.render).not.toHaveBeenCalled();

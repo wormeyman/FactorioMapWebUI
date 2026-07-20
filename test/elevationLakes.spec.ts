@@ -68,3 +68,30 @@ describe("elevationLakes reproduces the game's elevation_lakes tree (far from sp
     expect(worst, `worst ${worstLabel}`).toBeLessThan(8e-3);
   });
 });
+
+describe("makeElevationLakes bias parameter", () => {
+  const GRID: Array<[number, number]> = [
+    [0.5, 0.25],
+    [2200.5, 0.25],
+    [-1600.5, 1200.25],
+    [12345.75, 6789.125],
+  ];
+
+  it("defaults bias to 20 (omitted === explicit 20)", () => {
+    const def = makeElevationLakes({ seed0: 123456 });
+    const explicit = makeElevationLakes({ seed0: 123456, bias: 20 });
+    for (const [x, y] of GRID) expect(def(x, y)).toBe(explicit(x, y));
+  });
+
+  it("is monotonic non-decreasing in bias and actually takes effect", () => {
+    const def = makeElevationLakes({ seed0: 123456 });
+    const low = makeElevationLakes({ seed0: 123456, bias: -1000 });
+    let strictlyLowerSomewhere = false;
+    for (const [x, y] of GRID) {
+      // Lowering bias can only lower or keep max(branch1, branch2) -> lower or keep the tree.
+      expect(low(x, y)).toBeLessThanOrEqual(def(x, y) + 1e-9);
+      if (low(x, y) < def(x, y) - 1e-6) strictlyLowerSomewhere = true;
+    }
+    expect(strictlyLowerSomewhere).toBe(true);
+  });
+});
