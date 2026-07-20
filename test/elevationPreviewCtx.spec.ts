@@ -25,12 +25,21 @@ describe("elevationCtxFromPreset", () => {
     expect(r.mapType).toBe("nauvis");
   });
 
-  it("marks an Island preset unsupported", () => {
+  it("marks an Island preset supported with its label and map type", () => {
     const p = getBuiltinPreset("Default");
     writeMapType(p.propertyExpressionNames, "island");
     const r = elevationCtxFromPreset(p);
-    expect(r.supported).toBe(false);
+    expect(r.supported).toBe(true);
     expect(r.mapTypeLabel).toBe("Island elevation");
+    expect(r.mapType).toBe("island");
+  });
+
+  it("marks a modded/unknown elevation unsupported, preserving its label", () => {
+    const p = getBuiltinPreset("Default");
+    p.propertyExpressionNames["elevation"] = "elevation_modded_x";
+    const r = elevationCtxFromPreset(p);
+    expect(r.supported).toBe(false);
+    expect(r.mapTypeLabel).toBe("elevation_modded_x");
   });
 
   it("derives waterLevel = 10*log2(size) and segmentation = frequency", () => {
