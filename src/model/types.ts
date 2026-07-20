@@ -50,7 +50,7 @@ export interface Preset {
    * Nested, typed view of the MapSettings sections of the tail. The
    * enemyEvolution / enemyExpansion sections and the Advanced-tab subset of
    * pollution (enabled, ageing, enemyAttackPollutionConsumptionModifier,
-   * minPollutionToDamageTrees, pollutionPerTreeDamage, diffusionRatio),
+   * minPollutionToDamageTrees, pollutionRestoredPerTreeDamage, diffusionRatio),
    * difficulty (technologyPriceMultiplier, spoilTimeModifier), and asteroids
    * (spawningRate) are round-trip EDITABLE: `presetToEncodable` overlays them
    * back onto the tail (see `writeMapSettingsToTail`). Every OTHER field here

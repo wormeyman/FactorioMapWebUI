@@ -294,7 +294,7 @@ export function tailToNested(tail: TailBlock): { cliff: CliffSettings; mapSettin
  * Writes ONLY these keys: the full enemyEvolution / enemyExpansion sections,
  * plus the hand-picked Advanced-tab subset of pollution
  * (enabled, ageing, enemyAttackPollutionConsumptionModifier,
- * minPollutionToDamageTrees, pollutionPerTreeDamage, diffusionRatio),
+ * minPollutionToDamageTrees, pollutionRestoredPerTreeDamage, diffusionRatio),
  * difficulty (technologyPriceMultiplier, spoilTimeModifier), and asteroids
  * (spawningRate). It deliberately does NOT touch unitGroup, pathFinder, or the
  * other pollution/difficulty keys - those stay carried opaquely via
@@ -347,7 +347,9 @@ export function writeMapSettingsToTail(tail: TailBlock, mapSettings: MapSettings
     pollution.enemyAttackPollutionConsumptionModifier,
   );
   put("pollution.minPollutionToDamageTrees", pollution.minPollutionToDamageTrees);
-  put("pollution.pollutionPerTreeDamage", pollution.pollutionPerTreeDamage);
+  // The map-gen GUI's "Absorbed per damaged tree" tracks this field (confirmed
+  // by an in-game sentinel-import check), not pollutionPerTreeDamage.
+  put("pollution.pollutionRestoredPerTreeDamage", pollution.pollutionRestoredPerTreeDamage);
   put("pollution.diffusionRatio", pollution.diffusionRatio);
 
   put("difficulty.technologyPriceMultiplier", difficulty.technologyPriceMultiplier);
