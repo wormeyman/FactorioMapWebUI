@@ -94,6 +94,26 @@ describe("renderElevation map-type dispatch", () => {
     expect(Array.from(lakesImg.data)).toEqual(WATER_RGBA);
   });
 
+  it("flips the pixel color with mapType at a point where island and lakes disagree in sign", () => {
+    // World point (-8000, -8000), seed 123456: makeElevationIsland = -1043.07 (WATER),
+    // makeElevationLakes = +49.14 (LAND). Both magnitudes are well away from 0, so this
+    // point discriminates the dispatch - if "island" were routed to the lakes factory
+    // (or vice versa), this test would fail.
+    const request = {
+      seed0: 123456,
+      width: 1,
+      height: 1,
+      originX: -8000,
+      originY: -8000,
+      tilesPerPixel: 1,
+    };
+    const islandImg = renderElevation({ ...request, mapType: "island" as const });
+    expect(Array.from(islandImg.data)).toEqual(WATER_RGBA);
+
+    const lakesImg = renderElevation({ ...request, mapType: "lakes" as const });
+    expect(Array.from(lakesImg.data)).toEqual(LAND_RGBA);
+  });
+
   it("uses the island factory when mapType is 'island'", () => {
     const img = renderElevation({
       seed0: 123456,
