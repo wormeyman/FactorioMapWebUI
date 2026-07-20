@@ -86,22 +86,33 @@ enemy_autoplace_base(distance_factor, seed) =
    (the origin region's lone marginal spot fades out by ~d=95). Net: no positive
    footprint near spawn, so a `> 0` threshold clears the starting area for free.
 
-## The open RE item: `candidate_point_count`
+## `candidate_point_count` - RESOLVED (empirically a non-issue)
 
 The enemy `spot_noise` sets `candidate_point_count = 100` and leaves both
 `candidate_spot_count` and `suggested_minimum_candidate_point_spacing` at engine
-defaults. Every M3 resource `spot_noise` did the opposite (set `candidate_spot_count`
-+ explicit spacing, never `candidate_point_count`). `spot-noise-NOTES.md:57` records
-"default candidate point count = (region_size/spacing)^2" - i.e. `candidate_point_count`
-is the per-region candidate POOL size, `candidate_spot_count` the number selected.
+defaults - the opposite of every M3 resource call (which set `candidate_spot_count` +
+explicit spacing). This looked like an un-RE'd path because the current
+`spotSelection.ts` models only `candidateSpotCount` (the dart-throw acceptance target)
+with a required `spacing`.
 
-The current `spotSelection.ts` models only `candidateSpotCount` (dart-throw acceptance
-target `needed = candidateSpotCount * span`) with a REQUIRED `spacing`, over an
-unbounded lazy candidate stream - it has no `candidate_point_count` pool bound and no
-notion of a DEFAULT `candidate_spot_count`/spacing. So the enemy field cannot be ported
-by "just calling selectSpots"; the `candidate_point_count` + defaulted-`candidate_spot_count`
-+ defaulted-spacing path is un-reverse-engineered. This is M4's one genuine RE step
-(a preceding oracle spike), NOT a re-run of the validated M3 spot path. Resolve by
-matching a region's spot set (trilaterate cone centers from a dense oracle grid, per
-`spot-noise-NOTES.md`) against the port for candidate values of the two defaults +
-the pool bound.
+**But a spike settled it (2026-07-20):** a hand-port of `enemy_base_probability` over
+the EXISTING `selectSpots` (mapping `candidate_point_count -> candidateSpotCount = 100`,
+`hardRegionTargetQuantity = false`, cone peak `= 3q/(pi r^2)` with `r = spot_radius` at
+the spot, `q = pi/90 r^3`) matches the oracle to `abs < 0.001` at all 7 checked points
+(deep basement `(200,0)=-1000.29`; near-spawn `(60,0)=-15.107`; five cone-interior
+points in the far region around `(1000,1000)`, `ebp` 0.41..0.78). The match is
+**identical for spacing in {32, 45.25, 51.2}**.
+
+Why the pool size and spacing do not bind: the regional density target
+(`avg_density * region_area`) is small (frequency `~1e-5`), so only ~5 spots survive
+the trim per 512^2 region - reached with the first few accepted candidates, long before
+the 100-vs-128 pool bound or the Poisson-disk spacing-decay could change the kept set.
+So `candidate_point_count = 100` == `candidateSpotCount = 100` here and **no
+`spotSelection`/`spotCandidates` change is needed**. (This holds for THIS field's low
+density; a spacing/pool-sensitive `spot_noise` would still need the extension. Validate
+with a dense full-region oracle grid, not just these 7 points, to be safe.)
+
+Cone geometry note: with `q = pi/90 r^3`, `peak = 3q/(pi r^2) = r/30` and slope
+`= peak/r = 1/30`, so an enemy cone is `(r - dist)/30` - a shallow cone peaking at
+`~0.5-1.0` (r ~ 15-30), which is why in-spot `ebp` tops out under 1 and the placement
+source caps at 0.25. No `min(32, ...)` radius cap (that is resource-only).

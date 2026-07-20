@@ -29,20 +29,20 @@ Enemy bases reuse primitives that are already implemented and oracle-validated:
   render as `startingPositions`.
 - `clamp`/`min`/`max`/arithmetic.
 
-**But there is one genuine reverse-engineering step first** (verified by the M4 spike
-+ code review, 2026-07-20; full writeup in `docs/noise/enemy-bases-NOTES.md`): the
-enemy `spot_noise` sets **`candidate_point_count = 100`** and leaves both
-`candidate_spot_count` and `suggested_minimum_candidate_point_spacing` at engine
-defaults. Every M3 resource `spot_noise` did the opposite (set `candidate_spot_count`
-+ explicit spacing, never `candidate_point_count`). The existing
-`src/noise/spotSelection.ts` models only `candidateSpotCount` (the dart-throw
-acceptance target) with a **required** `spacing`, over an unbounded lazy candidate
-stream - it has no `candidate_point_count` pool bound and no notion of a default
-`candidate_spot_count`/spacing. So this field cannot be ported by "just calling
-`selectSpots`"; the `candidate_point_count`-parameterized path is un-RE'd. **Task 1 is
-a preceding oracle spike** (like `random_penalty` for M3a) that pins that path against
-the game before any field code is built. Everything after it is the validated M3
-overlay pipeline with a new field.
+**One spot-param question, resolved by the M4 spike** (2026-07-20; writeup in
+`docs/noise/enemy-bases-NOTES.md`): the enemy `spot_noise` sets
+**`candidate_point_count = 100`** and leaves `candidate_spot_count` +
+`suggested_minimum_candidate_point_spacing` at engine defaults, a path the M3
+`spotSelection.ts` (which models only `candidateSpotCount` + a required `spacing`)
+never exercised. The code review rightly flagged this as potentially un-RE'd. **A
+spike settled it as a non-issue:** a hand-port over the existing `selectSpots`
+(mapping `candidate_point_count -> candidateSpotCount = 100`) matches the oracle to
+`abs < 0.001` at 7 points (basement, near-spawn, five cone interiors), **identical for
+spacing in {32, 45.25, 51.2}** - because this field's low density (`frequency ~1e-5`)
+trims to ~5 spots/region, reached before the pool size or spacing-decay could bind. So
+**no `spotSelection` change is needed**; the field is a straight reuse. Task 1 folds
+this into a dense full-region oracle validation (belt-and-suspenders) rather than a
+standalone RE spike.
 
 `starting_area_radius = 150` (default `starting_area`) is directly sampleable, not a
 new primitive (see Levers).
@@ -172,18 +172,15 @@ the terrain ImageData - the same convention as the M3 resource footprint, except
 ## Module layout
 
 ```
-src/noise/
-  spotSelection.ts    # MODIFY (Task 1): support candidate_point_count (a candidate
-  spotCandidates.ts   #   pool bound) + the engine-default candidate_spot_count/spacing,
-                      #   per the Task 1 spike. Keep the existing M3 path untouched.
-  enemies/
-    enemyCatalog.ts   # control name "enemy-base", spot_noise params, blob seed,
+src/noise/enemies/
+  enemyCatalog.ts     # control name "enemy-base", spot_noise params, blob seed,
                       #   cap 0.25, starting_area_radius=150, enemy map_color, threshold T
-    enemyBaseField.ts # makeEnemyBaseField(ctx) -> { probability(x,y): number }
+  enemyBaseField.ts   # makeEnemyBaseField(ctx) -> { probability(x,y): number }
                       #   ports enemy_base_probability; returns the deterministic
                       #   spawner source min(enemy_base_probability, 0.25).
-                      #   reuses selectSpots + cone render (as regularPatches does),
-                      #   basisNoise blobs, distance. (No randomPenalty - batch op.)
+                      #   reuses selectSpots (candidateSpotCount=100) + cone render (as
+                      #   regularPatches does), basisNoise blobs, distance. No spotSelection
+                      #   change (spike-confirmed). No randomPenalty (batch op).
 src/noise/preview/
   renderEnemies.ts    # composite onto terrain ImageData; fill map_color where
                       #   probability >= T; skip water (WATER_TILE_COLORS)
@@ -195,13 +192,6 @@ on `terrainAvailable` (Nauvis), alongside Elevation/Terrain/Resources.
 
 ## Validation (oracle-first, mirrors M3)
 
-0. **`candidate_point_count` spike (Task 1, prerequisite).** Before any field code,
-   pin the `candidate_point_count = 100` + defaulted-`candidate_spot_count`/spacing
-   spot path against the oracle: trilaterate the cone centers of one region from a
-   dense `enemy_base_probability` grid (per `spot-noise-NOTES.md`) and match them to
-   the port's `selectSpots` output. Extend `spotSelection.ts`/`spotCandidates.ts`
-   minimally to honor the pool bound + defaults, and commit the resolved semantics to
-   `docs/noise/enemy-bases-NOTES.md`. This is the one un-RE'd piece.
 1. **Field port (primary, asserted).** Capture **`enemy_base_probability`** via
    `calculate_tile_properties` at a grid for 2-3 seeds (reuse `test/oracle/oracle.ts`
    `sampleExpression`; commit the JSON fixtures, run comparison without Factorio).
