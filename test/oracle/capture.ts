@@ -940,6 +940,132 @@ async function captureResourceRegular(): Promise<void> {
   console.log(`wrote ${out} (${cases.length} cases x ${positions.length} points)`);
 }
 
+/**
+ * Combined starting+regular resource field ground truth. Probes
+ * `resource_autoplace_all_patches` with `has_starting_area_placement = 1` (so
+ * all_patches = max(starting_patches, regular_patches)) and both
+ * `regular_patch_set_count = 1` / `starting_patch_set_count = 1` (index 0: this
+ * resource takes every accepted spot in each set, unpartitioned) - the cleanest
+ * ground truth for the combined field. frequency_multiplier / size_multiplier
+ * inlined as 1 to drop the control-var dependency. Params inlined (capture.ts
+ * can't import extensionless src/). Grid: a DENSE near-spawn block (catches the
+ * ~20-tile starting patches AND the regular fade-in ring) plus a far ring
+ * (regular-only region, keeps the regular branch covered). Seeds: 123456 and an
+ * odd one.
+ *
+ * Routed onto `moisture`, NOT `elevation` (unlike every other capture in this
+ * file). `has_starting_area_placement = 1` pulls in `elevation_lakes` (via
+ * `startingFavorabilityBaseAt`'s `clamp((elevation_lakes - 1) / 10, ...)` term),
+ * and `elevation_lakes` needs the engine's real spawn-lake resolution, which
+ * itself runs through the `elevation` property during the very first chunk
+ * generation. Overriding `elevation` with THIS expression makes that resolution
+ * recurse into itself with no base case - confirmed via a throwaway repro: it
+ * SIGSEGVs headless Factorio during "Creating new map", before our mod's
+ * `on_init` ever runs (so no stderr, just a silent crash). Routing onto
+ * `moisture` instead sidesteps the real elevation pipeline entirely and dumps
+ * clean values - verified with a 3-point repro before this full capture.
+ */
+async function captureResourceStarting(): Promise<void> {
+  interface Probe {
+    name: string;
+    base_density: number;
+    base_spots_per_km2: number;
+    candidate_spot_count: number;
+    random_spot_size_minimum: number;
+    random_spot_size_maximum: number;
+    regular_rq_factor: number;
+    starting_rq_factor: number;
+  }
+  // iron and copper (both has_starting true in-game; different starting_rq_factor).
+  const probes: Probe[] = [
+    {
+      name: "iron-ore",
+      base_density: 10,
+      base_spots_per_km2: 2.5,
+      candidate_spot_count: 22,
+      random_spot_size_minimum: 0.25,
+      random_spot_size_maximum: 2,
+      regular_rq_factor: 1.1 / 10,
+      starting_rq_factor: 1.5 / 7,
+    },
+    {
+      name: "copper-ore",
+      base_density: 8,
+      base_spots_per_km2: 2.5,
+      candidate_spot_count: 22,
+      random_spot_size_minimum: 0.25,
+      random_spot_size_maximum: 2,
+      regular_rq_factor: 1.1 / 10,
+      starting_rq_factor: 1.2 / 7,
+    },
+  ];
+  const buildExpr = (p: Probe): string =>
+    "resource_autoplace_all_patches{" +
+    [
+      `base_density = ${p.base_density}`,
+      `base_spots_per_km2 = ${p.base_spots_per_km2}`,
+      `candidate_spot_count = ${p.candidate_spot_count}`,
+      `frequency_multiplier = 1`,
+      `has_starting_area_placement = 1`,
+      `random_spot_size_minimum = ${p.random_spot_size_minimum}`,
+      `random_spot_size_maximum = ${p.random_spot_size_maximum}`,
+      `regular_blob_amplitude_multiplier = ${1 / 8}`,
+      `regular_patch_set_count = 1`,
+      `regular_patch_set_index = 0`,
+      `regular_rq_factor = ${p.regular_rq_factor}`,
+      `seed1 = 100`,
+      `size_multiplier = 1`,
+      `starting_blob_amplitude_multiplier = ${1 / 8}`,
+      `starting_patch_set_count = 1`,
+      `starting_patch_set_index = 0`,
+      `starting_rq_factor = ${p.starting_rq_factor}`,
+    ].join(", ") +
+    "}";
+
+  // Dense near-spawn block: +/-240 at stride 8 catches the ~20-tile starting
+  // patches AND the regular fade-in ring (120..420). Starting patches live
+  // within ~120-240.
+  const positions: Position[] = [];
+  for (let y = -240; y <= 240; y += 8)
+    for (let x = -240; x <= 240; x += 8) positions.push({ x: x + 0.5, y: y + 0.25 });
+  // A far ring (regular-only region) so the regular branch stays covered.
+  for (const r of [1500, 2500]) {
+    for (let k = 0; k < 12; k++) {
+      const a = (k * Math.PI) / 6;
+      positions.push({ x: r * Math.cos(a) + 0.5, y: r * Math.sin(a) + 0.25 });
+    }
+  }
+
+  const seeds = [123456, 777771];
+  const cases = [];
+  for (const seed of seeds) {
+    for (const p of probes) {
+      const expression = buildExpr(p);
+      const workDir = await mkdtemp(join(tmpdir(), "oracle-capture-"));
+      try {
+        const values = await sampleExpression(expression, positions, {
+          workDir,
+          seed,
+          property: "moisture",
+        });
+        cases.push({ resource: p.name, seed, values });
+        console.log(`  captured ${p.name} seed=${seed}`);
+      } finally {
+        await rm(workDir, { recursive: true, force: true });
+      }
+    }
+  }
+  const fixture = {
+    _comment:
+      "Ground truth from Factorio 2.1.11. resource_autoplace_all_patches (has_starting_area_placement=1, regular_patch_set_count=1, starting_patch_set_count=1) = max(starting_patches, regular_patches), both sets unpartitioned. frequency/size multipliers = 1. Routed onto MOISTURE, not elevation (unlike the other oracle-resource-*.json fixtures): has_starting_area_placement=1 pulls in elevation_lakes, which needs the engine's real spawn-lake resolution, which itself runs through the elevation property during the first chunk generation - overriding elevation with this expression makes that resolution recurse into itself and SIGSEGVs headless Factorio. Routing onto moisture sidesteps that; the values are the same resource_autoplace_all_patches output either way, only the carrier property differs. Regenerate: node --experimental-strip-types test/oracle/capture.ts resource-starting",
+    positions,
+    cases,
+  };
+  const out = join(FIXTURES, "oracle-resource-starting.seed123456.json");
+  await writeFile(out, JSON.stringify(fixture, null, 2) + "\n");
+  console.log(`wrote ${out} (${cases.length} cases x ${positions.length} points)`);
+}
+
 if (!oracleAvailable()) {
   console.error("No Factorio binary found (set FACTORIO_BIN). Cannot capture fixtures.");
   process.exit(1);
@@ -964,4 +1090,5 @@ if (want("moisture")) await captureMoisture();
 if (want("expression-in-range")) await captureExpressionInRange();
 if (want("random-penalty")) await captureRandomPenalty();
 if (want("resource-regular")) await captureResourceRegular();
+if (want("resource-starting")) await captureResourceStarting();
 if (want("tile-names")) await captureTileNames();
