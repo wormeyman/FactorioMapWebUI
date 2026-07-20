@@ -18,14 +18,19 @@ Next session starts at **writing-plans for M3a** (regular patches).
   `test/oracle/capture.ts`, and `docs/noise/random-penalty-NOTES.md`. Full suite
   632/632 green, `pnpm vp check` clean.
 
-### NEXT (start here tomorrow)
-1. **writing-plans for M3a** (regular patches, all 6 resources). Use the spec's
-   architecture section. The one thing M3a must pin empirically (see
-   random-penalty-NOTES "Open for M3"): the batch + order the game uses when it
-   evaluates `random_penalty` INSIDE spot_quantity/favorability during spot
-   selection - that determines each spot's U. Validate against the probability/
-   richness oracle.
-2. Then execute M3a (subagent-driven or TDD), then M3b (starting patches).
+### M3a plan WRITTEN: `docs/superpowers/plans/2026-07-19-milestone3a-regular-patches.md`
+10 tasks (catalog -> math -> oracle -> core field -> resolve -> controls -> render
+-> worker -> UI -> eyeball). The ONE risk is isolated to **Task 4**: how the game
+batches `random_penalty` when evaluating spot quantities in selection. Task 3
+captures a pure-regular oracle (probe with `has_starting_area_placement=0`,
+`regular_patch_set_count=1`) so Task 4's composition cannot pass wrong. Primary
+hypothesis: singleton-per-spot (U = draw0 seeded from the spot's own x,y, fits
+selectSpots' per-spot closure); fallback = batch all region spots. Resolve against
+the oracle in Task 4, record the winner in random-penalty-NOTES.md.
+
+### NEXT / IN PROGRESS
+Executing M3a task-by-task on `feat/m3-resources` (see the plan). Progress tracked
+below as tasks land.
 
 ## Decisions locked (in the spec)
 
