@@ -105,31 +105,3 @@ describe("selectSpots", () => {
     expect(out.every((s) => s.quantity > 0)).toBe(true);
   });
 });
-
-describe("selectSpots favorabilityBatch", () => {
-  const key = { seed0: 123456, seed1: 100, regionX: 1, regionY: 1 };
-  const base = {
-    density: () => 1, // small target
-    quantity: () => 1e6,
-    regionSize: 1024,
-    candidateSpotCount: 6,
-    spacing: 45.254833995939045,
-    skipSpan: 1,
-    skipOffset: 0,
-    hardRegionTargetQuantity: true as const,
-  };
-  it("uses the batched favorability for the trim sort (overrides per-spot)", () => {
-    // Per-spot favorability that would keep the FIRST-accepted spot (all equal ->
-    // acceptance order); a batch that flips it (descending index) keeps a LATER spot.
-    const perSpot = selectSpots(key, { ...base, favorability: () => 0 });
-    const batched = selectSpots(key, {
-      ...base,
-      favorability: () => 0,
-      favorabilityBatch: (spots) => spots.map((_, i) => i), // last accepted = highest fav
-    });
-    expect(batched.length).toBeGreaterThan(0);
-    // The batched run keeps the highest-index (last-accepted) spot first; assert its
-    // top-kept position differs from the per-spot run's top-kept position.
-    expect({ x: batched[0].x, y: batched[0].y }).not.toEqual({ x: perSpot[0].x, y: perSpot[0].y });
-  });
-});

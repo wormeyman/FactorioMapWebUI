@@ -143,29 +143,30 @@ export function startingSpotRadius(params: ResourceParams, controls: ResourceCon
 }
 
 /**
- * starting_favorability_base_at(distance, elevation_lakes): the non-random part of the
- * starting-area spot favorability. The `random_penalty_at(0.5, 1)` batch term (Task 3)
- * is added to this by the caller. The game's spot_favorability_expression is:
+ * starting_favorability_base_at(distance, elevation): the full starting-area spot
+ * favorability. In Factorio 2.1.11 it is deterministic (no random_penalty term). The
+ * game's spot_favorability_expression is:
  *
  *   starting_resources_lake_mask * starting_modulation * origin_excluder * 2
  *     - min(1, distance / starting_resource_placement_radius)
  *
- * where starting_resources_lake_mask = clamp((elevation - 1)/10, 0, 1) (elevation =
- * elevation_lakes on Nauvis), origin_excluder = distance > 40 (avoid the crash site),
- * and starting_modulation = starting_resource_placement_radius > distance.
+ * where starting_resources_lake_mask = clamp((elevation - 1)/10, 0, 1) and `elevation`
+ * is the map's elevation property (= elevation_nauvis on the default Nauvis map),
+ * origin_excluder = distance > 40 (avoid the crash site), and starting_modulation =
+ * starting_resource_placement_radius > distance.
  */
 // _params/_controls: unused today (this is purely the distance/elevation term), but kept
-// in the signature for a stable (distance, elevationLakes, params, controls) shape across
+// in the signature for a stable (distance, elevation, params, controls) shape across
 // the starting-patch local functions.
 export function startingFavorabilityBaseAt(
   distance: number,
-  elevationLakes: number,
+  elevation: number,
   _params: ResourceParams,
   _controls: ResourceControls,
 ): number {
   const originExcluder = distance > 40 ? 1 : 0;
   return (
-    clamp((elevationLakes - 1) / 10, 0, 1) * startingModulation(distance) * originExcluder * 2 -
+    clamp((elevation - 1) / 10, 0, 1) * startingModulation(distance) * originExcluder * 2 -
     Math.min(1, distance / STARTING_RESOURCE_PLACEMENT_RADIUS)
   );
 }
