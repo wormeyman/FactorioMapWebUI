@@ -3,14 +3,15 @@ import type { TailBlock } from "../codec/mapExchangeString";
 /**
  * Nested, typed views of the map-exchange tail, derived from the flat
  * dotted-key `TailBlock` purely for JSON export / display.
- * The `enemyEvolution` and `enemyExpansion` sections ARE round-trip editable -
- * `presetToEncodable` overlays them back onto the tail via `writeMapSettingsToTail`.
- * Every other section here is derived read-only for JSON export / display;
- * `Preset.opaqueTailB64` (the raw serialized tail) remains the round-trip
- * source of truth for those, so encoding stays byte-exact and independent of
- * these views. `cliff.unknownFloat`, `pathFinder.trailingA`, and `opaqueTail` are
- * byte-level round-trip artifacts, not JSON fields, and are intentionally
- * excluded here.
+ * The `enemyEvolution` / `enemyExpansion` sections plus the Advanced-tab subset
+ * of `pollution`, `difficulty`, and `asteroids` ARE round-trip editable -
+ * `presetToEncodable` overlays them back onto the tail via `writeMapSettingsToTail`
+ * (see that function for the exact editable keys). Every other section/field here
+ * is derived read-only for JSON export / display; `Preset.opaqueTailB64` (the raw
+ * serialized tail) remains the round-trip source of truth for those, so encoding
+ * stays byte-exact and independent of these views. `cliff.unknownFloat`,
+ * `pathFinder.trailingA`, and `opaqueTail` are byte-level round-trip artifacts,
+ * not JSON fields, and are intentionally excluded here.
  */
 
 export interface CliffSettings {
