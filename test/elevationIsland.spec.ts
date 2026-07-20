@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import fixture from "./fixtures/oracle-elevation-island.seed123456.json";
 import { makeElevationIsland, elevationIsland } from "../src/noise/expressions/elevationIsland";
 import { makeElevationLakes } from "../src/noise/expressions/elevationLakes";
 
@@ -32,5 +33,63 @@ describe("makeElevationIsland delegates to lakes with bias=-1000 and seg/4", () 
   it("elevationIsland(ctx) matches makeElevationIsland(...)(x, y)", () => {
     const at = makeElevationIsland({ seed0: 123456 });
     expect(elevationIsland({ seed0: 123456, x: 2200.5, y: 0.25 })).toBe(at(2200.5, 0.25));
+  });
+});
+
+// Parity is asserted only where the game's own starting_lake_distance saturated at
+// 1024 (the empty-lake far-from-spawn ctx is exact there); plus a near-spawn block
+// that uses the computed starting lakes. Mirrors elevationLakes.spec.ts.
+const SATURATED = (i: number) => fixture.startingLakeDistance[i] >= 1024;
+
+describe("elevationIsland reproduces the game's elevation_island tree", () => {
+  const evalAt = makeElevationIsland({ seed0: fixture.seed0 });
+
+  it("has parity-testable (saturated) points", () => {
+    expect(fixture.positions.filter((_p, i) => SATURATED(i)).length).toBeGreaterThanOrEqual(12);
+  });
+
+  it("matches the water mask (elevation < 0) away from the coastline", () => {
+    for (let i = 0; i < fixture.positions.length; i++) {
+      if (!SATURATED(i)) continue;
+      const exp = fixture.elevation[i];
+      if (Math.abs(exp) < 1e-3) continue; // coastline: sign ambiguous within the floor
+      const p = fixture.positions[i];
+      expect(evalAt(p.x, p.y) < 0).toBe(exp < 0);
+    }
+  });
+
+  it("matches the numeric elevation to the f32 coordinate floor", () => {
+    let worst = 0;
+    let worstLabel = "";
+    for (let i = 0; i < fixture.positions.length; i++) {
+      if (!SATURATED(i)) continue;
+      const p = fixture.positions[i];
+      const err = Math.abs(evalAt(p.x, p.y) - fixture.elevation[i]);
+      if (err > worst) {
+        worst = err;
+        worstLabel = `@(${p.x},${p.y})`;
+      }
+    }
+    // Same f32 regime as lakes (offset_x=10000, worst observed ~6.66e-3 vs lakes'
+    // ~7.37e-3). Calibrated just above the observed worst, same 8e-3 bound as lakes.
+    expect(worst, `worst ${worstLabel}`).toBeLessThan(8e-3);
+  });
+
+  it("matches near-spawn elevation too (computed starting lakes)", () => {
+    let worst = 0;
+    let worstLabel = "";
+    let checked = 0;
+    for (let i = 0; i < fixture.positions.length; i++) {
+      if (SATURATED(i)) continue;
+      const p = fixture.positions[i];
+      const err = Math.abs(evalAt(p.x, p.y) - fixture.elevation[i]);
+      checked++;
+      if (err > worst) {
+        worst = err;
+        worstLabel = `@(${p.x},${p.y})`;
+      }
+    }
+    expect(checked).toBeGreaterThanOrEqual(9);
+    expect(worst, `worst ${worstLabel}`).toBeLessThan(8e-3);
   });
 });
