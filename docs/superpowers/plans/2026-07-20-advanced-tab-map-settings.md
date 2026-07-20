@@ -255,8 +255,10 @@ describe("presetToEncodable map-settings overlay", () => {
   it("re-setting diffusionRatio to its decoded value re-encodes byte-exact", () => {
     const original = presets["Default"] as string;
     const preset = presetFromDecoded("x", decodeExchangeString(original));
-    // No-op edit at the decoded value must not perturb bytes.
-    preset.mapSettings.pollution.diffusionRatio = preset.mapSettings.pollution.diffusionRatio;
+    // No-op edit at the decoded value must not perturb bytes. Route through a
+    // temp so it is not a literal self-assignment (oxlint no-self-assign).
+    const decoded = preset.mapSettings.pollution.diffusionRatio;
+    preset.mapSettings.pollution.diffusionRatio = decoded;
     expect(roundTrip(preset)).toBe(original);
   });
 });
