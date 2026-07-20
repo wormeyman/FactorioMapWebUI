@@ -21,6 +21,8 @@ import {
   type SpawnResult,
 } from "./oracle";
 import tileNamesFixture from "../fixtures/oracle-tile-names.seed123456.json";
+import tileNamesFixture654321 from "../fixtures/oracle-tile-names.seed654321.json";
+import tileNamesFixture424242 from "../fixtures/oracle-tile-names.seed424242.json";
 
 describe("oracle harness - pure builders", () => {
   it("buildDataLua registers the probe as a noise-expression, embedding the expression verbatim", () => {
@@ -171,12 +173,32 @@ describe("tile-name oracle (get_tile) - pure parsing", () => {
     ]);
   });
 
-  it("the committed tile-names fixture holds real Nauvis tile names", () => {
-    expect(tileNamesFixture.tileNames.length).toBe(tileNamesFixture.positions.length);
-    for (const name of tileNamesFixture.tileNames) {
+  it.each([
+    ["seed123456", tileNamesFixture],
+    ["seed654321", tileNamesFixture654321],
+    ["seed424242", tileNamesFixture424242],
+  ])("the committed %s tile-names fixture holds real Nauvis tile names", (_label, fixture) => {
+    expect(fixture.tileNames.length).toBe(fixture.positions.length);
+    for (const name of fixture.tileNames) {
       expect(typeof name).toBe("string");
       expect(name.length).toBeGreaterThan(0);
     }
+  });
+
+  it("the combined three-seed fixture set is tile-diverse enough to be a meaningful resolver oracle", () => {
+    // A single seed's local terrain is biome-poor by luck (see the Task 2 review
+    // finding: the original single-seed fixture was 86% grass-2/red-desert-0).
+    // Combined across seeds and a wide spatial extent, a broken resolver that
+    // defaults to grass/red-desert should no longer be able to score well.
+    const all = [
+      ...tileNamesFixture.tileNames,
+      ...tileNamesFixture654321.tileNames,
+      ...tileNamesFixture424242.tileNames,
+    ];
+    const distinct = new Set(all);
+    // Actual captured diversity is 20 distinct tiles across 153 points (including
+    // sand-1/2/3 and deepwater); 12 is a safe floor with headroom for regeneration.
+    expect(distinct.size).toBeGreaterThanOrEqual(12);
   });
 });
 
@@ -217,17 +239,17 @@ describe("oracle integration (gated on a local Factorio install)", () => {
       const workDir = await mkdtemp(join(tmpdir(), "oracle-tile-live-"));
       try {
         const positions: Position[] = tileNamesFixture.positions.slice(0, 3);
-        const tileNames = await sampleTileNames(positions, {
+        const samples = await sampleTileNames(positions, {
           workDir,
           seed: tileNamesFixture.seed0,
         });
-        expect(tileNames.length).toBe(positions.length);
-        for (const name of tileNames) {
-          expect(typeof name).toBe("string");
-          expect(name.length).toBeGreaterThan(0);
+        expect(samples.length).toBe(positions.length);
+        for (const s of samples) {
+          expect(typeof s.name).toBe("string");
+          expect(s.name.length).toBeGreaterThan(0);
         }
         // Same seed, same positions -> the game places the same tiles again.
-        expect(tileNames).toEqual(tileNamesFixture.tileNames.slice(0, 3));
+        expect(samples.map((s) => s.name)).toEqual(tileNamesFixture.tileNames.slice(0, 3));
       } finally {
         await rm(workDir, { recursive: true, force: true });
       }

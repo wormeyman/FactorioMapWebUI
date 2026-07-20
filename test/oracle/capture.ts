@@ -17,7 +17,13 @@ import { dirname, join } from "node:path";
 // The .ts extension is required because this file is executed directly by Node
 // (`--experimental-strip-types`), which does no extension resolution; the specs,
 // run through Vite, import extensionless. allowImportingTsExtensions permits both.
-import { oracleAvailable, type Position, sampleExpression, sampleTileNames } from "./oracle.ts";
+import {
+  oracleAvailable,
+  type Position,
+  sampleExpression,
+  sampleTileNames,
+  type TileSample,
+} from "./oracle.ts";
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), "..", "fixtures");
 
@@ -565,48 +571,77 @@ async function captureExpressionInRange(): Promise<void> {
 }
 
 /**
- * A grid spanning several hundred tiles around the origin, meant to cross
- * multiple biomes (water/shoreline/grass/dirt vary with moisture+aux over that
- * range under the default settings) while keeping the chunk-generation radius
- * (and thus capture time) modest.
+ * Scattered points spread over a WIDE spatial extent, meant to cross many
+ * biomes. Tile selection is driven by `aux` and `moisture`, whose
+ * `input_scale` (`control:aux:frequency/2048`, `control:moisture:frequency/256`)
+ * makes both vary very slowly over space - near the origin the whole area is
+ * one or two biomes, so reaching sand (high aux) / red-desert / the fuller
+ * dirt range needs points spread over THOUSANDS of tiles.
+ *
+ * Uses a golden-angle spiral (radius growing linearly from `minR` to `maxR`,
+ * angle advancing by the golden angle each step) so `count` points cover both
+ * many radii and many directions with no clustering, rather than a grid that
+ * would repeat the same few directions. `angleOffset` decorrelates the spiral
+ * between seeds so the same relative sample layout doesn't line up with the
+ * same terrain features seed to seed.
  */
-function tileGridPositions(): Position[] {
-  const out: Position[] = [];
-  for (let gy = -2; gy <= 2; gy++) {
-    for (let gx = -2; gx <= 2; gx++) {
-      out.push({ x: gx * 45, y: gy * 45 });
-    }
+function scatterPositions(
+  count: number,
+  minR: number,
+  maxR: number,
+  angleOffset: number,
+): Position[] {
+  const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5)); // ~137.5 degrees
+  const out: Position[] = [{ x: 0.5, y: 0.25 }]; // one near-origin anchor point
+  for (let i = 0; i < count; i++) {
+    const t = (i + 0.5) / count;
+    const r = minR + t * (maxR - minR);
+    const angle = angleOffset + i * GOLDEN_ANGLE;
+    out.push({ x: r * Math.cos(angle) + 0.5, y: r * Math.sin(angle) + 0.25 });
   }
-  out.push({ x: 220, y: 180 }, { x: -200, y: 150 }, { x: 150, y: -220 });
   return out;
 }
 
 /**
- * The `get_tile` tile-name oracle: generates real chunks for the DEFAULT preset
- * (no property routing) and dumps `surface.get_tile(x, y).name` at each grid
- * position, so a later task can check tile-selection argmax exactly (rather
- * than just the noise values `calculate_tile_properties` reports).
+ * The `get_tile` tile-name oracle: generates real chunks (a small per-point
+ * radius, NOT one giant origin-centered disc - see `buildTileControlLua`) for
+ * the DEFAULT preset (no property routing) and dumps
+ * `surface.get_tile(x, y).name` at each scattered position, so a later task
+ * can check tile-selection argmax exactly (rather than just the noise values
+ * `calculate_tile_properties` reports). Widened per the Task 2 review finding:
+ * the original 220-tile-radius grid was 86% grass-2/red-desert-0 with zero
+ * sand/deepwater - not a meaningful ground truth for resolver validation.
+ * Captures three seeds (a single seed's local terrain is biome-poor by luck)
+ * spread out to ~4000 tiles, each written to its own fixture file.
  */
-async function captureTileNames(): Promise<void> {
-  const seed = 123456;
-  const positions = tileGridPositions();
+async function captureTileNamesForSeed(seed: number, angleOffset: number): Promise<void> {
+  const positions = scatterPositions(50, 100, 4000, angleOffset);
 
   const workDir = await mkdtemp(join(tmpdir(), "oracle-capture-"));
   try {
-    const tileNames = await sampleTileNames(positions, { workDir, seed });
+    const samples: TileSample[] = await sampleTileNames(positions, { workDir, seed, radius: 1 });
     const fixture = {
       _comment:
-        "Ground truth from Factorio 2.1.11 via the test/oracle harness. DEFAULT preset (no property_expression_names routing) - surface.get_tile(x, y).name at each position after real chunk generation. Regenerate: node --experimental-strip-types test/oracle/capture.ts tile-names",
+        "Ground truth from Factorio 2.1.11 via the test/oracle harness. DEFAULT preset (no property_expression_names routing) - surface.get_tile(x, y).name at each position after real chunk generation. positions are the mod's ECHOED floored get_tile input (not the pre-floor request), so a fractional capture can't silently mismatch. Regenerate: node --experimental-strip-types test/oracle/capture.ts tile-names",
       seed0: seed,
-      positions,
-      tileNames,
+      positions: samples.map((s) => ({ x: s.x, y: s.y })),
+      tileNames: samples.map((s) => s.name),
     };
-    const out = join(FIXTURES, "oracle-tile-names.seed123456.json");
+    const out = join(FIXTURES, `oracle-tile-names.seed${seed}.json`);
     await writeFile(out, JSON.stringify(fixture, null, 2) + "\n");
-    console.log(`wrote ${out} (${positions.length} points)`);
+    const distinct = new Set(fixture.tileNames).size;
+    console.log(
+      `wrote ${out} (${positions.length} points, ${distinct} distinct tiles: ${[...new Set(fixture.tileNames)].sort().join(", ")})`,
+    );
   } finally {
     await rm(workDir, { recursive: true, force: true });
   }
+}
+
+async function captureTileNames(): Promise<void> {
+  await captureTileNamesForSeed(123456, 0);
+  await captureTileNamesForSeed(654321, 1.3);
+  await captureTileNamesForSeed(424242, 2.6);
 }
 
 if (!oracleAvailable()) {

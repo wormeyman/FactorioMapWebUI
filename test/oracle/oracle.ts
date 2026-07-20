@@ -221,21 +221,26 @@ export function buildTileMapGenSettings(seed = 123456): object {
 }
 
 /**
- * The tile-name mod's `control.lua`: on init, requests chunk generation around
- * the origin out to `radius` chunks (auto-sized from the farthest sampled
- * coordinate, +2 chunks of buffer, unless overridden), blocks until generation
- * finishes, then reads `get_tile(x, y).name` at every position and writes
- * `{ results: [{x, y, name}, ...] }` JSON, then `error(DUMPED-OK)` to exit.
- * `get_tile` takes int32 coords and rounds non-integers down, so positions are
- * floored before being embedded.
+ * The tile-name mod's `control.lua`: on init, requests chunk generation
+ * individually AROUND EACH SAMPLE POSITION (a small `radius` chunks per point,
+ * default 1 -> a 3x3 chunk neighborhood), rather than one big disc from the
+ * origin - `request_to_generate_chunks` cost scales with radius^2, so a single
+ * origin-centered disc covering points thousands of tiles out would generate
+ * millions of chunks. Requests are queued for every point first, then a single
+ * `force_generate_chunk_requests()` blocks until all of them finish, then the
+ * mod reads `get_tile(x, y).name` at every position and writes
+ * `{ results: [{x, y, name}, ...] }` JSON (echoing back the SAME floored x/y
+ * that was actually passed to `get_tile`, so a caller can't accidentally pair
+ * an unfloored input position with a floored tile sample), then
+ * `error(DUMPED-OK)` to exit. `get_tile` takes int32 coords and rounds
+ * non-integers down, so positions are floored before being embedded.
  */
 export function buildTileControlLua(
   positions: readonly Position[],
   opts: { radius?: number; dumpFile?: string } = {},
 ): string {
   const dumpFile = opts.dumpFile ?? TILE_DUMP_FILE;
-  const maxAbs = positions.reduce((m, p) => Math.max(m, Math.abs(p.x), Math.abs(p.y)), 0);
-  const radius = opts.radius ?? Math.ceil(maxAbs / 32) + 2;
+  const radius = opts.radius ?? 1;
   const posLua = positions
     .map((p) => `    {x = ${Math.floor(p.x)}, y = ${Math.floor(p.y)}}`)
     .join(",\n");
@@ -244,7 +249,9 @@ export function buildTileControlLua(
 ${posLua}
   }
   local surface = game.surfaces[1]
-  surface.request_to_generate_chunks({x = 0, y = 0}, ${radius})
+  for i, p in ipairs(positions) do
+    surface.request_to_generate_chunks({x = p.x, y = p.y}, ${radius})
+  end
   surface.force_generate_chunk_requests()
   local results = {}
   for i, p in ipairs(positions) do
@@ -373,18 +380,32 @@ export async function sampleExpression(
   return parseDump(jsonText).values;
 }
 
+/** A tile-name oracle result: the ACTUAL floored position `get_tile` was called at, plus its name. */
+export interface TileSample {
+  readonly x: number;
+  readonly y: number;
+  readonly name: string;
+}
+
 /**
  * Sample the placed tile name (`surface.get_tile(x, y).name`) at `positions`
  * through the real game, for the DEFAULT preset (no property routing) -
  * `sampleExpression` can only report noise values, not the tile the game
- * actually chose. ~1-2s per call depending on the chunk radius; throws if the
- * binary is missing (gate calls with {@link oracleAvailable}) or if no dump
- * was produced.
+ * actually chose. Returns one {@link TileSample} per input position, in order,
+ * carrying back the SAME floored x/y that was actually passed to `get_tile`
+ * (not necessarily equal to the fractional input) so callers can't pair an
+ * unfloored position with a floored sample. `opts.radius` is the PER-POINT
+ * chunk-generation radius (default 1, i.e. a 3x3 chunk neighborhood around
+ * each point) - scattered far-apart points are generated individually rather
+ * than as one giant origin-centered disc, since generation cost scales with
+ * radius^2. ~1-2s per call depending on point count; throws if the binary is
+ * missing (gate calls with {@link oracleAvailable}) or if no dump was
+ * produced.
  */
 export async function sampleTileNames(
   positions: readonly Position[],
-  opts: OracleOptions,
-): Promise<string[]> {
+  opts: OracleOptions & { radius?: number },
+): Promise<TileSample[]> {
   const seed = opts.seed ?? 123456;
   const factorioBin = opts.factorioBin ?? DEFAULT_FACTORIO_BIN;
   const dataDir = opts.dataDir ?? defaultDataDir(factorioBin);
@@ -401,7 +422,10 @@ export async function sampleTileNames(
   await mkdir(modFilesDir, { recursive: true });
   await mkdir(writeDataDir, { recursive: true });
   await writeFile(join(modFilesDir, "info.json"), JSON.stringify(buildTileInfoJson(), null, 2));
-  await writeFile(join(modFilesDir, "control.lua"), buildTileControlLua(positions));
+  await writeFile(
+    join(modFilesDir, "control.lua"),
+    buildTileControlLua(positions, { radius: opts.radius }),
+  );
   await writeFile(join(modDir, "mod-list.json"), JSON.stringify(buildTileModList(), null, 2));
   await writeFile(mapGenPath, JSON.stringify(buildTileMapGenSettings(seed)));
   await writeFile(configPath, buildConfigIni(writeDataDir, dataDir));
@@ -418,5 +442,5 @@ export async function sampleTileNames(
       `tile oracle produced no dump at ${dumpPath}. Factorio stderr tail:\n${stderr.slice(-2000)}`,
     );
   }
-  return parseTileDump(jsonText).map((r) => r.name);
+  return parseTileDump(jsonText);
 }
