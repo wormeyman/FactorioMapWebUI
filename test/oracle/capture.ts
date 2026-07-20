@@ -1066,6 +1066,45 @@ async function captureResourceStarting(): Promise<void> {
   console.log(`wrote ${out} (${cases.length} cases x ${positions.length} points)`);
 }
 
+/**
+ * enemy_base_probability ground truth. Dense grid over region (2,2) (centred on
+ * (1024,1024), spanning [768,1280], stride 16) catches several spot cones - the
+ * region is off-spawn/high-density so a few of the ~15-30 tile cones survive the
+ * density trim - plus a near-spawn (+x) profile (basement + starting-area
+ * clearing). Two seeds.
+ */
+async function captureEnemyBase(): Promise<void> {
+  const positions: Position[] = [];
+  // Dense grid over region (2,2): centred (1024,1024), [768,1280]; stride 16 catches
+  // the ~15-30 tile enemy cones (a few survive the density trim per 512^2 region).
+  for (let iy = 0; iy < 32; iy++)
+    for (let ix = 0; ix < 32; ix++)
+      positions.push({ x: 768 + ix * 16 + 0.5, y: 768 + iy * 16 + 0.25 });
+  // Near-spawn (+x) profile: basement + starting-area clearing.
+  for (const d of [0, 40, 60, 80, 100, 150, 200, 300]) positions.push({ x: d + 0.5, y: 0.25 });
+  const seeds = [123456, 777771];
+  const cases: { seed: number; values: number[] }[] = [];
+  for (const seed of seeds) {
+    const workDir = await mkdtemp(join(tmpdir(), "oracle-capture-"));
+    try {
+      const values = await sampleExpression("enemy_base_probability", positions, { workDir, seed });
+      cases.push({ seed, values });
+      console.log(`  captured enemy-base seed=${seed}`);
+    } finally {
+      await rm(workDir, { recursive: true, force: true });
+    }
+  }
+  const fixture = {
+    _comment:
+      "Ground truth from Factorio 2.1.11 via test/oracle. enemy_base_probability routed onto elevation, default controls (enemy-base freq/size = 1). Regenerate: node --experimental-strip-types test/oracle/capture.ts enemy-base",
+    positions,
+    cases,
+  };
+  const out = join(FIXTURES, "oracle-enemy-base.seed123456.json");
+  await writeFile(out, JSON.stringify(fixture, null, 2) + "\n");
+  console.log(`wrote ${out} (${positions.length} points, ${cases.length} seeds)`);
+}
+
 if (!oracleAvailable()) {
   console.error("No Factorio binary found (set FACTORIO_BIN). Cannot capture fixtures.");
   process.exit(1);
@@ -1092,3 +1131,4 @@ if (want("random-penalty")) await captureRandomPenalty();
 if (want("resource-regular")) await captureResourceRegular();
 if (want("resource-starting")) await captureResourceStarting();
 if (want("tile-names")) await captureTileNames();
+if (want("enemy-base")) await captureEnemyBase();
