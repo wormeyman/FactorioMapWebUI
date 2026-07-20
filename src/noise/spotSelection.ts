@@ -21,6 +21,7 @@
  *    the target exactly, and its cone shrinks self-similarly: radius and peak
  *    both scale by (q'/q)^(1/3).
  */
+import { fastCbrt } from "./fastApprox";
 import { spotSeedWord, type SpotRegionKey } from "./spotCandidates";
 
 /** Per-rejection decay of the SQUARED spacing threshold (measured exactly:
@@ -46,6 +47,14 @@ export interface SpotExpressions {
    * returned array aligns with the input spots.
    */
   quantityBatch?: (spots: readonly { x: number; y: number }[]) => number[];
+  /**
+   * Optional batched spot favorability, evaluated over ALL skip-set accepted spots at
+   * once (in acceptance order), before the sort/trim. Overrides `favorability` when
+   * present. Needed for favorability expressions that contain a `random_penalty` (a
+   * batch op whose per-spot value depends on the whole spot list + its order). The
+   * returned array aligns with the input spots.
+   */
+  favorabilityBatch?: (spots: readonly { x: number; y: number }[]) => number[];
 }
 
 export interface SpotSelectParams extends SpotExpressions {
@@ -117,9 +126,13 @@ export function selectSpots(key: SpotRegionKey, p: SpotSelectParams): SelectedSp
   // quantityBatch is given (for random_penalty-bearing expressions), else per-spot.
   const qBatch = p.quantityBatch ? p.quantityBatch(mine) : null;
 
+  // Same batching for favorability (for random_penalty-bearing favorability
+  // expressions), evaluated once over the skip set in acceptance order.
+  const favVals = p.favorabilityBatch ? p.favorabilityBatch(mine) : null;
+
   // phase 4: stable sort by favorability desc, accumulate to target
   const ranked = mine
-    .map((a, j) => ({ ...a, j, fav: p.favorability(a.x, a.y) }))
+    .map((a, j) => ({ ...a, j, fav: favVals ? favVals[j] : p.favorability(a.x, a.y) }))
     .sort((a, b) => b.fav - a.fav || a.j - b.j);
   const out: SelectedSpot[] = [];
   let acc = 0;
@@ -136,7 +149,7 @@ export function selectSpots(key: SpotRegionKey, p: SpotSelectParams): SelectedSp
     let coneScale = 1;
     if (p.hardRegionTargetQuantity && acc + q > target) {
       const q2 = target - acc;
-      coneScale = Math.cbrt(q2 / q);
+      coneScale = fastCbrt(q2 / q);
       q = q2;
     }
     out.push({ x: s.x, y: s.y, quantity: q, coneScale });
