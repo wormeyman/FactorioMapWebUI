@@ -3,14 +3,15 @@ import type { TailBlock } from "../codec/mapExchangeString";
 /**
  * Nested, typed views of the map-exchange tail, derived from the flat
  * dotted-key `TailBlock` purely for JSON export / display.
- * The `enemyEvolution` and `enemyExpansion` sections ARE round-trip editable -
- * `presetToEncodable` overlays them back onto the tail via `writeEnemyToTail`.
- * Every other section here is derived read-only for JSON export / display;
- * `Preset.opaqueTailB64` (the raw serialized tail) remains the round-trip
- * source of truth for those, so encoding stays byte-exact and independent of
- * these views. `cliff.unknownFloat`, `pathFinder.trailingA`, and `opaqueTail` are
- * byte-level round-trip artifacts, not JSON fields, and are intentionally
- * excluded here.
+ * The `enemyEvolution` / `enemyExpansion` sections plus the Advanced-tab subset
+ * of `pollution`, `difficulty`, and `asteroids` ARE round-trip editable -
+ * `presetToEncodable` overlays them back onto the tail via `writeMapSettingsToTail`
+ * (see that function for the exact editable keys). Every other section/field here
+ * is derived read-only for JSON export / display; `Preset.opaqueTailB64` (the raw
+ * serialized tail) remains the round-trip source of truth for those, so encoding
+ * stays byte-exact and independent of these views. `cliff.unknownFloat`,
+ * `pathFinder.trailingA`, and `opaqueTail` are byte-level round-trip artifacts,
+ * not JSON fields, and are intentionally excluded here.
  */
 
 export interface CliffSettings {
@@ -287,47 +288,72 @@ export function tailToNested(tail: TailBlock): { cliff: CliffSettings; mapSettin
 }
 
 /**
- * Overlay the two editable enemy sections back onto a flat `TailBlock` - the
- * exact inverse of the `enemyEvolution.*` / `enemyExpansion.*` reads in
- * `tailToNested`. Writes ONLY enemy dotted keys (never the sibling
- * pollution/unitGroup/pathFinder/difficulty/asteroids keys, which stay
- * carried opaquely), and copies a field only when `value !== undefined` so a
- * field that decoded genuinely absent is not spuriously added. A `false` /
- * `0` edit IS written (that is the point of the undefined-check rather than a
- * truthiness check). Used by `presetToEncodable` to make these sections
- * round-trip-editable while every other tail byte round-trips from
- * `opaqueTailB64`.
+ * Overlay the round-trip-editable MapSettings sections back onto a flat
+ * `TailBlock` - the inverse of the corresponding reads in `tailToNested`.
+ *
+ * Writes ONLY these keys: the full enemyEvolution / enemyExpansion sections,
+ * plus the hand-picked Advanced-tab subset of pollution
+ * (enabled, ageing, enemyAttackPollutionConsumptionModifier,
+ * minPollutionToDamageTrees, pollutionRestoredPerTreeDamage, diffusionRatio),
+ * difficulty (technologyPriceMultiplier, spoilTimeModifier), and asteroids
+ * (spawningRate). It deliberately does NOT touch unitGroup, pathFinder, or the
+ * other pollution/difficulty keys - those stay carried opaquely via
+ * `opaqueTailB64`. Do not assume the "map settings" name means every section is
+ * handled; wiring a new control means adding its key here first.
+ *
+ * A field is copied only when `value !== undefined`, so a field that decoded
+ * genuinely absent is not spuriously added. (Optional tail fields decode to
+ * `null`, not `undefined`; `null` is copied and re-emitted as presence-byte 0,
+ * still byte-exact.) A `false` / `0` edit IS written - that is the point of the
+ * undefined-check rather than a truthiness check.
+ *
+ * Used by `presetToEncodable` to make these sections round-trip-editable while
+ * every other tail byte round-trips unchanged from `opaqueTailB64`.
  */
-export function writeEnemyToTail(
-  tail: TailBlock,
-  evolution: EnemyEvolutionSettings,
-  expansion: EnemyExpansionSettings,
-): void {
+export function writeMapSettingsToTail(tail: TailBlock, mapSettings: MapSettings): void {
   const put = (key: string, value: number | boolean | undefined) => {
     if (value !== undefined) tail[key] = value;
   };
+  const { enemyEvolution, enemyExpansion, pollution, difficulty, asteroids } = mapSettings;
 
-  put("enemyEvolution.enabled", evolution.enabled);
-  put("enemyEvolution.timeFactor", evolution.timeFactor);
-  put("enemyEvolution.destroyFactor", evolution.destroyFactor);
-  put("enemyEvolution.pollutionFactor", evolution.pollutionFactor);
+  put("enemyEvolution.enabled", enemyEvolution.enabled);
+  put("enemyEvolution.timeFactor", enemyEvolution.timeFactor);
+  put("enemyEvolution.destroyFactor", enemyEvolution.destroyFactor);
+  put("enemyEvolution.pollutionFactor", enemyEvolution.pollutionFactor);
 
-  put("enemyExpansion.enabled", expansion.enabled);
-  put("enemyExpansion.maxExpansionDistance", expansion.maxExpansionDistance);
-  put("enemyExpansion.minExpansionDistance", expansion.minExpansionDistance);
-  put("enemyExpansion.friendlyBaseInfluenceRadius", expansion.friendlyBaseInfluenceRadius);
-  put("enemyExpansion.enemyBuildingInfluenceRadius", expansion.enemyBuildingInfluenceRadius);
-  put("enemyExpansion.buildingCoefficient", expansion.buildingCoefficient);
-  put("enemyExpansion.otherBaseCoefficient", expansion.otherBaseCoefficient);
-  put("enemyExpansion.neighbouringChunkCoefficient", expansion.neighbouringChunkCoefficient);
+  put("enemyExpansion.enabled", enemyExpansion.enabled);
+  put("enemyExpansion.maxExpansionDistance", enemyExpansion.maxExpansionDistance);
+  put("enemyExpansion.minExpansionDistance", enemyExpansion.minExpansionDistance);
+  put("enemyExpansion.friendlyBaseInfluenceRadius", enemyExpansion.friendlyBaseInfluenceRadius);
+  put("enemyExpansion.enemyBuildingInfluenceRadius", enemyExpansion.enemyBuildingInfluenceRadius);
+  put("enemyExpansion.buildingCoefficient", enemyExpansion.buildingCoefficient);
+  put("enemyExpansion.otherBaseCoefficient", enemyExpansion.otherBaseCoefficient);
+  put("enemyExpansion.neighbouringChunkCoefficient", enemyExpansion.neighbouringChunkCoefficient);
   put(
     "enemyExpansion.neighbouringBaseChunkCoefficient",
-    expansion.neighbouringBaseChunkCoefficient,
+    enemyExpansion.neighbouringBaseChunkCoefficient,
   );
-  put("enemyExpansion.maxCollidingTilesCoefficient", expansion.maxCollidingTilesCoefficient);
-  put("enemyExpansion.settlerGroupMinSize", expansion.settlerGroupMinSize);
-  put("enemyExpansion.settlerGroupMaxSize", expansion.settlerGroupMaxSize);
-  put("enemyExpansion.evolutionGroupSizeFactor", expansion.evolutionGroupSizeFactor);
-  put("enemyExpansion.minExpansionCooldown", expansion.minExpansionCooldown);
-  put("enemyExpansion.maxExpansionCooldown", expansion.maxExpansionCooldown);
+  put("enemyExpansion.maxCollidingTilesCoefficient", enemyExpansion.maxCollidingTilesCoefficient);
+  put("enemyExpansion.settlerGroupMinSize", enemyExpansion.settlerGroupMinSize);
+  put("enemyExpansion.settlerGroupMaxSize", enemyExpansion.settlerGroupMaxSize);
+  put("enemyExpansion.evolutionGroupSizeFactor", enemyExpansion.evolutionGroupSizeFactor);
+  put("enemyExpansion.minExpansionCooldown", enemyExpansion.minExpansionCooldown);
+  put("enemyExpansion.maxExpansionCooldown", enemyExpansion.maxExpansionCooldown);
+
+  put("pollution.enabled", pollution.enabled);
+  put("pollution.ageing", pollution.ageing);
+  put(
+    "pollution.enemyAttackPollutionConsumptionModifier",
+    pollution.enemyAttackPollutionConsumptionModifier,
+  );
+  put("pollution.minPollutionToDamageTrees", pollution.minPollutionToDamageTrees);
+  // The map-gen GUI's "Absorbed per damaged tree" tracks this field (confirmed
+  // by an in-game sentinel-import check), not pollutionPerTreeDamage.
+  put("pollution.pollutionRestoredPerTreeDamage", pollution.pollutionRestoredPerTreeDamage);
+  put("pollution.diffusionRatio", pollution.diffusionRatio);
+
+  put("difficulty.technologyPriceMultiplier", difficulty.technologyPriceMultiplier);
+  put("difficulty.spoilTimeModifier", difficulty.spoilTimeModifier);
+
+  put("asteroids.spawningRate", asteroids.spawningRate);
 }

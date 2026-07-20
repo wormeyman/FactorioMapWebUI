@@ -47,12 +47,16 @@ export interface Preset {
   /** Nested, typed view of the cliff section of the tail, derived from `opaqueTailB64` for JSON export/display. Read-only; not the round-trip source of truth. */
   cliffSettings: CliffSettings;
   /**
-   * Nested, typed view of the MapSettings sections of the tail. `enemyEvolution`
-   * and `enemyExpansion` are round-trip EDITABLE: `presetToEncodable` overlays
-   * them back onto the tail (see `writeEnemyToTail`). The sibling sections
-   * (pollution, unitGroup, pathFinder, difficulty, asteroids) remain read-only
-   * derived views for JSON export/display only and are ignored by the encoder -
-   * wiring one to a control requires extending the overlay first.
+   * Nested, typed view of the MapSettings sections of the tail. The
+   * enemyEvolution / enemyExpansion sections and the Advanced-tab subset of
+   * pollution (enabled, ageing, enemyAttackPollutionConsumptionModifier,
+   * minPollutionToDamageTrees, pollutionRestoredPerTreeDamage, diffusionRatio),
+   * difficulty (technologyPriceMultiplier, spoilTimeModifier), and asteroids
+   * (spawningRate) are round-trip EDITABLE: `presetToEncodable` overlays them
+   * back onto the tail (see `writeMapSettingsToTail`). Every OTHER field here
+   * (unitGroup, pathFinder, the remaining pollution/difficulty keys) is a
+   * read-only derived view for JSON export/display and is ignored by the
+   * encoder - wiring one to a control requires extending the overlay first.
    */
   mapSettings: MapSettings;
   formatVersion: FormatVersion;
