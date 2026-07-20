@@ -476,6 +476,94 @@ async function captureElevationIsland(): Promise<void> {
   console.log(`wrote ${out} (${positions.length} points)`);
 }
 
+/**
+ * The native `expression_in_range(peak_multiplier, peak_maximum, expr_1..N,
+ * from_1..N, to_1..N)` builtin - the one genuine unknown of Milestone 2. Sample
+ * three sweeps that recover the 1-D peak/falloff shape (both the bounded (20,1)
+ * and the unbounded (5,inf) parametrizations) and the N-D combination rule.
+ *
+ * Arg order per the game docs: peak_multiplier, peak_maximum, ALL exprs, then ALL
+ * range_froms, then ALL range_tos. So 2-D is
+ * expression_in_range(pm, pmax, expr1, expr2, from1, from2, to1, to2).
+ */
+async function captureExpressionInRange(): Promise<void> {
+  const seed = 123456;
+
+  const sample = async (expression: string, positions: Position[]): Promise<number[]> => {
+    const workDir = await mkdtemp(join(tmpdir(), "oracle-capture-"));
+    try {
+      return await sampleExpression(expression, positions, { workDir, seed });
+    } finally {
+      await rm(workDir, { recursive: true, force: true });
+    }
+  };
+
+  // 1-D sweep: x from -1500..1500 step 25 (y fixed), expr = x/1000 in [-0.5, 0.5].
+  // Well inside, exactly on, and well beyond both edges of the range.
+  const oneDPositions: Position[] = [];
+  for (let x = -1500; x <= 1500; x += 25) oneDPositions.push({ x, y: 0.25 });
+
+  const oneD_20_1_expr = "expression_in_range(20, 1, (x/1000), -0.5, 0.5)";
+  const oneD_20_1_values = await sample(oneD_20_1_expr, oneDPositions);
+  console.log("  captured oneD_20_1");
+
+  const oneD_5_inf_expr = "expression_in_range(5, inf, (x/1000), -0.5, 0.5)";
+  const oneD_5_inf_values = await sample(oneD_5_inf_expr, oneDPositions);
+  console.log("  captured oneD_5_inf");
+
+  // 2-D sweep, (20, 1), both dims range [-0.5, 0.5]:
+  //   expression_in_range(20, 1, x/1000, y/1000, -0.5, -0.5, 0.5, 0.5)
+  // Two families that distinguish min vs product vs sum:
+  //  (a) hold x/1000 = 0.2 (intermediate, in range) and sweep y across and beyond
+  //      the range. At an in-range intermediate x, min(a,b), a*b and a+b all
+  //      predict different curves as b leaves [1-partial..1].
+  //  (b) a diagonal x=y sweep (both leave the range together).
+  const twoD_expr = "expression_in_range(20, 1, (x/1000), (y/1000), -0.5, -0.5, 0.5, 0.5)";
+  const twoDPositions: Position[] = [];
+  for (let y = -1000; y <= 1000; y += 25) twoDPositions.push({ x: 200, y }); // (a) hold x=0.2
+  for (let d = -1000; d <= 1000; d += 25) twoDPositions.push({ x: d, y: d }); // (b) diagonal
+  const twoD_values = await sample(twoD_expr, twoDPositions);
+  console.log("  captured twoD");
+
+  const fixture = {
+    _comment:
+      "Ground truth from Factorio 2.1.11 via the test/oracle harness. Native expression_in_range routed onto elevation. Arg order: peak_multiplier, peak_maximum, all exprs, all froms, all tos. Regenerate: node --experimental-strip-types test/oracle/capture.ts expression-in-range",
+    seed0: seed,
+    sweeps: {
+      oneD_20_1: {
+        expression: oneD_20_1_expr,
+        peakMultiplier: 20,
+        peakMaximum: 1,
+        from: -0.5,
+        to: 0.5,
+        positions: oneDPositions,
+        values: oneD_20_1_values,
+      },
+      oneD_5_inf: {
+        expression: oneD_5_inf_expr,
+        peakMultiplier: 5,
+        peakMaximum: "inf",
+        from: -0.5,
+        to: 0.5,
+        positions: oneDPositions,
+        values: oneD_5_inf_values,
+      },
+      twoD: {
+        expression: twoD_expr,
+        peakMultiplier: 20,
+        peakMaximum: 1,
+        froms: [-0.5, -0.5],
+        tos: [0.5, 0.5],
+        positions: twoDPositions,
+        values: twoD_values,
+      },
+    },
+  };
+  const out = join(FIXTURES, "oracle-expression-in-range.seed123456.json");
+  await writeFile(out, JSON.stringify(fixture, null, 2) + "\n");
+  console.log(`wrote ${out}`);
+}
+
 if (!oracleAvailable()) {
   console.error("No Factorio binary found (set FACTORIO_BIN). Cannot capture fixtures.");
   process.exit(1);
@@ -494,3 +582,4 @@ if (want("multioctave-wrappers")) await captureMultioctaveWrappers();
 if (want("elevation-lakes")) await captureElevationLakes();
 if (want("elevation-nauvis")) await captureElevationNauvis();
 if (want("elevation-island")) await captureElevationIsland();
+if (want("expression-in-range")) await captureExpressionInRange();
