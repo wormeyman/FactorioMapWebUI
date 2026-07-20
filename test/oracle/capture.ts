@@ -527,6 +527,49 @@ async function captureTemperature(): Promise<void> {
 }
 
 /**
+ * The `aux` (= `aux_nauvis`, "terrain type") climate expression: `clamp(0.5 + bias
+ * + 0.06*(nauvis_plateaus - 0.4) + quick_multioctave_noise{...}, 0, 1)`. Routed
+ * onto elevation, same standard grid as `captureTemperature` (near-origin band,
+ * far rings at r=2200/3300, one deep-field point) for comparability across
+ * captures. `nauvis_plateaus` is a Nauvis-shared sub-tree (also used by
+ * `elevation_nauvis`), so this exercises the shared module at defaults
+ * (`control:water:frequency` = 1).
+ */
+async function captureAux(): Promise<void> {
+  const seed = 123456;
+  const positions: Position[] = [];
+  for (let gy = 0; gy < 3; gy++) {
+    for (let gx = 0; gx < 3; gx++) {
+      positions.push({ x: gx * 11 - 11 + 0.5, y: gy * 13 - 13 + 0.25 });
+    }
+  }
+  for (const r of [2200, 3300]) {
+    for (let k = 0; k < 8; k++) {
+      const a = (k * Math.PI) / 4;
+      positions.push({ x: r * Math.cos(a) + 0.5, y: r * Math.sin(a) + 0.25 });
+    }
+  }
+  positions.push({ x: 12345.75, y: 6789.125 });
+
+  const workDir = await mkdtemp(join(tmpdir(), "oracle-capture-"));
+  try {
+    const aux = await sampleExpression("aux", positions, { workDir, seed });
+    const fixture = {
+      _comment:
+        "Ground truth from Factorio 2.1.11 via the test/oracle harness. aux (= aux_nauvis) routed onto elevation. Regenerate: node --experimental-strip-types test/oracle/capture.ts aux",
+      seed0: seed,
+      positions,
+      aux,
+    };
+    const out = join(FIXTURES, "oracle-aux.seed123456.json");
+    await writeFile(out, JSON.stringify(fixture, null, 2) + "\n");
+    console.log(`wrote ${out} (${positions.length} points)`);
+  } finally {
+    await rm(workDir, { recursive: true, force: true });
+  }
+}
+
+/**
  * The native `expression_in_range(peak_multiplier, peak_maximum, expr_1..N,
  * from_1..N, to_1..N)` builtin - the one genuine unknown of Milestone 2. Sample
  * three sweeps that recover the 1-D peak/falloff shape (both the bounded (20,1)
@@ -707,5 +750,6 @@ if (want("elevation-lakes")) await captureElevationLakes();
 if (want("elevation-nauvis")) await captureElevationNauvis();
 if (want("elevation-island")) await captureElevationIsland();
 if (want("temperature")) await captureTemperature();
+if (want("aux")) await captureAux();
 if (want("expression-in-range")) await captureExpressionInRange();
 if (want("tile-names")) await captureTileNames();
