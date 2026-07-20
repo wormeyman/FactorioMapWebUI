@@ -352,11 +352,11 @@ EOF
 - Consumes: `writeMapSettingsToTail` (via the store's `activeExchangeString`), the verified `DISPLAY_SCALE` / labels / tooltips from Task 2, `EnemyValueRow` (`{ label, modelValue, min?, max?, step?, disabled?, info? }`), `FCheckbox`, `FInfo`, `FNumberInput`.
 - Produces: the finished Advanced tab (no downstream consumers).
 
-> The `DISPLAY_SCALE` numbers and `INFO` strings below use the spec's working hypotheses (percent = 100). Task 2's verified values replace them before this task is considered done - if Task 2 confirmed a different scale for any field, use that number here.
+> Scales/labels/tooltips/ranges below are ORACLE-VERIFIED (see the spec's "Field mapping - ORACLE VERIFIED" section). Two non-obvious results: "Absorbed per damaged tree" binds `pollutionRestoredPerTreeDamage`, and Spoiling rate is the INVERSE `100 / wire`.
 
 - [ ] **Step 1: Write failing component tests in `test/advancedTab.spec.ts`**
 
-First add the codec import at the TOP of the file (with the other imports), then add the new `describe` block below (keep the two existing width/height tests unchanged). The tests mirror the EnemyTab pattern of asserting through `store.activeExchangeString` for the full pipeline:
+First add the codec import at the TOP of the file (with the other imports), then add the new `describe` block below (keep the two existing width/height tests unchanged). The tests mirror the EnemyTab pattern of asserting through `store.activeExchangeString` for the full pipeline. Note the two selector shapes: Price multiplier is a bare `FNumberInput` (its `data-test` lands ON the `<input>`), while the slider rows are `EnemyValueRow` (their `data-test` is on the row `<div>`, so target the nested `input[type="number"]`).
 
 ```ts
 // top of file, alongside the existing imports:
@@ -387,7 +387,8 @@ describe("AdvancedTab map settings", () => {
     setActivePinia(createPinia());
     const store = usePresetsStore();
     const wrapper = mount(AdvancedTab);
-    const box = wrapper.find('[data-test="tech-price-multiplier"] input[type="number"]');
+    // Price multiplier is a bare FNumberInput: data-test IS the input element.
+    const box = wrapper.find('[data-test="tech-price-multiplier"]');
     (box.element as HTMLInputElement).value = "4";
     await box.trigger("change");
     const tail = decodeExchangeString(store.activeExchangeString as string).tail;
@@ -403,6 +404,29 @@ describe("AdvancedTab map settings", () => {
     await box.trigger("change");
     const tail = decodeExchangeString(store.activeExchangeString as string).tail;
     expect(tail["pollution.diffusionRatio"]).toBeCloseTo(0.05, 6);
+  });
+
+  it("writes spoiling rate as the inverse of the wire spoil-time modifier", async () => {
+    setActivePinia(createPinia());
+    const store = usePresetsStore();
+    const wrapper = mount(AdvancedTab);
+    const box = wrapper.find('[data-test="spoiling-rate"] input[type="number"]');
+    (box.element as HTMLInputElement).value = "200"; // displayed rate %
+    await box.trigger("change");
+    const tail = decodeExchangeString(store.activeExchangeString as string).tail;
+    // rate 200% -> wire 100/200 = 0.5
+    expect(tail["difficulty.spoilTimeModifier"]).toBeCloseTo(0.5, 6);
+  });
+
+  it("binds 'Absorbed per damaged tree' to pollutionRestoredPerTreeDamage", async () => {
+    setActivePinia(createPinia());
+    const store = usePresetsStore();
+    const wrapper = mount(AdvancedTab);
+    const box = wrapper.find('[data-test="pollution-absorbed-per-tree"] input[type="number"]');
+    (box.element as HTMLInputElement).value = "25";
+    await box.trigger("change");
+    const tail = decodeExchangeString(store.activeExchangeString as string).tail;
+    expect(tail["pollution.pollutionRestoredPerTreeDamage"]).toBe(25);
   });
 
   it("disables the pollution child rows when pollution is unchecked", async () => {
@@ -422,8 +446,6 @@ describe("AdvancedTab map settings", () => {
   });
 });
 ```
-
-> If Task 2 verified diffusion's scale as non-percent, adjust the "5 -> 0.05" expectation to match (e.g. raw: "5 -> 5").
 
 - [ ] **Step 2: Run to verify failure**
 
@@ -450,16 +472,17 @@ const expressions = computed(() =>
   Object.entries(store.activePreset?.propertyExpressionNames ?? {}),
 );
 
-// Display scaling: the map-gen GUI shows some wire floats scaled. Each scale is
-// verified against the game (see the design spec's oracle pass); the wire stays
-// raw and the scale is applied only on set, so an untouched import is byte-exact.
-// TASK 2: replace any scale here that the oracle pass corrected.
+// Display scaling (oracle-verified against Factorio 2.1.9 - see the design spec's
+// "Field mapping - ORACLE VERIFIED" section). The map-gen GUI shows some wire
+// floats scaled; the wire stays raw and the scale is applied only on set, so an
+// untouched import is byte-exact. Percent fields display wire * 100; Spoiling
+// rate is the INVERSE (display% = 100 / wire); tree thresholds and the tech price
+// multiplier are raw.
 const PERCENT = 100;
 
-// A scaled display value: reads the raw wire float and shows `wire * scale`;
-// writes `display / scale` back so the wire stays raw and an untouched import is
-// byte-exact. read/write closures keep this fully typed against each settings
-// section (no generic indexing gymnastics against the boolean `enabled` field).
+// Linear scaled display: reads the raw wire float and shows `wire * scale`;
+// writes `display / scale`. read/write closures keep this fully typed against
+// each settings section (no generic indexing against the boolean `enabled`).
 function scaled(read: () => number | undefined, write: (v: number) => void, scale: number) {
   return computed({
     get: () => {
@@ -471,20 +494,6 @@ function scaled(read: () => number | undefined, write: (v: number) => void, scal
   });
 }
 
-const techPrice = scaled(
-  () => difficulty.value?.technologyPriceMultiplier,
-  (v) => {
-    if (difficulty.value) difficulty.value.technologyPriceMultiplier = v;
-  },
-  1,
-);
-const spoilingRate = scaled(
-  () => difficulty.value?.spoilTimeModifier,
-  (v) => {
-    if (difficulty.value) difficulty.value.spoilTimeModifier = v;
-  },
-  PERCENT,
-);
 const spawningRate = scaled(
   () => asteroids.value?.spawningRate,
   (v) => {
@@ -513,10 +522,12 @@ const minDamageTrees = scaled(
   },
   1,
 );
+// "Absorbed per damaged tree" tracks pollutionRestoredPerTreeDamage (oracle-verified,
+// NOT pollutionPerTreeDamage).
 const absorbedPerTree = scaled(
-  () => pollution.value?.pollutionPerTreeDamage,
+  () => pollution.value?.pollutionRestoredPerTreeDamage,
   (v) => {
-    if (pollution.value) pollution.value.pollutionPerTreeDamage = v;
+    if (pollution.value) pollution.value.pollutionRestoredPerTreeDamage = v;
   },
   1,
 );
@@ -528,17 +539,35 @@ const diffusion = scaled(
   PERCENT,
 );
 
-// Verbatim map-gen GUI tooltip text (from Task 2's locale grep).
+// Spoiling rate is displayed as the INVERSE of the wire spoil-time modifier:
+// rate% = 100 / spoilTimeModifier (wire is spoil TIME, GUI shows spoil RATE).
+// Applied only on set, so an untouched import stays byte-exact.
+const spoilingRate = computed({
+  get: () => {
+    const w = difficulty.value?.spoilTimeModifier;
+    return w ? Math.round(100 / w) : 0;
+  },
+  set: (displayPct: number) => {
+    if (difficulty.value && displayPct > 0) difficulty.value.spoilTimeModifier = 100 / displayPct;
+  },
+});
+
+// Verbatim map-gen GUI tooltip text (Factorio 2.1.9 core locale [gui-map-generator]).
+// Price multiplier has no dedicated map-gen tooltip, so it gets no FInfo.
 const INFO = {
-  techPrice: "TASK2: verbatim tooltip",
-  pollution: "TASK2: verbatim tooltip",
-  ageing: "TASK2: verbatim tooltip",
-  attackCost: "TASK2: verbatim tooltip",
-  minDamageTrees: "TASK2: verbatim tooltip",
-  absorbedPerTree: "TASK2: verbatim tooltip",
-  diffusion: "TASK2: verbatim tooltip",
-  spawningRate: "TASK2: verbatim tooltip",
-  spoilingRate: "TASK2: verbatim tooltip",
+  pollution:
+    "Controls whether pollution is enabled.\nNote: Disabled pollution will disable some achievements.",
+  ageing:
+    "Modifier of how much pollution is absorbed by trees and tiles.\nNote: A value higher than 100% will disable some achievements.",
+  attackCost:
+    "Modifier of how much pollution is consumed to send a biter to attack.\nNote: A value higher than 100% will disable some achievements.",
+  minDamageTrees:
+    "Trees have 4 different progressive stages toward being destroyed by pollution. Any pollution above this amount starts the process of moving a tree toward a more damaged stage.",
+  absorbedPerTree:
+    "Trees have 4 different progressive stages toward being destroyed by pollution. This value specifies how much pollution is absorbed when moving to a more damaged stage.",
+  diffusion: "The amount of pollution diffused into neighboring chunks per second.",
+  spawningRate: "Rate at which asteroids spawn in space.",
+  spoilingRate: "Rate at which spoilable items spoil.",
 };
 </script>
 
@@ -552,15 +581,16 @@ const INFO = {
 
     <template v-if="difficulty">
       <h3>Technology</h3>
-      <EnemyValueRow
-        data-test="tech-price-multiplier"
-        label="Price multiplier"
-        v-model="techPrice"
-        :info="INFO.techPrice"
-        :min="0.25"
-        :max="10"
-        :step="0.25"
-      />
+      <!-- Price multiplier is a number box in the game GUI (range 1-100000), not a
+           slider. Bound raw (no display scaling). -->
+      <div class="size-row">
+        <label
+          >Price multiplier
+          <FNumberInput
+            v-model="difficulty.technologyPriceMultiplier"
+            data-test="tech-price-multiplier"
+        /></label>
+      </div>
     </template>
 
     <template v-if="pollution">
@@ -573,9 +603,9 @@ const INFO = {
         label="Absorption modifier"
         v-model="ageing"
         :info="INFO.ageing"
-        :min="0"
-        :max="1000"
-        :step="10"
+        :min="10"
+        :max="400"
+        :step="5"
         :disabled="!pollution.enabled"
       />
       <EnemyValueRow
@@ -583,9 +613,9 @@ const INFO = {
         label="Attack cost modifier"
         v-model="attackCost"
         :info="INFO.attackCost"
-        :min="0"
-        :max="1000"
-        :step="10"
+        :min="10"
+        :max="400"
+        :step="5"
         :disabled="!pollution.enabled"
       />
       <EnemyValueRow
@@ -594,7 +624,7 @@ const INFO = {
         v-model="minDamageTrees"
         :info="INFO.minDamageTrees"
         :min="0"
-        :max="1000"
+        :max="9999"
         :step="1"
         :disabled="!pollution.enabled"
       />
@@ -604,7 +634,7 @@ const INFO = {
         v-model="absorbedPerTree"
         :info="INFO.absorbedPerTree"
         :min="0"
-        :max="1000"
+        :max="9999"
         :step="1"
         :disabled="!pollution.enabled"
       />
@@ -614,7 +644,7 @@ const INFO = {
         v-model="diffusion"
         :info="INFO.diffusion"
         :min="0"
-        :max="100"
+        :max="25"
         :step="1"
         :disabled="!pollution.enabled"
       />
@@ -627,9 +657,9 @@ const INFO = {
         label="Spawning rate"
         v-model="spawningRate"
         :info="INFO.spawningRate"
-        :min="0"
-        :max="1000"
-        :step="10"
+        :min="10"
+        :max="400"
+        :step="5"
       />
     </template>
 
@@ -640,7 +670,7 @@ const INFO = {
         label="Spoiling rate"
         v-model="spoilingRate"
         :info="INFO.spoilingRate"
-        :min="0"
+        :min="10"
         :max="1000"
         :step="10"
       />
