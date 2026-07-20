@@ -156,7 +156,10 @@ export function startingFavorabilityBaseAt(
   _params: ResourceParams,
   _controls: ResourceControls,
 ): number {
-  return clamp((elevationLakes - 1) / 10, 0, 1) * startingModulation(distance) * 2 - distance / 120;
+  return (
+    clamp((elevationLakes - 1) / 10, 0, 1) * startingModulation(distance) * 2 -
+    distance / STARTING_RESOURCE_PLACEMENT_RADIUS
+  );
 }
 
 /** starting_blob_amplitude - a scalar; referenced by basement_value even for regular-only. */
