@@ -60,4 +60,48 @@ describe("selectSpots", () => {
       }
     });
   }
+
+  // The game skips a spot with non-positive quantity or radius - "not emitted, not
+  // counted toward the target" (docs/noise/spot-noise-NOTES.md, "The effective
+  // radius is min(maximum_spot_basement_radius, radius_expression) ... a spot with
+  // non-positive quantity or radius is skipped"). Near spawn, regular resource
+  // density fades to 0, so its spots get quantity 0; if we emit them they render as
+  // a degenerate flat cone=0 disk across the whole cull radius (a "crescent" once
+  // the blob term lifts part of it above 0.5).
+  const params = {
+    regionSize: 1024,
+    candidateSpotCount: 21,
+    spacing: 45.254833995939045,
+    skipSpan: 1,
+    skipOffset: 0,
+    favorability: () => 1,
+  };
+  const key = { seed0: 123456, seed1: 100, regionX: 0, regionY: 0 };
+
+  it("emits no spot whose quantity is non-positive (per-spot quantity)", () => {
+    const out = selectSpots(key, {
+      ...params,
+      density: () => 1,
+      // quantity 0 for x <= 0, positive otherwise
+      quantity: (x) => (x > 0 ? 1000 : 0),
+    });
+    expect(out.length).toBeGreaterThan(0); // the x>0 spots survive
+    expect(out.every((s) => s.quantity > 0)).toBe(true);
+  });
+
+  it("emits nothing when every spot's quantity is zero", () => {
+    const out = selectSpots(key, { ...params, density: () => 1, quantity: () => 0 });
+    expect(out).toEqual([]);
+  });
+
+  it("skips non-positive quantities from a quantityBatch too", () => {
+    const out = selectSpots(key, {
+      ...params,
+      density: () => 1,
+      quantity: () => 0, // unused
+      quantityBatch: (spots) => spots.map((s) => (s.x > 0 ? 1000 : 0)),
+    });
+    expect(out.length).toBeGreaterThan(0);
+    expect(out.every((s) => s.quantity > 0)).toBe(true);
+  });
 });

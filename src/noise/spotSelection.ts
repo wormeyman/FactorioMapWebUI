@@ -126,6 +126,13 @@ export function selectSpots(key: SpotRegionKey, p: SpotSelectParams): SelectedSp
   for (const s of ranked) {
     if (acc >= target) break;
     let q = qBatch ? qBatch[s.j] : p.quantity(s.x, s.y);
+    // The game skips a spot with non-positive quantity (or radius, which for
+    // radius = rq*cbrt(q) is equivalent): "not emitted, not counted toward the
+    // target" (docs/noise/spot-noise-NOTES.md). Near spawn, regular resource
+    // density fades to 0 so its spots get quantity 0 - if emitted they render as a
+    // degenerate flat cone=0 disk across the whole cull radius. Skip before the
+    // accumulation so a zero spot neither renders nor consumes the target budget.
+    if (q <= 0) continue;
     let coneScale = 1;
     if (p.hardRegionTargetQuantity && acc + q > target) {
       const q2 = target - acc;
