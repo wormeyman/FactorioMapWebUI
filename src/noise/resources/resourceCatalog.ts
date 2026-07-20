@@ -26,6 +26,8 @@ export interface ResourceParams {
   readonly candidateSpotCount: number;
   /** regular_rq_factor = regular_rq_factor_multiplier / 10. */
   readonly regularRqFactor: number;
+  /** starting_rq_factor = starting_rq_factor_multiplier / 7 (needed for basement_value). */
+  readonly startingRqFactor: number;
   readonly seed1: number;
   readonly randomProbability: number;
   readonly randomSpotSizeMin: number;
@@ -49,6 +51,7 @@ function solidOre(
   patchSetIndex: number,
   baseDensity: number,
   regularRqFactorMultiplier: number,
+  startingRqFactorMultiplier: number,
   candidateSpotCount: number,
   mapColor: readonly [number, number, number],
 ): ResourceParams {
@@ -61,6 +64,7 @@ function solidOre(
     baseSpotsPerKm2: 2.5,
     candidateSpotCount,
     regularRqFactor: regularRqFactorMultiplier / 10,
+    startingRqFactor: startingRqFactorMultiplier / 7,
     seed1: 100,
     randomProbability: 1,
     randomSpotSizeMin: 0.25,
@@ -74,10 +78,10 @@ function solidOre(
 }
 
 export const RESOURCE_CATALOG: readonly ResourceParams[] = [
-  solidOre("iron-ore", 0, 10, 1.1, 22, color255(0.415, 0.525, 0.58)),
-  solidOre("copper-ore", 1, 8, 1.1, 22, color255(0.803, 0.388, 0.215)),
-  solidOre("coal", 2, 8, 1.0, 21, color255(0, 0, 0)),
-  solidOre("stone", 3, 4, 1.0, 21, color255(0.69, 0.611, 0.427)),
+  solidOre("iron-ore", 0, 10, 1.1, 1.5, 22, color255(0.415, 0.525, 0.58)),
+  solidOre("copper-ore", 1, 8, 1.1, 1.2, 22, color255(0.803, 0.388, 0.215)),
+  solidOre("coal", 2, 8, 1.0, 1.1, 21, color255(0, 0, 0)),
+  solidOre("stone", 3, 4, 1.0, 1.1, 21, color255(0.69, 0.611, 0.427)),
   {
     name: "crude-oil",
     controlName: "crude-oil",
@@ -87,6 +91,7 @@ export const RESOURCE_CATALOG: readonly ResourceParams[] = [
     baseSpotsPerKm2: 1.8,
     candidateSpotCount: 21,
     regularRqFactor: 1 / 10,
+    startingRqFactor: 1 / 7,
     seed1: 100,
     randomProbability: 1 / 48,
     randomSpotSizeMin: 1,
@@ -106,6 +111,7 @@ export const RESOURCE_CATALOG: readonly ResourceParams[] = [
     baseSpotsPerKm2: 1.25,
     candidateSpotCount: 21,
     regularRqFactor: 1 / 10,
+    startingRqFactor: 1 / 7,
     seed1: 100,
     randomProbability: 1,
     randomSpotSizeMin: 2,

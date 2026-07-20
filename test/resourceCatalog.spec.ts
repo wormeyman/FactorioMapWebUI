@@ -25,6 +25,7 @@ describe("RESOURCE_CATALOG", () => {
       baseDensity: 10,
       candidateSpotCount: 22,
       regularRqFactor: 1.1 / 10,
+      startingRqFactor: 1.5 / 7,
       baseSpotsPerKm2: 2.5,
       seed1: 100,
       order: "b",
