@@ -5,6 +5,7 @@ import {
 } from "../src/noise/preview/elevationRenderRequest";
 import { renderElevation, LAND_RGBA, WATER_RGBA } from "../src/noise/preview/renderElevation";
 import { renderTerrain } from "../src/noise/preview/renderTerrain";
+import { RESOURCE_CATALOG } from "../src/noise/resources/resourceCatalog";
 
 const REQ: ElevationRenderRequest = {
   id: 7,
@@ -158,6 +159,78 @@ describe("runRenderRequest", () => {
 
     const baseline = new Uint8ClampedArray(runRenderRequest({ ...req, auxBias: undefined }).buffer);
     expect(Array.from(got)).not.toEqual(Array.from(baseline));
+  });
+
+  it("view 'resources' overlays ore on the terrain (differs from terrain only where ore is)", () => {
+    // 32x32 px at 16 tiles/px over world [512, 1024) - a region with patches.
+    const terrainReq: ElevationRenderRequest = {
+      id: 11,
+      seed0: 123456,
+      width: 32,
+      height: 32,
+      originX: 512,
+      originY: 512,
+      tilesPerPixel: 16,
+      waterLevel: 0,
+      segmentationMultiplier: 1,
+      startingPositions: [{ x: 0, y: 0 }],
+      view: "terrain",
+    };
+    const terrain = new Uint8ClampedArray(runRenderRequest(terrainReq).buffer);
+    const withOre = new Uint8ClampedArray(
+      runRenderRequest({ ...terrainReq, view: "resources" }).buffer,
+    );
+
+    const catalogColors = new Set(RESOURCE_CATALOG.map((r) => r.mapColor.join(",")));
+    let differing = 0;
+    for (let i = 0; i < terrain.length; i += 4) {
+      const same =
+        terrain[i] === withOre[i] &&
+        terrain[i + 1] === withOre[i + 1] &&
+        terrain[i + 2] === withOre[i + 2] &&
+        terrain[i + 3] === withOre[i + 3];
+      if (same) continue;
+      differing++;
+      // A differing pixel must be an opaque catalog color (the overlay).
+      expect(withOre[i + 3]).toBe(255);
+      expect(catalogColors.has(`${withOre[i]},${withOre[i + 1]},${withOre[i + 2]}`)).toBe(true);
+    }
+    expect(differing).toBeGreaterThan(0); // ore appears
+    expect(differing).toBeLessThan(32 * 32); // but not everywhere
+  });
+
+  it("view 'resources' forwards resourceControls (iron size 0 removes iron pixels)", () => {
+    const base: ElevationRenderRequest = {
+      id: 12,
+      seed0: 123456,
+      width: 32,
+      height: 32,
+      originX: 512,
+      originY: 512,
+      tilesPerPixel: 16,
+      waterLevel: 0,
+      segmentationMultiplier: 1,
+      startingPositions: [{ x: 0, y: 0 }],
+      view: "resources",
+    };
+    const iron = RESOURCE_CATALOG.find((r) => r.name === "iron-ore")!;
+    const ironColor = iron.mapColor.join(",");
+    const countIron = (buf: Uint8ClampedArray): number => {
+      let n = 0;
+      for (let i = 0; i < buf.length; i += 4) {
+        if (`${buf[i]},${buf[i + 1]},${buf[i + 2]}` === ironColor && buf[i + 3] === 255) n++;
+      }
+      return n;
+    };
+    const withIron = new Uint8ClampedArray(runRenderRequest(base).buffer);
+    const noIron = new Uint8ClampedArray(
+      runRenderRequest({
+        ...base,
+        resourceControls: { "iron-ore": { frequency: 1, size: 0, richness: 1 } },
+      }).buffer,
+    );
+    expect(countIron(withIron)).toBeGreaterThan(0);
+    expect(countIron(noIron)).toBe(0);
   });
 
   it("view 'elevation' (explicit or default/omitted) keeps the water/land mask", () => {

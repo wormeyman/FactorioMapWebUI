@@ -13,8 +13,6 @@ describe("readResourceControls", () => {
     expect(controls["iron-ore"]).toEqual({ frequency: 2, size: 1.5, richness: 3 });
     expect(controls.coal).toEqual({ frequency: 1, size: 1, richness: 1 });
     // one entry per catalog resource
-    expect(Object.keys(controls).sort()).toEqual(
-      RESOURCE_CATALOG.map((r) => r.controlName).sort(),
-    );
+    expect(Object.keys(controls).sort()).toEqual(RESOURCE_CATALOG.map((r) => r.controlName).sort());
   });
 });

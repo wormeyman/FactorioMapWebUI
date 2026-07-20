@@ -51,7 +51,13 @@ describe("renderResources", () => {
 
   it("leaves the spawn pixel untouched (no patches inside the fade-in radius)", () => {
     const base = sentinelBase(1, 1);
-    renderResources(base, { seed0: 123456, originX: 0, originY: 0, tilesPerPixel: 1, controls: {} });
+    renderResources(base, {
+      seed0: 123456,
+      originX: 0,
+      originY: 0,
+      tilesPerPixel: 1,
+      controls: {},
+    });
     expect([base.data[0], base.data[1], base.data[2]]).toEqual([7, 8, 9]);
   });
 });
