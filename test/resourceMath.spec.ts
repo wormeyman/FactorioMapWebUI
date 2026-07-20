@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import { fastCbrt } from "../src/noise/fastApprox";
 import { RESOURCE_CATALOG } from "../src/noise/resources/resourceCatalog";
 import {
   basementValue,
@@ -39,11 +40,14 @@ describe("resourceMath", () => {
     );
   });
 
-  it("spot height typical is cbrt(meanSize*quantityBase) / (pi/3 * rq^2)", () => {
+  it("spot height typical is fastCbrt(meanSize*quantityBase) / (pi/3 * rq^2)", () => {
+    // The game's noise machine takes this cube root through its fastapprox `pow`, not
+    // an exact cbrt (see src/noise/fastApprox.ts + docs/noise/random-penalty-NOTES.md);
+    // exact Math.cbrt is off by ~7e-5 relative and would fail at 6 decimals.
     const d = 800;
     const meanSize = (iron.randomSpotSizeMin + iron.randomSpotSizeMax) / 2;
     const expected =
-      Math.cbrt(meanSize * regularSpotQuantityBaseAt(d, iron, one)) /
+      fastCbrt(meanSize * regularSpotQuantityBaseAt(d, iron, one)) /
       ((Math.PI / 3) * iron.regularRqFactor ** 2);
     expect(regularSpotHeightTypicalAt(d, iron, one)).toBeCloseTo(expected, 6);
   });

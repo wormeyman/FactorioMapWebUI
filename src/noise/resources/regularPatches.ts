@@ -14,11 +14,17 @@
  * quantityBase(distance)`. `random_penalty` is a batch op, and the game evaluates the
  * quantity expression over ALL skip-set accepted spots as ONE batch (in acceptance
  * order, seeded from the first spot, streamed) before the trim - NOT per spot. This is
- * supplied via selectSpots' `quantityBatch`. Validated to ~2e-3 (a residual f32
- * register-precision effect at the trim boundary / cone edges remains; see the notes).
+ * supplied via selectSpots' `quantityBatch`.
+ *
+ * Precision: the game's spot_noise op renders the cone in the f32 noise machine, with
+ * the radius cube root through its fastapprox `pow` ({@link fastCbrt}). Matching that
+ * (fastCbrt + f32 cone/quantity arithmetic here) pins the field to the game within
+ * ~0.7 units everywhere; exact Math.cbrt + f64 left a ~3-unit / 4.8e-2-relative
+ * residual at cone edges. See docs/noise/random-penalty-NOTES.md and test/regularPatches.spec.ts.
  */
 import { basisNoise, basisNoiseTablesFromSeed, type BasisNoiseTables } from "../basisNoise";
 import { distanceFromNearestPoint, type Point } from "../distanceFromNearestPoint";
+import { fastCbrt } from "../fastApprox";
 import { randomPenaltyBatch } from "../randomPenalty";
 import { selectSpots, type SelectedSpot } from "../spotSelection";
 import type { SpotRegionKey } from "../spotCandidates";
@@ -62,6 +68,7 @@ export interface RegularPatches {
   richness(x: number, y: number): number;
 }
 
+const f32 = Math.fround;
 const clamp = (v: number, lo: number, hi: number): number => Math.min(Math.max(v, lo), hi);
 /** region index for a coordinate (regions centred on multiples of REGION_SIZE). */
 const regionIndex = (c: number): number => Math.floor((c + REGION_SIZE / 2) / REGION_SIZE);
@@ -90,8 +97,8 @@ export function makeRegularPatches(params: ResourceParams, ctx: RegularPatchesCt
       spots.map(() => source),
       { seed: 1, amplitude },
     );
-    return spots.map(
-      (s, i) => jitter[i] * regularSpotQuantityBaseAt(distanceAt(s.x, s.y), params, controls),
+    return spots.map((s, i) =>
+      f32(jitter[i] * f32(regularSpotQuantityBaseAt(distanceAt(s.x, s.y), params, controls))),
     );
   };
 
@@ -136,10 +143,16 @@ export function makeRegularPatches(params: ResourceParams, ctx: RegularPatchesCt
           const dy = y - s.y;
           const d2 = dx * dx + dy * dy;
           if (d2 > MAX_SPOT_BASEMENT_RADIUS * MAX_SPOT_BASEMENT_RADIUS) continue;
+          // The cone is rendered per-tile by the game's spot_noise op, in the f32
+          // noise machine (cube root via fastapprox `pow`); f64/exact-cbrt leaves the
+          // ~1e-3 residual at cone edges (docs/noise/random-penalty-NOTES.md).
           // regular patches have no hard-target shrink, so coneScale === 1.
-          const radius = Math.min(MAX_SPOT_RADIUS, params.regularRqFactor * Math.cbrt(s.quantity));
-          const peak = (3 * s.quantity) / (Math.PI * radius * radius);
-          const cone = peak - Math.sqrt(d2) * (peak / radius);
+          const radius = Math.min(
+            MAX_SPOT_RADIUS,
+            f32(params.regularRqFactor * fastCbrt(s.quantity)),
+          );
+          const peak = f32(f32(3 * s.quantity) / f32(f32(Math.PI * radius) * radius));
+          const cone = f32(peak - f32(f32(Math.sqrt(d2)) * f32(peak / radius)));
           if (cone > best) best = cone;
         }
       }

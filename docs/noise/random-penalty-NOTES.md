@@ -104,11 +104,34 @@ at once; `src/noise/resources/regularPatches.ts` supplies it with
 `randomPenaltyBatch(spots, ...)`. This dropped the oracle error from **3e-1 to
 ~2e-3**.
 
-Residual (~1e-3, up to ~5e-2 at one cone edge): the game's noise register machine
-is **f32** throughout the selection math (density -> regional target -> trim
-accumulation -> per-spot quantity -> cone peak/slope), so the last-kept spot at the
-trim boundary and the exact cone-edge zero-crossings differ from an f64 port by a
-precision-amplified amount. Closing to the ~1e-5 floor needs f32 emulation of that
-math (a partial `Math.fround` of just the cone step did NOT help - it must be the
-whole selection/quantity chain). Deferred as an M3a refinement; the field is already
-render-adequate (the >=0.5 probability footprint shifts by <1px).
+### The ~1e-3 residual - RESOLVED (2026-07-20): it was fastapprox `cbrt`, not the trim boundary
+
+The residual that the batch fix left (worst ~4.8e-2 relative, ~3 units absolute) was
+**not** an f32 instability at the trim boundary (no spot is kept/dropped differently).
+It was a single, smooth mechanism found by instrumentation:
+
+1. Decomposed each field value into `spotField + blobTerm`. Points that sit *exactly*
+   on the basement constant (outside every cone - `spotField == basement`) still
+   carried ~0.35-unit error, so the error there is entirely in the **blob term**, not
+   the cone/trim path.
+2. Ruled out `basement` (f32 == f64 to 9e-4) and `basisNoise` (f32-stable) as sources.
+3. Isolated it to the `cbrt` in `regular_spot_height_typical` (which drives
+   `regular_blob_amplitude`). The game's noise machine takes that cube root through its
+   **fastapprox `pow`** (Paul Mineiro `fastlog2`/`fastpow2`, the same pair
+   `multioctave_noise`'s normalisation uses), not an exact `cbrt`. Exact `Math.cbrt`
+   is ~7e-5 relative high, and it multiplies a large blob-amplitude scalar (~1800), so
+   it shows up as ~0.3-0.7 units on blob values of thousands.
+
+The same fastapprox `cbrt` + f32 arithmetic applies to the **cone render** (a
+`spot_noise` op, evaluated per tile in the f32 machine): `radius = min(32, rq *
+fastCbrt(quantity))`, `peak = 3q/(pi r^2)`, `cone = peak - sqrt(d2)*(peak/radius)` -
+all f32.
+
+Fix (2026-07-20): extracted the fastapprox primitives to `src/noise/fastApprox.ts`
+(added `fastCbrt`); routed `regularSpotHeightTypicalAt` / `startingBlobAmplitude`
+(resourceMath.ts) and the cone radius/peak/slope + spot quantity (regularPatches.ts)
+through it in f32. Result across the pure-regular oracle (iron + uranium, 2 seeds,
+4105 pts each): **absolute error < 0.7 units everywhere**, relative < 1e-3 across
+patch interiors, up to ~9e-3 only at cone-edge / basement zero-crossings (the same f32
+floor M1 elevation_lakes = 7.4e-3 and Island = 6.66e-3 documented). `test/regularPatches.spec.ts`
+is now **un-skipped**, asserting `worstAbs < 1.0 && worstRel < 1e-2`.

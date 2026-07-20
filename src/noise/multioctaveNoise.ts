@@ -27,6 +27,12 @@
  */
 
 import { basisNoise, basisNoiseTablesFromSeed, type BasisNoiseTables } from "./basisNoise";
+// The fastapprox log2/exp2/pow primitives moved to ./fastApprox (the resource
+// spot-height/blob-amplitude expressions need the same fast cbrt); re-exported here
+// for the existing importers and tests.
+import { fastLog2, fastPow, fastPow2 } from "./fastApprox";
+
+export { fastLog2, fastPow2 };
 
 /** Each octave halves the input scale (doubles the wavelength). */
 const LACUNARITY = 0.5;
@@ -38,50 +44,6 @@ const LACUNARITY = 0.5;
  * variants derive this from their `offset_x` parameter instead - not yet mapped.
  */
 const OCTAVE_OFFSET_X = -1774.83;
-
-// ---------------------------------------------------------------------------
-// fastapprox log2 / exp2 - Paul Mineiro's approximations, exactly as Factorio's
-// Math::log2 / Math::exp2f (read out of the 2.1.11 disassembly). Used for the
-// normalisation's (1/P^2)^N power; matching them is what closes the last ~1e-4.
-// ---------------------------------------------------------------------------
-
-const f32 = Math.fround;
-const i32 = new Int32Array(1);
-const f32view = new Float32Array(i32.buffer);
-const bitsToFloat = (bits: number): number => {
-  i32[0] = bits;
-  return f32view[0];
-};
-const floatToBits = (x: number): number => {
-  f32view[0] = x;
-  return i32[0];
-};
-
-/** Paul Mineiro `fastlog2`, matching Factorio's `Math::log2`. */
-export function fastLog2(x: number): number {
-  const bits = floatToBits(x) >>> 0;
-  const y = f32(bits * 1.1920928955078125e-7); // bits * 2^-23
-  const mx = bitsToFloat((bits & 0x007fffff) | 0x3f000000);
-  return f32(y - 124.22551499 - 1.498030302 * mx - 1.72587999 / (0.3520887068 + mx));
-}
-
-/** Paul Mineiro `fastpow2`, matching Factorio's `Math::exp2f`. */
-export function fastPow2(p: number): number {
-  const clipp = p < -126 ? -126 : p;
-  const w = Math.trunc(clipp); // (int)clipp, toward zero
-  const z = f32(clipp - w + (clipp < 0 ? 1 : 0)); // fractional part, floor semantics
-  const v = f32(
-    (1 << 23) * f32(clipp + 121.2740575 + 27.7280233 / f32(4.84252568 - z) - 1.49012907 * z),
-  );
-  return bitsToFloat(v | 0);
-}
-
-/** `x^p` via the fastapprox pair, as the game computes the normalisation power. */
-function fastPow(x: number, p: number): number {
-  return fastPow2(f32(p * fastLog2(x)));
-}
-
-// ---------------------------------------------------------------------------
 
 export interface MultioctaveParams {
   /** Map seed. */

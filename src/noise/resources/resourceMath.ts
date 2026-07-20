@@ -9,6 +9,7 @@
  * resources pass nil, so `sign` is 1 (iron/copper/coal/stone) or 0 (oil/uranium) -
  * and the `sign === -1` branches never fire for them, but are kept for fidelity.
  */
+import { fastCbrt } from "../fastApprox";
 import type { ResourceParams } from "./resourceCatalog";
 
 export const DOUBLE_DENSITY_DISTANCE = 1300;
@@ -77,7 +78,10 @@ export function regularSpotHeightTypicalAt(
 ): number {
   const meanSize = (params.randomSpotSizeMin + params.randomSpotSizeMax) / 2;
   const q = meanSize * regularSpotQuantityBaseAt(distance, params, controls);
-  return Math.cbrt(q) / ((Math.PI / 3) * params.regularRqFactor * params.regularRqFactor);
+  // The game's noise machine evaluates this cube root through its fastapprox `pow`
+  // (docs/noise/random-penalty-NOTES.md, the fastapprox-cbrt residual) - exact
+  // Math.cbrt leaves a ~7e-5 relative error that dominates the blob term.
+  return fastCbrt(q) / ((Math.PI / 3) * params.regularRqFactor * params.regularRqFactor);
 }
 
 /** regular_blob_amplitude_maximum_distance. */
@@ -109,7 +113,7 @@ export function startingBlobAmplitude(params: ResourceParams, controls: Resource
   return (
     (STARTING_BLOB_AMPLITUDE_MULTIPLIER /
       ((Math.PI / 3) * params.startingRqFactor * params.startingRqFactor)) *
-    Math.cbrt(startingAreaSpotQuantity)
+    fastCbrt(startingAreaSpotQuantity)
   );
 }
 
