@@ -26,12 +26,13 @@ const PERCENT = 100;
 // Linear scaled display: reads the raw wire float and shows `wire * scale`;
 // writes `display / scale`. read/write closures keep this fully typed against
 // each settings section (no generic indexing against the boolean `enabled`).
-function scaled(read: () => number | undefined, write: (v: number) => void, scale: number) {
+function scaled(read: () => number | null | undefined, write: (v: number) => void, scale: number) {
   return computed({
     get: () => {
       const v = read();
       // Round away float-multiply noise for the box (e.g. 2.0000000000000004).
-      return v === undefined ? 0 : Math.round(v * scale * 1e6) / 1e6;
+      // `== null` catches both null (absent optional tail field) and undefined.
+      return v == null ? 0 : Math.round(v * scale * 1e6) / 1e6;
     },
     set: (display: number) => write(display / scale),
   });

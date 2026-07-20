@@ -93,6 +93,17 @@ describe("AdvancedTab map settings", () => {
     expect(tail["pollution.pollutionRestoredPerTreeDamage"]).toBe(25);
   });
 
+  it("writes asteroid spawning rate at the percent display scale", async () => {
+    setActivePinia(createPinia());
+    const store = usePresetsStore();
+    const wrapper = mount(AdvancedTab);
+    const box = wrapper.find('[data-test="asteroid-spawning-rate"] input[type="number"]');
+    (box.element as HTMLInputElement).value = "150"; // displayed percent
+    await box.trigger("change");
+    const tail = decodeExchangeString(store.activeExchangeString as string).tail;
+    expect(tail["asteroids.spawningRate"]).toBeCloseTo(1.5, 6);
+  });
+
   it("disables the pollution child rows when pollution is unchecked", async () => {
     setActivePinia(createPinia());
     const store = usePresetsStore();
