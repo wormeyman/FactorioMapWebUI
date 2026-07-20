@@ -1,9 +1,9 @@
 import { basisNoiseTablesFromSeed } from "../basisNoise";
 import { distanceFromNearestPoint, type Point } from "../distanceFromNearestPoint";
-import { basisNoiseExpr } from "../eval/primitives";
 import { clamp, lerp, max, min } from "../eval/math";
 import { withCtxDefaults, type EvalCtxInput } from "../eval/ctx";
 import { makeMultioctaveNoise } from "../multioctaveNoise";
+import { makeNauvisShared } from "./nauvisShared";
 import { makeQuickMultioctaveNoisePersistence } from "../quickMultioctaveNoise";
 import { startingLakePositions as computeStartingLakes } from "../startingLakes";
 import {
@@ -48,18 +48,11 @@ export function makeElevationNauvis(
   // nauvis_segmentation_multiplier = 1.5 * control:water:frequency. EVERY noise
   // sub-node scales/offsets by THIS, not by the plain `seg` (= segmentation_multiplier);
   // only starting_island uses plain seg (see below). See noise-programs.lua.
-  const nauvisSeg = 1.5 * seg;
+  const nz = makeNauvisShared({ seed0, segmentationMultiplier: seg });
+  const nauvisSeg = nz.nauvisSeg;
   const offsetX = 10000 / nauvisSeg;
 
   // Hoisted noise closures / tables (persistence field still varies per tile).
-  const bridgeBillows = makeMultioctaveNoise({
-    seed0,
-    seed1: 700,
-    octaves: 4,
-    persistence: 0.5,
-    inputScale: nauvisSeg / 150,
-    outputScale: 1,
-  });
   const detail = makeVariablePersistenceMultioctaveNoise({
     seed0,
     seed1: 600,
@@ -84,15 +77,6 @@ export function makeElevationNauvis(
     inputScale: nauvisSeg / 1600,
     outputScale: 1,
   });
-  const hills = makeMultioctaveNoise({
-    seed0,
-    seed1: 900,
-    octaves: 4,
-    persistence: 0.5,
-    inputScale: nauvisSeg / 90,
-    outputScale: 1,
-  });
-  const cliffLevelTables: BasisNoiseTables = basisNoiseTablesFromSeed(seed0, 99584);
   const persistanceTables: BasisNoiseTables = basisNoiseTablesFromSeed(seed0, 500);
   const startingLakeNoise = makeQuickMultioctaveNoisePersistence({
     seed0,
@@ -127,26 +111,15 @@ export function makeElevationNauvis(
     const nauvisDetail = detail(x, y, persistence);
 
     // nauvis_bridges
-    const bb = Math.abs(bridgeBillows(x, y));
+    const bb = nz.bridgeBillows(x, y);
     const nauvisBridges = 1 - 0.1 * bb - 0.9 * max(0, -0.1 + bb);
 
     // nauvis_macro
     const nauvisMacro = macroA(x, y) * max(0, macroB(x, y));
 
     // nauvis_hills -> nauvis_plateaus -> nauvis_hills_plateaus (= added_cliff_elevation)
-    const nauvisHills = Math.abs(hills(x, y));
-    const cliffLevel = clamp(
-      0.65 +
-        basisNoiseExpr(
-          x,
-          y,
-          { seed0, seed1: 99584, inputScale: nauvisSeg / 500, outputScale: 0.6 },
-          cliffLevelTables,
-        ),
-      0.15,
-      1.15,
-    );
-    const nauvisPlateaus = 0.5 + clamp((nauvisHills - cliffLevel) * 10, -0.5, 0.5);
+    const nauvisHills = nz.hills(x, y);
+    const nauvisPlateaus = nz.plateaus(x, y);
     const addedCliffElevation = 0.1 * nauvisHills + 0.8 * nauvisPlateaus;
 
     // elevation_nauvis_function body (elevation_magnitude = 20, wlc_amplitude = 2)
