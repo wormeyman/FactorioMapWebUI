@@ -82,6 +82,14 @@ describe("elevationCtxFromPreset", () => {
     expect(r.ctx.startingAreaMoistureFrequency).toBe(1);
   });
 
+  it("exposes per-resource control levers, defaulting absent resources to 1/1/1", () => {
+    const p = lakesPreset();
+    p.autoplaceControls["iron-ore"] = { frequency: 2, size: 0.5, richness: 3 };
+    const r = elevationCtxFromPreset(p);
+    expect(r.resourceControls["iron-ore"]).toEqual({ frequency: 2, size: 0.5, richness: 3 });
+    expect(r.resourceControls.coal).toEqual({ frequency: 1, size: 1, richness: 1 });
+  });
+
   it("reads control:aux/moisture/starting_area_moisture:* off the preset's property_expression_names", () => {
     const p = lakesPreset();
     p.propertyExpressionNames["control:aux:frequency"] = "4.000000";

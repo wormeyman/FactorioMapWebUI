@@ -118,6 +118,33 @@ describe("ElevationPreviewPanel", () => {
     expect(putImageData).toHaveBeenCalledOnce();
   });
 
+  it("passes view:'resources' + resourceControls after selecting the Resources toggle (Nauvis)", async () => {
+    const putImageData = stubCanvas();
+    const renderer = okRenderer();
+    const w = setup("nauvis", renderer);
+    expect(w.find('[data-test="view-resources"]').attributes("disabled")).toBeUndefined();
+
+    await w.find('[data-test="view-resources"]').trigger("click");
+    await w.find('[data-test="generate"]').trigger("click");
+    await flushPromises();
+
+    expect(renderer.render).toHaveBeenCalledOnce();
+    const arg = (renderer.render as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg).toMatchObject({ view: "resources", mapType: "nauvis" });
+    // Every catalog resource has a lever entry (defaults 1/1/1).
+    expect(arg.resourceControls["iron-ore"]).toEqual({ frequency: 1, size: 1, richness: 1 });
+    expect(putImageData).toHaveBeenCalledOnce();
+  });
+
+  it("disables the Resources toggle off-Nauvis (Lakes/Island)", async () => {
+    expect(
+      setup("lakes", okRenderer()).find('[data-test="view-resources"]').attributes("disabled"),
+    ).toBeDefined();
+    expect(
+      setup("island", okRenderer()).find('[data-test="view-resources"]').attributes("disabled"),
+    ).toBeDefined();
+  });
+
   it("disables the Terrain toggle for a Lakes preset (renderTerrain is Nauvis-only)", async () => {
     const renderer = okRenderer();
     const w = setup("lakes", renderer);

@@ -34,7 +34,9 @@ const supported = computed(() => preview.value?.supported ?? false);
 // climate + tile catalog, regardless of the active preset's actual map type -
 // it is only faithful for mapType "nauvis". Gate the toggle on that rather
 // than rendering a Lakes/Island preset with the wrong climate.
-const view = ref<"elevation" | "terrain">("elevation");
+// Terrain and Resources both render through the Nauvis-only renderTerrain, so
+// both toggles gate on `terrainAvailable`.
+const view = ref<"elevation" | "terrain" | "resources">("elevation");
 const terrainAvailable = computed(() => preview.value?.mapType === "nauvis");
 watch(terrainAvailable, (available) => {
   if (!available) view.value = "elevation";
@@ -71,6 +73,7 @@ async function generate() {
       auxBias: info.ctx.auxBias,
       startingAreaMoistureSize: info.ctx.startingAreaMoistureSize,
       startingAreaMoistureFrequency: info.ctx.startingAreaMoistureFrequency,
+      resourceControls: info.resourceControls,
     });
     const el = canvas.value;
     const g = el?.getContext("2d");
@@ -114,6 +117,19 @@ async function generate() {
           @click="view = 'terrain'"
         >
           Terrain
+        </FButton>
+        <FButton
+          data-test="view-resources"
+          :variant="view === 'resources' ? 'tool' : 'default'"
+          :disabled="!terrainAvailable"
+          :title="
+            terrainAvailable
+              ? undefined
+              : 'Resources view is only available for the Nauvis map type'
+          "
+          @click="view = 'resources'"
+        >
+          Resources
         </FButton>
       </div>
       <span class="spacer" />

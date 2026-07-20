@@ -1,6 +1,8 @@
 import { readClimateControls } from "./climateReads";
 import type { Point } from "../noise/distanceFromNearestPoint";
 import { readMapType } from "./mapType";
+import { readResourceControls } from "./resourceReads";
+import type { ResourceControlLevers } from "../noise/resources/resolveResource";
 import type { Preset } from "./types";
 
 export interface ElevationPreviewCtx {
@@ -10,6 +12,13 @@ export interface ElevationPreviewCtx {
   mapType: "lakes" | "nauvis" | "island";
   /** Resolved map-type label, for the "not available for <label>" message. */
   mapTypeLabel: string;
+  /**
+   * Per-resource control levers (control:<res>:frequency|size|richness), keyed by
+   * controlName - consumed only by the `view: "resources"` overlay (renderResources).
+   * Absent resources default to 1/1/1. Faithful only on the Nauvis map type, same as
+   * the terrain view.
+   */
+  resourceControls: Record<string, ResourceControlLevers>;
   /**
    * Non-seed free variables for renderElevation/renderTerrain
    * (Omit<..., "seed0">-compatible). The climate fields (aux/moisture
@@ -60,6 +69,7 @@ export function elevationCtxFromPreset(preset: Preset): ElevationPreviewCtx {
     supported,
     mapType,
     mapTypeLabel: mt.label,
+    resourceControls: readResourceControls(preset),
     ctx: {
       waterLevel: 10 * Math.log2(size),
       segmentationMultiplier: water?.frequency ?? 1,
