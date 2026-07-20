@@ -220,8 +220,18 @@ tip `0131aa8`). Plan
       tightly around spawn, oil renders as a small dot far out (no starting
       placement, as expected), spawn is not bare.
 
-Remaining for M3: **M3.5** (per-tile placement stipple - needs the un-RE'd
-entity-placement RNG). Solid-footprint (opaque where `prob >= 0.5`) ships in M3a/b.
+**M3.5 (per-tile placement stipple) - SPIKED then DEFERRED (2026-07-20).** The
+placement RNG was reverse-engineered (`EntityMapGenerationTask::generateEntities` /
+`generateEntityOnTile`): it is taus88, seeded once per 32x32 chunk from
+`ChunkPosition` (`max(341, 0x3FBE2C + 7919*chunkX + 7907*chunkY)`, no map-seed), and
+the roll is `place if taus88()/2^32 < probability`. But it is a **single per-chunk
+stream shared across ALL entity autoplacers** (enemies, rocks, resources), consumed
+in a fixed order with 2 data-dependent jitter draws per placed entity - so faithful
+resource stipple would require simulating whole-chunk entity generation across
+subsystems this app never ported. Multi-session + cross-subsystem; **deferred**
+(Eric, 2026-07-20). Full RE + a cheaper cosmetic-dither alternative:
+`docs/noise/placement-roll-NOTES.md`. Solid-footprint (opaque where `prob >= 0.5`)
+ships in M3a/b and stands as the M3 end state.
 
 M3a follow-ups (known, deferred by priority - 2026-07-20):
 
