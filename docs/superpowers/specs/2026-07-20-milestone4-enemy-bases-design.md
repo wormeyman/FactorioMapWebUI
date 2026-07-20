@@ -18,30 +18,43 @@ exact per-nest placement - exact spawner tile positions go through the per-chunk
 `EntityMapGenerationTask` roll that was reverse-engineered and **deferred** in M3.5
 (`docs/noise/placement-roll-NOTES.md`); a faithful footprint does not need it.
 
-## Why this is tractable (no new primitive)
+## Tractability: mostly reuse, plus one RE step
 
-Enemy bases reuse only primitives that are already implemented and oracle-validated:
+Enemy bases reuse primitives that are already implemented and oracle-validated:
 
-- `spot_noise` (candidate RNG `spotCandidates.ts` + selection `spotSelection.ts`,
-  cone rendering in `resources/regularPatches.ts`) - the existing spot-field
-  machinery already handles this field's `basement_value = -1000` and
-  `maximum_spot_basement_radius = 128`.
+- `spot_noise` cone rendering (`resources/regularPatches.ts`) - already honors this
+  field's `basement_value = -1000` and `maximum_spot_basement_radius = 128`.
 - `basis_noise` (`basisNoise.ts`) - the three `blob(...)` terms are `basis_noise`.
-- `distance_from_nearest_point` / `distance` (`distanceFromNearestPoint.ts`) -
-  already threaded through the resources render as `startingPositions`.
+- `distance` (`distanceFromNearestPoint.ts`) - already threaded through the resources
+  render as `startingPositions`.
 - `clamp`/`min`/`max`/arithmetic.
 
-The only non-obvious scalar, `starting_area_radius`, is **oracle-derivable** (see
-the Validation section), not a new primitive. Because nothing here is un-RE'd, M4 needs **no
-preceding research spike** (unlike `random_penalty` for M3a or the M3.5 roll) - it
-is a re-run of the validated M3 overlay pipeline with a new field.
+**But there is one genuine reverse-engineering step first** (verified by the M4 spike
++ code review, 2026-07-20; full writeup in `docs/noise/enemy-bases-NOTES.md`): the
+enemy `spot_noise` sets **`candidate_point_count = 100`** and leaves both
+`candidate_spot_count` and `suggested_minimum_candidate_point_spacing` at engine
+defaults. Every M3 resource `spot_noise` did the opposite (set `candidate_spot_count`
++ explicit spacing, never `candidate_point_count`). The existing
+`src/noise/spotSelection.ts` models only `candidateSpotCount` (the dart-throw
+acceptance target) with a **required** `spacing`, over an unbounded lazy candidate
+stream - it has no `candidate_point_count` pool bound and no notion of a default
+`candidate_spot_count`/spacing. So this field cannot be ported by "just calling
+`selectSpots`"; the `candidate_point_count`-parameterized path is un-RE'd. **Task 1 is
+a preceding oracle spike** (like `random_penalty` for M3a) that pins that path against
+the game before any field code is built. Everything after it is the validated M3
+overlay pipeline with a new field.
+
+`starting_area_radius = 150` (default `starting_area`) is directly sampleable, not a
+new primitive (see Levers).
 
 ## The field (1:1 port from `base/prototypes/noise-expressions.lua` @ 2.1.11)
 
 Source: `~/GitHub/factorio-data` (tag `2.1.11`),
 `base/prototypes/noise-expressions.lua` (enemy expressions),
 `base/prototypes/entity/enemy-autoplace-utils.lua` (the autoplace wrapper),
-`base/prototypes/entity/enemies.lua` (spawner uses `enemy_autoplace_base(0, 6)`).
+`base/prototypes/entity/enemies.lua` (biter-spawner uses `enemy_autoplace_base(0, 6)`
+at :209, spitter-spawner `(0, 7)` at :865). Transcription verified character-for-character
+by the code review.
 
 ```
 enemy_base_intensity   = clamp(distance, 0, 2400) / 325
@@ -70,7 +83,7 @@ blob(input_scale, output_scale) =
                  input_scale = input_scale, output_scale = output_scale }
 ```
 
-The full spawner placement probability is `enemy_autoplace_base(0, 6)`:
+The spawner placement probability is `enemy_autoplace_base(0, 6)`:
 
 ```
 enemy_autoplace_base(distance_factor = 0, seed = 6) =
@@ -81,11 +94,13 @@ enemy_autoplace_base(distance_factor = 0, seed = 6) =
         amplitude = 0.1 }
 ```
 
-With `distance_factor = 0` (spawners) the distance-shaping factor collapses to `1`
-and the cap to `0.25`, so the **deterministic source** is
-`min(enemy_base_probability, 0.25)`. The near-spawn **starting-area clearing** falls
-out of the `- 0.3` and `min(0, 20/starting_area_radius * distance - 20)` terms
-inside `enemy_base_probability`, with no special handling.
+With `distance_factor = 0` the distance-shaping factor collapses to `1` and the cap to
+`0.25`, so the **deterministic source** is `min(enemy_base_probability, 0.25)`
+(verified against the oracle: inside spots `enemy_autoplace_base = min(ebp, 0.25) -
+0.1*U`, subtractive `random_penalty`; e.g. ebp 0.781 -> 0.172). The near-spawn
+**starting-area clearing** falls out of the `- 0.3` and `min(0, 20/150 * distance -
+20)` terms inside `enemy_base_probability` (measured clear within +-140 tiles of
+spawn), with no special handling.
 
 **We render the deterministic source and omit the `random_penalty` wrapper** - see
 the render-semantics section for why. `random_penalty` (`randomPenalty.ts`) is a
@@ -94,16 +109,20 @@ position and consumes its taus88 stream across the batch from last element to fi
 so its exact per-tile value depends on the batch the game happens to evaluate (a
 chunk row), which a per-pixel downsampled preview cannot reproduce - the same
 batch-boundary coupling that blocks crude-oil's `random_probability` factor and the
-M3.5 placement roll. Its `amplitude = 0.1` (±10%) is cosmetically irrelevant to a
-threshold footprint anyway. So the footprint uses `min(enemy_base_probability,
-0.25)` directly; the batch RNG never enters.
+M3.5 placement roll. Its `amplitude = 0.1` is cosmetically irrelevant to a threshold
+footprint anyway. So the footprint uses `min(enemy_base_probability, 0.25)` directly;
+the batch RNG never enters.
 
-Worms (`enemy_autoplace_base(0, 7)`) are `spawner_probability * (1 -
-no_enemies_mode)`; on the default preset `no_enemies_mode = 0`, so the worm field
-equals the spawner field. We render the single **spawner** field. (`seed` is a
-per-expression x-offset into the omitted `random_penalty`, so with the wrapper
-dropped the spawner and worm deterministic sources are identical at
-`no_enemies_mode = 0`.)
+**What we render (spawners only).** Both biter-spawner `(0, 6)` and spitter-spawner
+`(0, 7)` are `distance_factor = 0`, so they share the identical deterministic source
+`min(enemy_base_probability, 0.25)` - one footprint covers both. `(0, 7)` is the
+**spitter-spawner, not a worm** (`seed` is just the per-expression x-offset into the
+omitted `random_penalty`). **Worms** (`enemy_worm_autoplace`, `(0,2)/(2,3)/(5,4)/(8,5)`
+in `turrets.lua`, wrapped `* (1 - no_enemies_mode)`) are OUT OF SCOPE: only the small
+worm is `distance_factor = 0`; medium/big/behemoth are distance-shaped (their factor
+and cap do not collapse), so they are a distinct, wider field. Rendering the spawner
+footprint is the "where are the biter/spitter nests" answer; worm turrets sit within
+the same base regions and add no distinct visible territory at preview scale.
 
 ## Render semantics
 
@@ -112,11 +131,16 @@ fill each land tile where the deterministic spawner source
 `min(enemy_base_probability, 0.25) >= T` with the enemy `map_color`, composited onto
 the terrain ImageData - the same convention as the M3 resource footprint, except:
 
-- **Threshold `T`.** Resources use `>= 0.5` (half the `[0,1]` cap). The spawner
-  probability caps at `0.25`, so `>= 0.5` would render nothing. Start at
-  `T = 0.125` (half the `0.25` cap) and pin it in the headless-eyeball step by comparing
-  renders against a real `--generate-map-preview` (nest regions + starting-area
-  clearing). `T` is a single documented constant.
+- **The field structure (measured).** `enemy_base_probability` sits at the `-1000`
+  basement almost everywhere and rises above `0` only *inside* base spot cones (far
+  grid: basement `-1000` vs spot peaks `~0.4-0.78` in `ebp`, capped at `0.25` in the
+  placement source). So the footprint is exactly those positive cones.
+- **Threshold `T` is a small positive value**, NOT the resource `>= 0.5` (which caps
+  at `0.25` here) nor "half the cap". Since the field is either `~-1000` or a positive
+  cone, any `T` in `(0, 0.25)` cleanly separates base from non-base; `T` only trims how
+  much of each cone's fading edge is included. Start at `T = 0.05` and pin it in the
+  headless-eyeball step by comparing renders against a real `--generate-map-preview`
+  (nest regions + starting-area clearing). `T` is a single documented constant.
 - **`random_penalty` omitted** (see the field section): a ±10% per-tile jitter with
   batch-RNG semantics that a per-pixel preview cannot reproduce and that does not
   change the region. The footprint is the deterministic source.
@@ -135,23 +159,27 @@ the terrain ImageData - the same convention as the M3 resource footprint, except
   by the resources render.
 - `distance` - Euclidean distance to `startingPositions` (already threaded through
   `renderResources` / `elevationRenderRequest`; default single origin spawn).
-- `starting_area_radius` - a game-provided scalar from the `starting_area` map
-  setting, **oracle-derived** (see Validation): sample the named expression
-  `starting_area_weight = max(0, distance - starting_area_radius) / starting_area_radius`
-  (`core/prototypes/noise-programs.lua:576`) at two distances and solve for
-  `starting_area_radius`. Modeled as a constant keyed off the `starting_area`
-  setting (default only, initially).
+- `starting_area_radius` - a game-provided scalar. Measured `= 150` for the default
+  `starting_area` setting (directly sampleable as the named value `starting_area_radius`;
+  it equals the `starting_resource_placement_radius` constant). Hardcode `150`; it
+  scales with the `starting_area` setting but only the default is validated (deferred,
+  like other non-default settings). (NB: do NOT derive it from `starting_area_weight` -
+  that is a different, decreasing expression `1 - min(1, 0.5*tier_from_start)`.)
 - `no_enemies_mode` - defaults `0`; already modeled on the mid-block
-  (`src/model/types.ts`). We render the spawner field (worms == spawners at
-  `no_enemies_mode = 0`).
+  (`src/model/types.ts`). Only affects worms (out of scope), so it does not enter the
+  spawner footprint.
 
 ## Module layout
 
 ```
-src/noise/enemies/
-  enemyCatalog.ts     # control name "enemy-base", spot_noise params, blob seed,
-                      #   cap 0.25, starting_area_radius, enemy map_color, threshold T
-  enemyBaseField.ts   # makeEnemyBaseField(ctx) -> { probability(x,y): number }
+src/noise/
+  spotSelection.ts    # MODIFY (Task 1): support candidate_point_count (a candidate
+  spotCandidates.ts   #   pool bound) + the engine-default candidate_spot_count/spacing,
+                      #   per the Task 1 spike. Keep the existing M3 path untouched.
+  enemies/
+    enemyCatalog.ts   # control name "enemy-base", spot_noise params, blob seed,
+                      #   cap 0.25, starting_area_radius=150, enemy map_color, threshold T
+    enemyBaseField.ts # makeEnemyBaseField(ctx) -> { probability(x,y): number }
                       #   ports enemy_base_probability; returns the deterministic
                       #   spawner source min(enemy_base_probability, 0.25).
                       #   reuses selectSpots + cone render (as regularPatches does),
@@ -167,28 +195,36 @@ on `terrainAvailable` (Nauvis), alongside Elevation/Terrain/Resources.
 
 ## Validation (oracle-first, mirrors M3)
 
+0. **`candidate_point_count` spike (Task 1, prerequisite).** Before any field code,
+   pin the `candidate_point_count = 100` + defaulted-`candidate_spot_count`/spacing
+   spot path against the oracle: trilaterate the cone centers of one region from a
+   dense `enemy_base_probability` grid (per `spot-noise-NOTES.md`) and match them to
+   the port's `selectSpots` output. Extend `spotSelection.ts`/`spotCandidates.ts`
+   minimally to honor the pool bound + defaults, and commit the resolved semantics to
+   `docs/noise/enemy-bases-NOTES.md`. This is the one un-RE'd piece.
 1. **Field port (primary, asserted).** Capture **`enemy_base_probability`** via
    `calculate_tile_properties` at a grid for 2-3 seeds (reuse `test/oracle/oracle.ts`
    `sampleExpression`; commit the JSON fixtures, run comparison without Factorio).
-   Assert `|port-game| < max(1.0, 1e-2*|game|)` - the combined abs/rel tolerance M3b
-   uses, which accommodates the far-field `basisNoise` f32 floor without masking
-   near-spawn errors. We assert against `enemy_base_probability` (no
-   `random_penalty`), **not** `enemy_autoplace_base`: the latter's batch-RNG
-   `random_penalty` cannot be matched per-pixel (field section). Sampling
-   `enemy_autoplace_base` as a non-asserted sanity check is fine (its deterministic
-   source should track `min(enemy_base_probability, 0.25)` within the ±10%
-   amplitude), but it is not a pass/fail gate.
-2. **Footprint threshold (eyeball, not asserted).** Headless full-view render;
-   confirm nest regions cluster correctly, the starting area is clear, and the
-   footprint responds to the frequency/size sliders. Pin `T`. We do **not** assert
-   exact per-nest tile placement (deferred per-chunk roll, M3.5).
+   Assert `|port-game| < max(1.0, 1e-2*|game|)`. **Tolerance caveat:** the field spans
+   `-1000` (basement) to `~0.25` (spot caps), so a `1.0` absolute tolerance is loose
+   relative to the `~0.25` in-spot signal. The assertion therefore mainly guarantees
+   basement-matches-basement and that cones land in the right place at roughly the
+   right height; the *footprint* correctness (which side of `T` each pixel falls) is
+   what actually matters and is confirmed by the eyeball step. We assert against
+   `enemy_base_probability` (no `random_penalty`), **not** `enemy_autoplace_base`: the
+   latter's batch-RNG `random_penalty` cannot be matched per-pixel (field section).
+2. **Footprint threshold (eyeball, not asserted).** Headless full-view render; confirm
+   nest regions cluster correctly, the starting area is clear (measured clear within
+   +-140 tiles), and the footprint responds to the frequency/size sliders. Pin `T`. We
+   do **not** assert exact per-nest tile placement (deferred per-chunk roll, M3.5).
 
 ## Testing
 
 Unit tests per module, mirroring `regularPatches.spec.ts` / `renderResources.spec.ts`:
 
 - `enemyBaseField.spec.ts` - field values vs the committed oracle fixtures (abs/rel
-  tolerance); a `starting_area_radius` derivation check.
+  tolerance); structural checks (basement far from spots, positive cones inside them,
+  cleared near spawn).
 - `renderEnemies.spec.ts` - footprint fill at/above `T`, water-exclusion, and a
   drift guard asserting the enemy `map_color` and `WATER_TILE_COLORS` still match
   their sources.
