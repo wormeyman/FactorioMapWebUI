@@ -830,6 +830,117 @@ async function captureRandomPenalty(): Promise<void> {
   console.log(`wrote ${out} (${configs.length} configs x ${positions.length} points)`);
 }
 
+/**
+ * Pure-regular resource field ground truth. Probes `resource_autoplace_all_patches`
+ * with `has_starting_area_placement = 0` (so all_patches = regular_patches) and
+ * `regular_patch_set_count = 1` / `index = 0` (skip_span 1: this resource takes every
+ * accepted spot, unpartitioned) - the cleanest ground truth for the regular field.
+ * frequency_multiplier / size_multiplier inlined as 1 to drop the control-var
+ * dependency. Params inlined (capture.ts can't import extensionless src/). Grid: a
+ * near-spawn cluster + a far ring, so the distance fade-in and double-density ramp
+ * are both exercised. Seeds: 123456 and an odd one.
+ */
+async function captureResourceRegular(): Promise<void> {
+  interface Probe {
+    name: string;
+    base_density: number;
+    base_spots_per_km2: number;
+    candidate_spot_count: number;
+    random_spot_size_minimum: number;
+    random_spot_size_maximum: number;
+    regular_rq_factor: number;
+    starting_rq_factor: number;
+  }
+  // iron (has_starting true in-game) and uranium (false) - a spread of density/rq.
+  // has_starting is forced to 0 in the probe for all. Only iron takes both seeds
+  // (odd + even) to keep the fixture small; the field code path is identical.
+  const probes: Probe[] = [
+    {
+      name: "iron-ore",
+      base_density: 10,
+      base_spots_per_km2: 2.5,
+      candidate_spot_count: 22,
+      random_spot_size_minimum: 0.25,
+      random_spot_size_maximum: 2,
+      regular_rq_factor: 1.1 / 10,
+      starting_rq_factor: 1.5 / 7,
+    },
+    {
+      name: "uranium-ore",
+      base_density: 0.9,
+      base_spots_per_km2: 1.25,
+      candidate_spot_count: 21,
+      random_spot_size_minimum: 2,
+      random_spot_size_maximum: 4,
+      regular_rq_factor: 1.0 / 10,
+      starting_rq_factor: 1.0 / 7,
+    },
+  ];
+  const buildExpr = (p: Probe): string =>
+    "resource_autoplace_all_patches{" +
+    [
+      `base_density = ${p.base_density}`,
+      `base_spots_per_km2 = ${p.base_spots_per_km2}`,
+      `candidate_spot_count = ${p.candidate_spot_count}`,
+      `frequency_multiplier = 1`,
+      `has_starting_area_placement = 0`,
+      `random_spot_size_minimum = ${p.random_spot_size_minimum}`,
+      `random_spot_size_maximum = ${p.random_spot_size_maximum}`,
+      `regular_blob_amplitude_multiplier = ${1 / 8}`,
+      `regular_patch_set_count = 1`,
+      `regular_patch_set_index = 0`,
+      `regular_rq_factor = ${p.regular_rq_factor}`,
+      `seed1 = 100`,
+      `size_multiplier = 1`,
+      `starting_blob_amplitude_multiplier = ${1 / 8}`,
+      `starting_patch_set_count = 1`,
+      `starting_patch_set_index = 0`,
+      `starting_rq_factor = ${p.starting_rq_factor}`,
+    ].join(", ") +
+    "}";
+
+  // Cover the WHOLE of region (1,1) - centered on (1024,1024), spanning [512,1536]
+  // - at stride 16, so every ~30-tile-radius patch is caught by several points
+  // (patches are sparse: only a handful survive the trim per 1024^2 region, so a
+  // local window misses them all). This is a high-density, off-spawn region (the
+  // distance fade-in is fully ramped), which maximizes patch count. Plus a few
+  // near-spawn points to confirm the fade-in floor (basement there).
+  const positions: Position[] = [];
+  const N = 64;
+  const stride = 16;
+  const x0 = 512;
+  for (let iy = 0; iy < N; iy++)
+    for (let ix = 0; ix < N; ix++)
+      positions.push({ x: x0 + ix * stride, y: x0 + iy * stride });
+  for (let gy = 0; gy < 3; gy++)
+    for (let gx = 0; gx < 3; gx++) positions.push({ x: gx * 60 - 60, y: gy * 60 - 60 });
+
+  const seeds = [123456, 777771];
+  const cases = [];
+  for (const seed of seeds) {
+    for (const p of probes) {
+      const expression = buildExpr(p);
+      const workDir = await mkdtemp(join(tmpdir(), "oracle-capture-"));
+      try {
+        const values = await sampleExpression(expression, positions, { workDir, seed });
+        cases.push({ resource: p.name, seed, values });
+        console.log(`  captured ${p.name} seed=${seed}`);
+      } finally {
+        await rm(workDir, { recursive: true, force: true });
+      }
+    }
+  }
+  const fixture = {
+    _comment:
+      "Ground truth from Factorio 2.1.11. resource_autoplace_all_patches (has_starting_area_placement=0, regular_patch_set_count=1) routed onto elevation = the pure regular_patches field. frequency/size multipliers = 1. Regenerate: node --experimental-strip-types test/oracle/capture.ts resource-regular",
+    positions,
+    cases,
+  };
+  const out = join(FIXTURES, "oracle-resource-regular.seed123456.json");
+  await writeFile(out, JSON.stringify(fixture, null, 2) + "\n");
+  console.log(`wrote ${out} (${cases.length} cases x ${positions.length} points)`);
+}
+
 if (!oracleAvailable()) {
   console.error("No Factorio binary found (set FACTORIO_BIN). Cannot capture fixtures.");
   process.exit(1);
@@ -853,4 +964,5 @@ if (want("aux")) await captureAux();
 if (want("moisture")) await captureMoisture();
 if (want("expression-in-range")) await captureExpressionInRange();
 if (want("random-penalty")) await captureRandomPenalty();
+if (want("resource-regular")) await captureResourceRegular();
 if (want("tile-names")) await captureTileNames();
