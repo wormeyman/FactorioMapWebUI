@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import { decodeExchangeString } from "../src/codec/mapExchangeString";
-import { tailToNested, writeEnemyToTail } from "../src/model/mapSettings";
+import { tailToNested, writeMapSettingsToTail } from "../src/model/mapSettings";
 import fixtures from "./fixtures/builtin-presets.json";
 import mapDefaults from "./fixtures/map-settings.example.json";
 
@@ -228,31 +228,44 @@ describe("tailToNested", () => {
   });
 });
 
-describe("writeEnemyToTail", () => {
-  it("is the inverse of tailToNested's enemy reads (round-trips edited values)", () => {
+describe("writeMapSettingsToTail", () => {
+  it("is the inverse of tailToNested's reads (round-trips edited values)", () => {
     const tail = decodeExchangeString(presets["Default"] as string).tail;
     const { mapSettings } = tailToNested(tail);
-    const evolution = { ...mapSettings.enemyEvolution, enabled: false, timeFactor: 0.5 };
-    const expansion = { ...mapSettings.enemyExpansion, maxExpansionDistance: 99 };
+    const edited = {
+      ...mapSettings,
+      enemyEvolution: { ...mapSettings.enemyEvolution, enabled: false, timeFactor: 0.5 },
+      enemyExpansion: { ...mapSettings.enemyExpansion, maxExpansionDistance: 99 },
+      pollution: { ...mapSettings.pollution, diffusionRatio: 0.09, minPollutionToDamageTrees: 42 },
+      difficulty: { ...mapSettings.difficulty, technologyPriceMultiplier: 4 },
+      asteroids: { ...mapSettings.asteroids, spawningRate: 2 },
+    };
 
-    writeEnemyToTail(tail, evolution, expansion);
+    writeMapSettingsToTail(tail, edited);
     const after = tailToNested(tail).mapSettings;
 
     expect(after.enemyEvolution.enabled).toBe(false);
     expect(after.enemyEvolution.timeFactor).toBe(0.5);
     expect(after.enemyExpansion.maxExpansionDistance).toBe(99);
+    expect(after.pollution.diffusionRatio).toBe(0.09);
+    expect(after.pollution.minPollutionToDamageTrees).toBe(42);
+    expect(after.difficulty.technologyPriceMultiplier).toBe(4);
+    expect(after.asteroids.spawningRate).toBe(2);
   });
 
   it("skips a field whose value is undefined (preserves the original)", () => {
     const tail = decodeExchangeString(presets["Default"] as string).tail;
     const original = tail["enemyEvolution.timeFactor"];
     const { mapSettings } = tailToNested(tail);
-    const evolution = {
-      ...mapSettings.enemyEvolution,
-      timeFactor: undefined as unknown as number,
+    const edited = {
+      ...mapSettings,
+      enemyEvolution: {
+        ...mapSettings.enemyEvolution,
+        timeFactor: undefined as unknown as number,
+      },
     };
 
-    writeEnemyToTail(tail, evolution, mapSettings.enemyExpansion);
+    writeMapSettingsToTail(tail, edited);
 
     expect(tail["enemyEvolution.timeFactor"]).toBe(original);
   });
