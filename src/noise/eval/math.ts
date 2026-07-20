@@ -31,3 +31,18 @@ export function max(...xs: number[]): number {
 export function log2(x: number): number {
   return Math.log2(x);
 }
+
+/**
+ * Maps a geometric "slider" value `s` (the same 1..6-ish scale the game's
+ * frequency/size/richness sliders use) onto a linear `[lo, hi]` range:
+ *
+ *   slider_to_linear(s, lo, hi) = lo + 0.5*(hi-lo) * (1 + log2(s)/log2(6))
+ *
+ * `s = 1` (the default, un-adjusted slider position) lands at the midpoint of
+ * `[lo, hi]`; `s = 6` lands at `hi`. Used by `moisture_nauvis`'s starting-area
+ * bias term (`starting_area_moisture_size` -> `startingBiasChange`); reused by
+ * any other climate/terrain lever built on the same slider convention.
+ */
+export function sliderToLinear(s: number, lo: number, hi: number): number {
+  return lo + 0.5 * (hi - lo) * (1 + log2(s) / log2(6));
+}

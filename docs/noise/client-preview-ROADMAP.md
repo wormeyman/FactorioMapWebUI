@@ -106,18 +106,44 @@ data port.
 Done = a recognizable land/water/coastline image from a `Preset`, matching the
 game's elevation to the noise floor.
 
-## Milestone 2 - climate terrain colors
+## Milestone 2 - climate terrain colors - DONE 2026-07-19
 
-- [ ] Port `temperature`, `moisture`, `aux` expressions (same method).
-- [ ] **Tile-type resolution** (`src/noise/tiles/`): implement Factorio's tile
-      autoplace "peaks" - each tile prototype has influence peaks over
-      elevation/temperature/moisture/aux; the winner (with order/tiebreak) is the
-      tile. Port the tile autoplace specs from `data/base/prototypes/tile/`.
-- [ ] Palette: map each tile prototype to its `map_color`.
-- [ ] Validate tile assignment against the game (a debug expression per tile
-      influence, or compare rendered colors to `--generate-map-preview`).
+Shipped on branch `feat/m2-climate-terrain` (see
+`docs/superpowers/specs/2026-07-19-milestone2-climate-terrain-design.md` and
+`docs/noise/terrain-render-NOTES.md`). Client renders Nauvis terrain colors that
+match the real game's tile placement at 100% (153/153 oracle points, 3 seeds).
 
-Done = colored terrain (grass / sand / dirt / desert variants + water).
+- [x] Ported `temperature_basic`, `moisture_nauvis`, `aux_nauvis` (default Nauvis
+      climate) as hand-written closures over the solved primitives, reusing the
+      extracted `nauvisShared` internals (`nauvis_plateaus`/`hills`/`bridge_billows`
+      + new `forest_path_billows`). Oracle-validated to the f32 floor (temperature
+      worst 7.07e-5, aux 1.01e-5, moisture 2.76e-5). `temperature` is ported but
+      unused by tiles. KEY: `trees_forest_path_cutout` is billow noise, not tree
+      placement.
+- [x] **Reverse-engineered the native `expression_in_range`** (undocumented C++
+      builtin) from the oracle: `min(peak_maximum, peak_multiplier * min_i(min(v_i -
+      from_i, to_i - v_i)))` - per-dim triangular peak, min across dims, no lower
+      clamp, `peak_maximum` may be Infinity (sand-1). Worst residual 9.5e-7. See
+      `docs/noise/expression-in-range-NOTES.md`.
+- [x] **Tile-type resolution** (`src/noise/tiles/`): the 21 Nauvis tiles as a
+      catalog (`catalog.ts`) built on `expression_in_range_base`/`water_base`/
+      `noise_layer_noise`; `resolveTile` picks the argmax `probability_expression`
+      (tiles are a pure argmax - `order` has no effect). Tile selection is driven by
+      aux + moisture (land) and elevation (water); temperature is unused.
+- [x] Palette: each tile's `map_color`, cross-checked byte-for-byte against
+      `tiles.lua`.
+- [x] **Validated tile assignment against the game** via a new `get_tile` tile-ID
+      oracle path (chunk-generate + `surface.get_tile().name`, `test/oracle/oracle.ts`),
+      NOT `--generate-map-preview` (which only sanity-checks compositing). The
+      widened multi-seed fixture (20/21 tiles) caught a latent `quickMultioctaveNoise`
+      octave-seed bug (invisible on even seeds) - fixed to a flat `seed0 + k`.
+- [x] Terrain render path (`renderTerrain`, water early-out with an analytically
+      proven-safe threshold) + a Terrain/Elevation view toggle (Nauvis only). The
+      moisture/aux sliders drive the terrain view (non-default climate is a faithful
+      port but not oracle-validated point-by-point; only the default preset is).
+
+Done = colored terrain (grass / sand / dirt / desert variants + water), matching the
+game's tile placement at the default preset.
 
 ## Milestone 3 - resources
 

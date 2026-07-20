@@ -13,11 +13,16 @@ import {
   DUMP_FILE,
   oracleAvailable,
   parseDump,
+  parseTileDump,
   PROBE_NAME,
   type Position,
   sampleExpression,
+  sampleTileNames,
   type SpawnResult,
 } from "./oracle";
+import tileNamesFixture from "../fixtures/oracle-tile-names.seed123456.json";
+import tileNamesFixture654321 from "../fixtures/oracle-tile-names.seed654321.json";
+import tileNamesFixture424242 from "../fixtures/oracle-tile-names.seed424242.json";
 
 describe("oracle harness - pure builders", () => {
   it("buildDataLua registers the probe as a noise-expression, embedding the expression verbatim", () => {
@@ -154,6 +159,49 @@ describe("oracle fixture is genuine ground truth", () => {
   });
 });
 
+describe("tile-name oracle (get_tile) - pure parsing", () => {
+  it("parseTileDump parses a canned dump into {x, y, name} entries", () => {
+    const json = JSON.stringify({
+      results: [
+        { x: 0, y: 0, name: "grass-1" },
+        { x: 45, y: -45, name: "water" },
+      ],
+    });
+    expect(parseTileDump(json)).toEqual([
+      { x: 0, y: 0, name: "grass-1" },
+      { x: 45, y: -45, name: "water" },
+    ]);
+  });
+
+  it.each([
+    ["seed123456", tileNamesFixture],
+    ["seed654321", tileNamesFixture654321],
+    ["seed424242", tileNamesFixture424242],
+  ])("the committed %s tile-names fixture holds real Nauvis tile names", (_label, fixture) => {
+    expect(fixture.tileNames.length).toBe(fixture.positions.length);
+    for (const name of fixture.tileNames) {
+      expect(typeof name).toBe("string");
+      expect(name.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("the combined three-seed fixture set is tile-diverse enough to be a meaningful resolver oracle", () => {
+    // A single seed's local terrain is biome-poor by luck (see the Task 2 review
+    // finding: the original single-seed fixture was 86% grass-2/red-desert-0).
+    // Combined across seeds and a wide spatial extent, a broken resolver that
+    // defaults to grass/red-desert should no longer be able to score well.
+    const all = [
+      ...tileNamesFixture.tileNames,
+      ...tileNamesFixture654321.tileNames,
+      ...tileNamesFixture424242.tileNames,
+    ];
+    const distinct = new Set(all);
+    // Actual captured diversity is 20 distinct tiles across 153 points (including
+    // sand-1/2/3 and deepwater); 12 is a safe floor with headroom for regeneration.
+    expect(distinct.size).toBeGreaterThanOrEqual(12);
+  });
+});
+
 describe("oracle integration (gated on a local Factorio install)", () => {
   // Runs the REAL game (~1.7s). Proves the committed harness still reproduces the
   // committed fixture bit-for-bit - catches drift in the recipe or a game update.
@@ -173,6 +221,35 @@ describe("oracle integration (gated on a local Factorio install)", () => {
           // Same game, same seed, same positions -> identical bytes.
           expect(values[i]).toBe(basisFixture.points[i].v);
         }
+      } finally {
+        await rm(workDir, { recursive: true, force: true });
+      }
+    },
+    30_000,
+  );
+
+  // Same real-game smoke test for the get_tile path: a few positions from the
+  // committed tile-names fixture, re-sampled live and checked for shape only
+  // (chunk generation for a fresh mtime/thread pool is not guaranteed bit-exact
+  // like calculate_tile_properties, but the tile the game places at a given seed
+  // position is deterministic - see the exact-match assertion below).
+  it.skipIf(!oracleAvailable())(
+    "live get_tile oracle returns real tile names for a few fixture positions",
+    async () => {
+      const workDir = await mkdtemp(join(tmpdir(), "oracle-tile-live-"));
+      try {
+        const positions: Position[] = tileNamesFixture.positions.slice(0, 3);
+        const samples = await sampleTileNames(positions, {
+          workDir,
+          seed: tileNamesFixture.seed0,
+        });
+        expect(samples.length).toBe(positions.length);
+        for (const s of samples) {
+          expect(typeof s.name).toBe("string");
+          expect(s.name.length).toBeGreaterThan(0);
+        }
+        // Same seed, same positions -> the game places the same tiles again.
+        expect(samples.map((s) => s.name)).toEqual(tileNamesFixture.tileNames.slice(0, 3));
       } finally {
         await rm(workDir, { recursive: true, force: true });
       }

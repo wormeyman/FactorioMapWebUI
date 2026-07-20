@@ -4,6 +4,7 @@ import {
   type ElevationRenderRequest,
 } from "../src/noise/preview/elevationRenderRequest";
 import { renderElevation, LAND_RGBA, WATER_RGBA } from "../src/noise/preview/renderElevation";
+import { renderTerrain } from "../src/noise/preview/renderTerrain";
 
 const REQ: ElevationRenderRequest = {
   id: 7,
@@ -89,5 +90,88 @@ describe("runRenderRequest", () => {
 
     const lakesBuf = new Uint8ClampedArray(runRenderRequest({ ...base, mapType: "lakes" }).buffer);
     expect(Array.from(lakesBuf.slice(0, 4))).toEqual(WATER_RGBA);
+  });
+
+  it("view 'terrain' dispatches to renderTerrain, producing terrain-tile colors", () => {
+    // World point (2742, 8459), seed 123456: a known deep-water point from
+    // renderTerrain.spec.ts (deepwater color [38, 64, 73, 255]) - distinct from
+    // renderElevation's flat WATER_RGBA, so this proves the terrain renderer ran.
+    const req: ElevationRenderRequest = {
+      id: 9,
+      seed0: 123456,
+      width: 1,
+      height: 1,
+      originX: 2742,
+      originY: 8459,
+      tilesPerPixel: 1,
+      waterLevel: 0,
+      segmentationMultiplier: 1,
+      startingPositions: [{ x: 0, y: 0 }],
+      view: "terrain",
+    };
+    const direct = renderTerrain({
+      seed0: req.seed0,
+      width: req.width,
+      height: req.height,
+      originX: req.originX,
+      originY: req.originY,
+      tilesPerPixel: req.tilesPerPixel,
+      ctx: { segmentationMultiplier: req.segmentationMultiplier },
+    });
+    const got = new Uint8ClampedArray(runRenderRequest(req).buffer);
+    expect(Array.from(got)).toEqual(Array.from(direct.data));
+    expect(Array.from(got)).toEqual([38, 64, 73, 255]);
+  });
+
+  it("view 'terrain' forwards climate fields, changing some pixel under a shifted aux bias", () => {
+    // A 20x20 land-ward grid (aux/moisture drive most of the catalog's
+    // expression_in_range boxes, so a +0.5 aux bias reliably flips some
+    // pixel's argmax winner somewhere in a grid this size) - proving
+    // runRenderRequest forwards moistureFrequency/moistureBias/auxFrequency/
+    // auxBias/startingAreaMoistureSize/startingAreaMoistureFrequency through
+    // to renderTerrain's ctx rather than dropping them.
+    const req: ElevationRenderRequest = {
+      id: 10,
+      seed0: 123456,
+      width: 20,
+      height: 20,
+      originX: -2000,
+      originY: -2000,
+      tilesPerPixel: 200,
+      waterLevel: 0,
+      segmentationMultiplier: 1,
+      startingPositions: [{ x: 0, y: 0 }],
+      view: "terrain",
+      auxBias: 0.5,
+    };
+    const direct = renderTerrain({
+      seed0: req.seed0,
+      width: req.width,
+      height: req.height,
+      originX: req.originX,
+      originY: req.originY,
+      tilesPerPixel: req.tilesPerPixel,
+      ctx: { segmentationMultiplier: req.segmentationMultiplier, auxBias: 0.5 },
+    });
+    const got = new Uint8ClampedArray(runRenderRequest(req).buffer);
+    expect(Array.from(got)).toEqual(Array.from(direct.data));
+
+    const baseline = new Uint8ClampedArray(runRenderRequest({ ...req, auxBias: undefined }).buffer);
+    expect(Array.from(got)).not.toEqual(Array.from(baseline));
+  });
+
+  it("view 'elevation' (explicit or default/omitted) keeps the water/land mask", () => {
+    const explicit = new Uint8ClampedArray(runRenderRequest({ ...REQ, view: "elevation" }).buffer);
+    const omitted = new Uint8ClampedArray(runRenderRequest(REQ).buffer);
+    expect(Array.from(explicit)).toEqual(Array.from(omitted));
+    // Every pixel of the flat elevation mask is exactly LAND_RGBA or WATER_RGBA
+    // - neither matches the terrain deepwater color proven above, so this locks
+    // in that omitting/explicitly requesting "elevation" never routes through
+    // renderTerrain.
+    const landOrWater = [LAND_RGBA, WATER_RGBA].map((c) => JSON.stringify(c));
+    for (let i = 0; i < explicit.length; i += 4) {
+      const px = JSON.stringify(Array.from(explicit.slice(i, i + 4)));
+      expect(landOrWater).toContain(px);
+    }
   });
 });
