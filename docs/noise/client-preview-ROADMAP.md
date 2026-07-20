@@ -270,8 +270,11 @@ Done = ore patches overlaid on land, responding to the frequency/size/richness s
 ## Milestone 4 - the long tail
 
 - [ ] Cliffs (`cliffiness` / cliff elevation bands).
-- [ ] Enemy bases (enemy autoplace - `enemy-autoplace-utils.lua`), starting-area
-      clearing.
+- [x] Enemy bases (enemy autoplace - `enemy-autoplace-utils.lua`), starting-area
+      clearing. Done = footprint overlay (`view: "enemies"`) from the
+      oracle-validated `enemy_base_probability` field, threshold
+      `ENEMY_FOOTPRINT_THRESHOLD = 0.05`, spawners only (worms and per-nest
+      placement deferred, see `docs/noise/enemy-bases-NOTES.md`).
 - [ ] Trees / decoratives (optional for a preview).
 - [ ] Non-Nauvis planets (Space Age) if in scope - each is another expression set.
 

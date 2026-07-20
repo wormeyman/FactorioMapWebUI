@@ -116,3 +116,17 @@ Cone geometry note: with `q = pi/90 r^3`, `peak = 3q/(pi r^2) = r/30` and slope
 `= peak/r = 1/30`, so an enemy cone is `(r - dist)/30` - a shallow cone peaking at
 `~0.5-1.0` (r ~ 15-30), which is why in-spot `ebp` tops out under 1 and the placement
 source caps at 0.25. No `min(32, ...)` radius cap (that is resource-only).
+
+## Shipped (2026-07-20)
+
+Task 6 headless eyeball render (seed 123456, 2048-tile span centered on spawn,
+tilesPerPixel 4): base regions render as scattered red blobs, spawn stays clear
+(0 red pixels within an 80-tile radius of origin), and re-rendering with
+`enemyControls: { frequency: 3, size: 2 }` roughly 8x'd the red pixel count
+(2986 -> 23893 of 262144 total) with visibly bigger/more blobs, not a solid
+sheet. `ENEMY_FOOTPRINT_THRESHOLD` **kept at 0.05** - the sparse render reads as
+distinct base regions (not noise dust) and the dense render still shows plenty
+of terrain between blobs, so no retune was needed. `test/enemyBaseField.spec.ts`
+and `test/renderEnemies.spec.ts` re-run green with the threshold unchanged.
+M4 enemy bases done: footprint overlay, spawners only (worms + per-nest
+placement out of scope, see above). Cliffs remain the one open M4 item.
