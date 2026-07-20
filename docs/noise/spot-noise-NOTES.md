@@ -365,6 +365,75 @@ for each spot within the region bounds:
 `spot_noise` is now understood end to end: candidate RNG, selection, and
 rendering, each confirmed against the binary.
 
+## `starting_patches` (2.1.11) and the `favorabilityBatch` primitive change (2026-07-20, M3b)
+
+Two additions from porting `starting_patches` (`core/prototypes/noise-functions.lua`,
+the near-spawn guaranteed ore field), verified against a `has_starting_area_placement=1`
+oracle fixture and cross-checked against the Steam app's bundled 2.1.11 Lua directly
+(see `docs/noise/M3-session-handoff.md`'s "stale data-dump" finding - the numbers
+below are the CURRENT 2.1.11 values; an earlier draft used 2.0.77 numbers from a
+stale `~/Downloads` dump and got several of them wrong).
+
+**The 2.1.11 `starting_patches` expression, as implemented (`startingPatches.ts`):**
+
+- `starting_resource_placement_radius = 150` (not 120 in 2.0.77).
+- `region_size = radius * 3 = 450` (not `radius * 2 = 300`).
+- `candidate_spot_count = 32`, `suggested_minimum_candidate_point_spacing = 48`
+  (not 32).
+- `spot_quantity_expression = starting_area_spot_quantity` (a per-set constant, not
+  per-spot-varying).
+- `spot_radius_expression = starting_rq_factor * starting_area_spot_quantity^(1/3)`
+  - also the constant quantity, so every candidate spot has the same base radius;
+    the hard-target trim then shrinks the *last* kept spot's radius/peak
+    self-similarly by `coneScale` (same mechanism as regular patches).
+- `maximum_spot_basement_radius = 2 * starting_rq_factor *
+  starting_area_spot_quantity^(1/3)` (~29.5 tiles for iron at default controls) -
+  a flat `128` in the 2.0.77 dump. Unlike regular patches (cull 128, radius capped
+  at 32 - so the cone is already deep below basement by the cull), this cull sits
+  close to the actual cone radius, so it is a genuine HARD cull: the cone is still
+  above basement right up to the cutoff, producing a real discontinuity to
+  basement at the boundary. This is the game's own behavior, not a port artifact.
+- `hard_region_target_quantity = 1`.
+- `seed1 = seed1 + 1` for the candidate/selection stream (a distinct stream from
+  the regular set, which uses the bare `seed1`); the `blobs0` blob-noise term
+  still uses the bare `seed1` - only the spot-selection RNG gets the `+1`.
+- `spot_favorability_expression = starting_resources_lake_mask * starting_modulation
+  * origin_excluder * 2 - min(1, distance / starting_resource_placement_radius)`,
+  where `starting_resources_lake_mask = clamp((elevation - 1) / 10, 0, 1)` (the
+  map's `elevation` PROPERTY - `elevation_nauvis` on default Nauvis, NOT the
+  `elevation_lakes` literal an earlier draft assumed),
+  `origin_excluder = distance > 40` (avoid the crash site/landing spot), and
+  `starting_modulation = starting_resource_placement_radius > distance`.
+  **This is fully deterministic - there is NO `random_penalty` term.** The 2.0.77
+  dump had `+ random_penalty_at(0.5, 1)` appended to the favorability expression;
+  that term does not exist in 2.1.11's `starting_patches`. An earlier M3b draft
+  assumed it was there (by analogy with `regular_patches`' quantity jitter) and
+  needed a batched favorability primitive to reproduce it - see below for why that
+  primitive was built anyway, and why it ends up unused.
+
+**`selectSpots` primitive changes** (`src/noise/spotSelection.ts`), built to cover
+the case where a favorability expression DOES contain a `random_penalty` term:
+
+- New `favorabilityBatch` option on `SpotExpressions`, mirroring the existing
+  `quantityBatch`: an optional `(spots) => number[]` evaluated once over the whole
+  skip-set in acceptance order (before the sort/trim), for favorability expressions
+  whose `random_penalty` batch semantics (docs/noise/random-penalty-NOTES.md) make
+  a single spot's favorability depend on the whole spot list and its order. When
+  present it overrides the per-spot `favorability` callback.
+- The hard-target trim's `coneScale` shrink now goes through `fastCbrt` (was
+  `Math.cbrt`), matching the fastapprox-cbrt fix already applied to the cone
+  radius/peak/slope and blob-amplitude cube roots (random-penalty-NOTES.md's
+  "fastapprox `cbrt`, not the trim boundary" finding) - consistency, not a new bug.
+- **`makeStartingPatches` does NOT end up using `favorabilityBatch`.** Since
+  2.1.11's starting favorability turned out deterministic (no `random_penalty`),
+  it passes a plain per-spot `favorability` callback to `selectSpots`, same shape
+  as `regularPatches.ts`'s density/radius callbacks. `favorabilityBatch` was built
+  to cover the case the plan (correctly, per the 2.0.77-derived spec) anticipated,
+  and is exercised by the 55-config `spot-selection.game.json` fixture regression
+  suite, but no shipped resource expression currently needs it - it stands ready
+  for whatever primitive needs it next (spec risk item, closed as "not needed
+  here, kept for the next caller").
+
 ## Nothing left open
 
 `basis_noise` seeding (the sibling primitive a client-side preview needs) is also

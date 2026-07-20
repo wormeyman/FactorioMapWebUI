@@ -176,9 +176,50 @@ Spec `docs/superpowers/specs/2026-07-19-milestone3-resources-design.md`, plan
       renderTerrain's exact water decision (no re-derivation), so the ore edge lines
       up with the drawn coastline.
 
-Remaining for M3: **M3b** (starting patches + `max(starting, regular)`) and
-**M3.5** (per-tile placement stipple - needs the un-RE'd entity-placement RNG).
-Solid-footprint (opaque where `prob >= 0.5`) ships in M3a.
+**M3b (starting patches, near-spawn guaranteed ore) - DONE** (branch
+`feat/m3-resources`, tip 4cf6675, unmerged). Plan
+`docs/superpowers/plans/2026-07-20-milestone3b-starting-patches.md`.
+
+- [x] Ported `starting_patches` (`src/noise/resources/startingPatches.ts`) for the
+      four solids (iron/copper/coal/stone): a spot field (region_size 450,
+      candidate_spot_count 32, spacing 48, `hard_region_target_quantity`) plus the
+      same `blobs0` blob term shape as regular patches, over a deterministic
+      favorability (lake-mask x modulation x origin-excluder x 2, minus a distance
+      term - no random jitter). `resourcePatches.ts` composes
+      `all_patches = max(starting, regular)` for the four solids; oil/uranium
+      (no starting placement) delegate to the regular field unchanged.
+- [x] **Version-discrepancy finding**: the `~/Downloads/factorio 4/data` dump used
+      to draft the M3b plan is Factorio 2.0.77 (stale); the app targets 2.1.11.
+      `starting_patches` changed materially between those versions (radius
+      120->150, region_size radius*2->radius*3, spacing 32->48, and the
+      favorability term dropped its `random_penalty_at(0.5,1)` jitter entirely in
+      favor of a deterministic `origin_excluder`). Caught mid-implementation by
+      diffing against the oracle and the Steam app's own bundled 2.1.11 Lua - see
+      `docs/noise/M3-session-handoff.md` and the
+      `factorio-data-version-hazard` memory note for the full finding and the
+      authoritative source path.
+- [x] The starting favorability's lake mask couples to the map's `elevation`
+      PROPERTY, which on the default Nauvis map is `elevation_nauvis` (confirmed
+      against the oracle, not the `elevation_lakes` literal an earlier draft
+      assumed). `makeStartingPatches` hardcodes `makeElevationNauvis`; generalizing
+      to Lakes/Island starting elevation is deferred until the resolver needs a
+      non-default map type for resources.
+- [x] `selectSpots` gained a `favorabilityBatch` option (mirrors the existing
+      `quantityBatch`) for favorability expressions with a `random_penalty` batch
+      term - unused by 2.1.11 starting patches (whose favorability turned out
+      deterministic) but available for future primitives - plus routed the
+      hard-target `coneScale` shrink through `fastCbrt` (was `Math.cbrt`).
+- [x] Oracle-validated against a `has_starting_area_placement=1` fixture: near-spawn
+      points match to well under 1.0 absolute. `test/resourcePatches.spec.ts` uses a
+      combined `abs<1.0 OR rel<1e-2` tolerance to also accommodate the pre-existing
+      far-field `basisNoise` f32 floor (~5e-4 relative on ~1e4-magnitude points)
+      without masking real near-spawn errors.
+- [x] Headless full-view eyeball (Task 7): iron/copper/coal/stone patches cluster
+      tightly around spawn, oil renders as a small dot far out (no starting
+      placement, as expected), spawn is not bare.
+
+Remaining for M3: **M3.5** (per-tile placement stipple - needs the un-RE'd
+entity-placement RNG). Solid-footprint (opaque where `prob >= 0.5`) ships in M3a/b.
 
 M3a follow-ups (known, deferred by priority - 2026-07-20):
 

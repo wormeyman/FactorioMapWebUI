@@ -67,6 +67,61 @@ the oracle in Task 4, record the winner in random-penalty-NOTES.md.
 **M3a COMPLETE.** Remaining M3: M3b (starting patches + `max(starting,regular)`), M3.5 (per-tile
 stipple). Branch `feat/m3-resources` still unmerged/unpushed.
 
+### M3b (starting patches) COMPLETE (2026-07-20, tip 4cf6675)
+
+Shipped: `src/noise/resources/startingPatches.ts` (`makeStartingPatches` - the
+near-spawn guaranteed patches for iron/copper/coal/stone) and
+`src/noise/resources/resourcePatches.ts` (`makeResourcePatches` -
+`all_patches = max(starting, regular)` for the four solids; oil/uranium delegate
+unchanged to the regular field since they have no starting placement).
+`resolveResource.ts` threads the elevation ctx (`segmentationMultiplier`,
+`waterLevel`, `startingLakePositions`) through so the starting favorability's lake
+mask has what it needs. `selectSpots` gained a `favorabilityBatch` option
+(spotSelection.ts) mirroring the existing `quantityBatch`, plus the hard-target
+`coneScale` shrink now goes through `fastCbrt` instead of `Math.cbrt`. Oracle
+fixture `test/fixtures/oracle-resource-starting.seed123456.json`
+(`has_starting_area_placement=1`); `test/resourcePatches.spec.ts` validates near-spawn
+points to well under 1.0 absolute error, using a combined `abs<1.0 OR rel<1e-2`
+tolerance so the pre-existing far-field `basisNoise` f32 floor (~5e-4 relative on
+~1e4-magnitude points, from the M3a fixture's far ring) doesn't mask real
+near-spawn bugs. Full suite green throughout, `vp check` clean, all committed.
+Headless full-view eyeball (Task 7) confirms iron/copper/coal/stone clustering
+tightly around spawn with oil appearing as a sparse far-out dot, spawn not bare.
+
+**Two findings worth being loud about, both recorded in
+`docs/noise/spot-noise-NOTES.md`** (and the `factorio-data-version-hazard` Claude
+memory note for the first):
+
+1. **Stale data-dump hazard.** The M3b plan was drafted against
+   `~/Downloads/factorio 4/data`, which is Factorio **2.0.77** - stale. The app and
+   headless oracle both target **2.1.11**, and `starting_patches`
+   (`core/prototypes/noise-functions.lua`) changed materially between those
+   versions: `starting_resource_placement_radius` 120->150, `region_size`
+   `radius*2`->`radius*3` (300->450), `suggested_minimum_candidate_point_spacing`
+   32->48, `maximum_spot_basement_radius` a flat `128`->the formula
+   `2*starting_rq_factor*starting_area_spot_quantity^(1/3)`, and the favorability
+   term dropped `+ random_penalty_at(0.5, 1)` in favor of a deterministic
+   `* origin_excluder` (`distance > 40`) with an explicit `min(1, ...)` wrapper on
+   the distance term. `regular_patches` did NOT change between 2.0.77 and 2.1.11,
+   which is why M3a was unaffected and this only bit M3b. The implementer caught it
+   by cross-checking the plan's assumed constants against the has_starting=1 oracle
+   and the game's own bundled Lua before trusting the plan's numbers.
+   **The authoritative 2.1.11 source is the Steam app's own bundled data**:
+   `~/Library/Application Support/Steam/steamapps/common/Factorio/factorio.app/Contents/data/core/prototypes/{noise-functions,noise-programs}.lua`
+   - it matches the oracle binary's version by construction (same install). Prefer
+   it over any separately-downloaded data dump for noise/autoplace RE; verify the
+   dump's `base/info.json` `version` field before trusting it if one must be used.
+2. **`elevation_nauvis` coupling.** The starting favorability's lake mask
+   (`starting_resources_lake_mask`) reads the map's `elevation` PROPERTY, which on
+   the default Nauvis map resolves to `elevation_nauvis` - not the `elevation_lakes`
+   literal an earlier draft assumed (a plausible guess, since `elevation_lakes` is
+   the smaller/simpler tree and the *variable* is literally named
+   `starting_resources_lake_mask`). `makeStartingPatches` hardcodes
+   `makeElevationNauvis`, which is correct for the Nauvis-gated resources overlay
+   this app renders; generalizing to Lakes/Island starting elevation is deferred
+   (tracked in the ROADMAP) until the resolver needs a non-default map type for
+   resources.
+
 - **Post-M3a bug FIXED (2026-07-20, commit d0cc0e3): crescent-shaped patches near spawn.** Eric
   spotted a lake-sized iron crescent at seed 2883961880. Root cause (systematic-debugging, decomposed
   field into spotField+blob): `selectSpots` emitted spots with quantity <= 0, which the game skips
@@ -150,7 +205,18 @@ is the two build plans (M3a regular, M3b starting) - start at writing-plans for 
 ## Ground truth / recipes
 
 - Factorio bin present: `~/Library/Application Support/Steam/steamapps/common/Factorio/factorio.app/Contents/MacOS/factorio` (non-stripped, has NoiseOperations symbols).
-- Game data dump: `~/Downloads/factorio 4/data` (resources.lua, noise-functions.lua, resource-autoplace.lua). API JSON: `~/Downloads/factorioluaapi/`.
+- **Authoritative 2.1.11 Lua source (use this one): the Steam app's own bundled
+  data**, `~/Library/Application Support/Steam/steamapps/common/Factorio/factorio.app/Contents/data/{core,base}/prototypes/*.lua`
+  (`resources.lua`, `noise-functions.lua`, `resource-autoplace.lua`, ...). It is
+  guaranteed to match the oracle binary's version since it ships alongside it.
+- **`~/Downloads/factorio 4/data` is STALE (Factorio 2.0.77, confirmed via its
+  `base/info.json` `"version"` field) - do NOT treat it as ground truth for 2.1.11
+  RE.** `starting_patches` changed between 2.0.77 and 2.1.11 (see the M3b section
+  above); this dump caused the M3b plan to specify wrong starting-patch constants.
+  `regular_patches` happened not to change, so M3a was unaffected - but that was
+  luck, not a property of the dump. Always check `base/info.json`'s version before
+  trusting any non-Steam data dump, and prefer the Steam path above outright.
+  API JSON: `~/Downloads/factorioluaapi/`.
 - Oracle harness: `test/oracle/oracle.ts` (`sampleExpression`), captures via `node --experimental-strip-types test/oracle/capture.ts`.
 - Disasm a symbol: `lldb -b -o "disassemble --name '<mangled>'" "$BIN"`.
 - Tests: `pnpm vp test`, single `pnpm vp test test/<f>.spec.ts`, lint `pnpm vp check --fix`.
