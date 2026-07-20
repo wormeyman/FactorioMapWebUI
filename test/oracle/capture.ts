@@ -910,8 +910,7 @@ async function captureResourceRegular(): Promise<void> {
   const stride = 16;
   const x0 = 512;
   for (let iy = 0; iy < N; iy++)
-    for (let ix = 0; ix < N; ix++)
-      positions.push({ x: x0 + ix * stride, y: x0 + iy * stride });
+    for (let ix = 0; ix < N; ix++) positions.push({ x: x0 + ix * stride, y: x0 + iy * stride });
   for (let gy = 0; gy < 3; gy++)
     for (let gx = 0; gx < 3; gx++) positions.push({ x: gx * 60 - 60, y: gy * 60 - 60 });
 
