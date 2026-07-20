@@ -52,7 +52,8 @@ export function regularDensityAt(
           0,
           1,
         );
-  const doubleUp = 1 + clamp(sizeEffectiveDistanceAt(distance, params) / DOUBLE_DENSITY_DISTANCE, 0, 1);
+  const doubleUp =
+    1 + clamp(sizeEffectiveDistanceAt(distance, params) / DOUBLE_DENSITY_DISTANCE, 0, 1);
   return params.baseDensity * controls.frequency * controls.size * fadeIn * doubleUp;
 }
 
@@ -92,7 +93,11 @@ export function regularBlobAmplitudeAt(
   params: ResourceParams,
   controls: ResourceControls,
 ): number {
-  const atMax = regularSpotHeightTypicalAt(regularBlobAmplitudeMaximumDistance(params), params, controls);
+  const atMax = regularSpotHeightTypicalAt(
+    regularBlobAmplitudeMaximumDistance(params),
+    params,
+    controls,
+  );
   const atD = regularSpotHeightTypicalAt(distance, params, controls);
   return REGULAR_BLOB_AMPLITUDE_MULTIPLIER * Math.min(atMax, atD);
 }
