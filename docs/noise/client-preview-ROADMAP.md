@@ -149,18 +149,31 @@ game's tile placement at the default preset.
 
 `spot_noise` is fully solved; this is wiring, not research.
 
-- [ ] Port the per-resource autoplace expressions (iron/copper/coal/stone/
+**M3a (regular whole-map patches) - DONE** (branch `feat/m3-resources`, unmerged).
+Spec `docs/superpowers/specs/2026-07-19-milestone3-resources-design.md`, plan
+`docs/superpowers/plans/2026-07-19-milestone3a-regular-patches.md`.
+
+- [x] Port the per-resource autoplace expressions (iron/copper/coal/stone/
       uranium + crude-oil) from `prototypes/entity/resources.lua` +
-      `autoplace-controls.lua`. They are `spot_noise` over density/richness with
-      the `control:<resource>:frequency/size/richness` levers the app already
-      round-trips.
-- [ ] Wire `selectSpots` + the documented max-of-cones renderer
-      (`spot-noise-NOTES.md` "Field rendering") into per-pixel evaluation. Note the
-      region cache: spots are per `region_size` region; compute a region's spot
-      list once, reuse for all pixels in it.
-- [ ] Overlay resource patches on the terrain image (resource `map_color`).
-- [ ] Validate patch positions/extents against `calculate_tile_properties` for the
-      resource autoplace property, and against a real preview.
+      `resource-autoplace.lua`. `src/noise/resources/` = catalog (6 param sets),
+      resourceMath (distance/amplitude local functions), regularPatches
+      (`makeRegularPatches`: spot field + blob term). The `control:<resource>:*`
+      levers flow in via `readResourceControls`.
+- [x] Wire `selectSpots` + the max-of-cones renderer into per-pixel evaluation,
+      region-cached. The one unknown (`random_penalty`'s batch composition inside
+      spot-quantity selection) resolved: a batch over all skip-set accepted spots
+      in acceptance order (`quantityBatch`). Oracle-validated (pure-regular fixture,
+      iron+uranium, 2 seeds): abs error < 0.7 units everywhere after fixing the
+      cube root to the game's fastapprox `pow` (`fastApprox.ts`, `fastCbrt`).
+- [x] Overlay resource patches on the terrain image (resource `map_color`),
+      order-priority winner where `probability >= 0.5` (`resolveResource` +
+      `renderResources`); worker `view:"resources"`; Resources toggle on the panel.
+- [x] Validated against the pure-regular `calculate_tile_properties` oracle and a
+      headless full-view render (all 6 ore types as blob patches, spawn cleared).
+
+Remaining for M3: **M3b** (starting patches + `max(starting, regular)`) and
+**M3.5** (per-tile placement stipple - needs the un-RE'd entity-placement RNG).
+Solid-footprint (opaque where `prob >= 0.5`) ships in M3a.
 
 Done = ore patches overlaid, responding to the frequency/size/richness sliders.
 

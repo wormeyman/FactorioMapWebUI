@@ -52,9 +52,24 @@ the oracle in Task 4, record the winner in random-penalty-NOTES.md.
     trail + the decomposition proof in docs/noise/random-penalty-NOTES.md. Suite
     646/646 green (was 642 + 4 skipped), `vp check` clean. **Uncommitted** - Eric to
     review/commit.
-- **Tasks 5-10 TODO** (plan has full concrete steps): resolveResource (order-priority
-  overlay winner), resourceReads (controls from preset), renderResources (overlay),
-  worker `view:"resources"` wiring, UI Resources toggle, eyeball.
+- **Tasks 5-10 DONE** (2026-07-20, committed on branch):
+  - T5 `src/noise/resources/resolveResource.ts` - order-priority overlay winner
+    (`makeResourceResolver`/`pickWinner`; skip_span 6/offset patchSetIndex; "b">"c" then index).
+  - T6 `src/model/resourceReads.ts` - `readResourceControls` (levers from preset, default 1/1/1).
+  - T7 `src/noise/preview/renderResources.ts` - overlay onto terrain ImageData.
+  - T8 `elevationRenderRequest.ts` - `view:"resources"` (terrain then overlay) + `resourceControls` field.
+  - T9 `elevationPreviewCtx.ts` (+resourceControls) & `ElevationPreviewPanel.vue` - Resources toggle
+    (Nauvis-gated like Terrain).
+  - T10 eyeball: headless 1024px render confirms all 6 ore blobs over terrain, spawn cleared
+    (scratchpad PNG, sent to Eric). In-app live-slider eyeball still Eric's to do.
+  - ROADMAP M3a marked done. Full suite 661/661, `vp check` clean, all committed.
+
+**M3a COMPLETE.** Remaining M3: M3b (starting patches + `max(starting,regular)`), M3.5 (per-tile
+stipple). Branch `feat/m3-resources` still unmerged/unpushed.
+
+Perf note: the 1024² resources render took ~60s headless (single-threaded node); in-app it runs
+in the worker so it won't block the UI, but it's slow - a candidate for later optimisation
+(the terrain resolver dominates; the 6 resource fields add region-cached spot work on top).
 
 Full suite: 646 passed / 0 skipped. `vp check` clean. Nothing pushed/deployed.
 The 2026-07-20 fastCbrt precision fix (fastApprox.ts + resourceMath.ts + regularPatches.ts
