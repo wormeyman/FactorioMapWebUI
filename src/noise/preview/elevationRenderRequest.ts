@@ -1,4 +1,5 @@
 import type { Point } from "../distanceFromNearestPoint";
+import type { EnemyControls } from "../enemies/enemyCatalog";
 import type { ResourceControlLevers } from "../resources/resolveResource";
 import { renderElevation } from "./renderElevation";
 import { renderEnemies } from "./renderEnemies";
@@ -54,7 +55,7 @@ export interface ElevationRenderRequest {
    * consumed only when `view: "enemies"`. Defaults to `{ frequency: 1, size: 1 }`
    * when omitted.
    */
-  enemyControls?: { frequency: number; size: number };
+  enemyControls?: EnemyControls;
 }
 
 /** The rendered pixels, with `buffer` posted back as a transferable. */

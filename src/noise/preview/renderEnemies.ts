@@ -12,7 +12,11 @@
  */
 import type { Point } from "../distanceFromNearestPoint";
 import { makeEnemyBaseField } from "../enemies/enemyBaseField";
-import { ENEMY_FOOTPRINT_THRESHOLD, ENEMY_MAP_COLOR } from "../enemies/enemyCatalog";
+import {
+  ENEMY_FOOTPRINT_THRESHOLD,
+  ENEMY_MAP_COLOR,
+  type EnemyControls,
+} from "../enemies/enemyCatalog";
 import { WATER_TILE_COLORS } from "./renderResources";
 
 export interface RenderEnemiesOptions {
@@ -22,7 +26,7 @@ export interface RenderEnemiesOptions {
   readonly originY?: number;
   /** World tiles per pixel. Default 1. */
   readonly tilesPerPixel?: number;
-  readonly controls: { frequency: number; size: number };
+  readonly controls: EnemyControls;
   /** Spawn points for `distance`. Default single origin spawn. */
   readonly startingPositions?: readonly Point[];
 }

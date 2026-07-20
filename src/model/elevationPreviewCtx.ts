@@ -4,6 +4,7 @@ import { readMapType } from "./mapType";
 import { readResourceControls } from "./resourceReads";
 import type { ResourceControlLevers } from "../noise/resources/resolveResource";
 import type { Preset } from "./types";
+import { ENEMY_CONTROL_NAME, type EnemyControls } from "../noise/enemies/enemyCatalog";
 
 export interface ElevationPreviewCtx {
   /** false => the active map type has no client renderer (unknown/modded map type). */
@@ -25,7 +26,7 @@ export interface ElevationPreviewCtx {
    * defaults to `{ frequency: 1, size: 1 }`. Faithful only on the Nauvis map
    * type, same as the terrain/resources views.
    */
-  enemyControls: { frequency: number; size: number };
+  enemyControls: EnemyControls;
   /**
    * Non-seed free variables for renderElevation/renderTerrain
    * (Omit<..., "seed0">-compatible). The climate fields (aux/moisture
@@ -72,7 +73,7 @@ export function elevationCtxFromPreset(preset: Preset): ElevationPreviewCtx {
 
   const supported = mt.id === "nauvis" || mt.id === "lakes" || mt.id === "island";
   const mapType = mt.id === "nauvis" ? "nauvis" : mt.id === "island" ? "island" : "lakes";
-  const eb = preset.autoplaceControls["enemy-base"];
+  const eb = preset.autoplaceControls[ENEMY_CONTROL_NAME];
   return {
     supported,
     mapType,
