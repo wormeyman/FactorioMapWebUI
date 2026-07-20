@@ -66,3 +66,30 @@ describe("makeResourceResolver", () => {
     }
   });
 });
+
+describe("makeResourceResolver (M3b: starting patches near spawn)", () => {
+  // iron-ore is order "b", patchSetIndex 0 - the highest-priority resource, so if
+  // its own field is present at a tile it always wins regardless of what else
+  // overlaps there. STARTING_RESOURCE_PLACEMENT_RADIUS is 150: the regular field's
+  // fade-in (REGULAR_PATCH_FADE_IN_DISTANCE) makes regular density (and therefore
+  // the regular field, including its blob term) exactly 0 for every distance < 150,
+  // so a resource found strictly inside that radius can only come from the
+  // starting-patch term this task wires in - a scan there is a real RED/GREEN
+  // discriminator (verified: unwired, this scan finds nothing and the test fails).
+  it("returns iron-ore at some near-spawn tile inside its guaranteed starting patch", () => {
+    const resolve = makeResourceResolver({
+      seed0: 123456,
+      controls: { "iron-ore": { frequency: 1, size: 1, richness: 1 } },
+    });
+    let found = false;
+    for (let y = -140; y <= 140 && !found; y += 4) {
+      for (let x = -140; x <= 140; x += 4) {
+        if (resolve(x, y)?.name === "iron-ore") {
+          found = true;
+          break;
+        }
+      }
+    }
+    expect(found).toBe(true);
+  });
+});

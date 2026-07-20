@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { renderResources, WATER_TILE_COLORS } from "../src/noise/preview/renderResources";
 import { RESOURCE_CATALOG } from "../src/noise/resources/resourceCatalog";
 import { makeTileCatalog } from "../src/noise/tiles/catalog";
@@ -99,5 +99,42 @@ describe("renderResources", () => {
       controls: {},
     });
     expect([base.data[0], base.data[1], base.data[2]]).toEqual([7, 8, 9]);
+  });
+
+  describe("elevation-coupling ctx forwarding", () => {
+    afterEach(() => {
+      // The static imports above (already resolved at file load) keep using the
+      // real module regardless; this only un-mocks for any later dynamic import.
+      vi.doUnmock("../src/noise/resources/resolveResource");
+      vi.resetModules();
+    });
+
+    it("forwards segmentationMultiplier/waterLevel/startingLakePositions into makeResourceResolver", async () => {
+      const resolverFactory = vi.fn(() => () => null);
+      vi.doMock("../src/noise/resources/resolveResource", () => ({
+        makeResourceResolver: resolverFactory,
+      }));
+      vi.resetModules();
+      const { renderResources: mockedRenderResources } =
+        await import("../src/noise/preview/renderResources");
+
+      const startingLakePositions = [{ x: 3, y: 4 }];
+      const base = sentinelBase(4, 4);
+      mockedRenderResources(base, {
+        seed0: 123456,
+        controls: {},
+        segmentationMultiplier: 1.7,
+        waterLevel: 3,
+        startingLakePositions,
+      });
+
+      expect(resolverFactory).toHaveBeenCalledWith(
+        expect.objectContaining({
+          segmentationMultiplier: 1.7,
+          waterLevel: 3,
+          startingLakePositions,
+        }),
+      );
+    });
   });
 });

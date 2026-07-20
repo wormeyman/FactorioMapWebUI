@@ -34,6 +34,10 @@ export interface RenderResourcesOptions {
   readonly controls: Record<string, ResourceControlLevers>;
   /** Spawn points for `distance`. Default single origin spawn. */
   readonly startingPositions?: readonly Point[];
+  /** elevation inputs for the starting-patch favorability coupling (solids only). */
+  readonly segmentationMultiplier?: number;
+  readonly waterLevel?: number;
+  readonly startingLakePositions?: readonly Point[];
 }
 
 export function renderResources(base: ImageData, opts: RenderResourcesOptions): void {
@@ -46,6 +50,9 @@ export function renderResources(base: ImageData, opts: RenderResourcesOptions): 
     seed0: opts.seed0,
     controls: opts.controls,
     startingPositions: opts.startingPositions,
+    segmentationMultiplier: opts.segmentationMultiplier,
+    waterLevel: opts.waterLevel,
+    startingLakePositions: opts.startingLakePositions,
   });
 
   const isWater = (r: number, g: number, b: number): boolean => {

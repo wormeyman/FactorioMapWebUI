@@ -91,6 +91,9 @@ export function runRenderRequest(req: ElevationRenderRequest): ElevationRenderRe
         tilesPerPixel: req.tilesPerPixel,
         controls: req.resourceControls ?? {},
         startingPositions: req.startingPositions,
+        segmentationMultiplier: req.segmentationMultiplier,
+        waterLevel: req.waterLevel,
+        startingLakePositions: req.startingLakePositions,
       });
     }
   } else {

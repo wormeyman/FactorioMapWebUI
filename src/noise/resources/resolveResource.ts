@@ -10,9 +10,18 @@
  * `skip_span = 6` / `skip_offset = patchSetIndex` (regular set), so each resource's
  * field is built with those skip params (unlike the pure-regular oracle, which uses
  * span 1). See docs/superpowers/plans/2026-07-19-milestone3a-regular-patches.md T5.
+ *
+ * M3b adds the starting (near-spawn guaranteed) patches for the four solids: each
+ * resource's field is now `makeResourcePatches` = `max(starting, regular)` (solids)
+ * or plain regular (oil/uranium, unchanged). The four solids' starting-set stream is
+ * partitioned by `skip_span = 4` / `skip_offset = patchSetIndex` (only iron, copper,
+ * coal, stone have `hasStartingAreaPlacement`, and they register first, so their
+ * starting index equals their regular `patchSetIndex`). The starting favorability
+ * couples to the map's `elevation` property (elevation_nauvis on default Nauvis),
+ * hence the `segmentationMultiplier`/`waterLevel`/`startingLakePositions` ctx fields.
  */
 import type { Point } from "../distanceFromNearestPoint";
-import { makeRegularPatches, type RegularPatches } from "./regularPatches";
+import { makeResourcePatches, type ResourcePatches } from "./resourcePatches";
 import { RESOURCE_CATALOG, type ResourceParams } from "./resourceCatalog";
 
 /** control:<res>:frequency|size|richness levers for one resource. */
@@ -28,12 +37,18 @@ export interface ResourceResolverCtx {
   readonly controls: Record<string, ResourceControlLevers>;
   /** Spawn points for `distance`. Default single origin spawn. */
   readonly startingPositions?: readonly Point[];
+  /** elevation inputs for the starting favorability coupling (solids only). */
+  readonly segmentationMultiplier?: number;
+  readonly waterLevel?: number;
+  readonly startingLakePositions?: readonly Point[];
 }
 
 const DEFAULT_LEVERS: ResourceControlLevers = { frequency: 1, size: 1, richness: 1 };
 
 /** The regular set shares one candidate stream across all 6 resources. */
 const REGULAR_SKIP_SPAN = 6;
+/** The starting set shares one candidate stream across the 4 solids. */
+const STARTING_SKIP_SPAN = 4;
 
 const orderRank = (o: "b" | "c"): number => (o === "b" ? 0 : 1);
 
@@ -63,18 +78,23 @@ export function pickWinner(present: readonly ResourceParams[]): ResourceParams |
 export function makeResourceResolver(
   ctx: ResourceResolverCtx,
 ): (x: number, y: number) => ResourceParams | null {
-  const fields: { params: ResourceParams; patches: RegularPatches }[] = [];
+  const fields: { params: ResourceParams; patches: ResourcePatches }[] = [];
   for (const params of RESOURCE_CATALOG) {
     const levers = ctx.controls[params.controlName] ?? DEFAULT_LEVERS;
     if (levers.size <= 0) continue; // a disabled resource never appears
     fields.push({
       params,
-      patches: makeRegularPatches(params, {
+      patches: makeResourcePatches(params, {
         seed0: ctx.seed0,
         controls: levers,
         startingPositions: ctx.startingPositions,
-        skipSpan: REGULAR_SKIP_SPAN,
-        skipOffset: params.patchSetIndex,
+        segmentationMultiplier: ctx.segmentationMultiplier,
+        waterLevel: ctx.waterLevel,
+        startingLakePositions: ctx.startingLakePositions,
+        regularSkipSpan: REGULAR_SKIP_SPAN,
+        regularSkipOffset: params.patchSetIndex,
+        startingSkipSpan: STARTING_SKIP_SPAN,
+        startingSkipOffset: params.patchSetIndex,
       }),
     });
   }
