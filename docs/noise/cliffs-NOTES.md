@@ -1,0 +1,174 @@
+# Cliffs (M4) - reverse-engineering notes
+
+Factorio 2.1.11 (build 86962, mac-arm64). Measured 2026-07-20 against the headless
+oracle (`test/oracle/oracle.ts` `sampleExpression` for the noise fields; a
+`find_entities_filtered{type="cliff"}` chunk-forced dump for placement) and the
+non-stripped shipped binary (disassembly). Companion to `enemy-bases-NOTES.md`,
+`placement-roll-NOTES.md`, `basis-noise-NOTES.md`. Source Lua: `~/GitHub/factorio-data`
+@ tag `2.1.11`, `core/prototypes/noise-programs.lua` (cliff expressions),
+`base/prototypes/entity/entity-util.lua` (`scaled_cliff`, the cliff entity),
+`base/prototypes/planet/planet-map-gen.lua` (Nauvis `cliff_settings`).
+
+Key strategic finding: **cliff placement is deterministic** - there is NO per-chunk
+RNG roll (unlike the deferred M3.5 resource stipple / M4 per-nest placement). It is a
+pure function of two noise fields plus the interval/elevation_0 settings, so a
+faithful render does not touch the deferred `EntityMapGenerationTask` placement RNG.
+
+## The two noise fields (verbatim, `noise-programs.lua`)
+
+```
+cliff_elevation_nauvis = 10 + 30 * (nauvis_hills - nauvis_hills_cliff_level)
+
+cliffiness_nauvis = (main_cliffiness >= cliff_cutoff) * 10       -- a 0-or-10 gate
+
+main_cliffiness = min( base_cliffiness, forest_path_cliffiness, bridge_path_cliffiness,
+                       elevation_cliffiness, starting_area_cliffiness, 4*low_frequency_cliffiness )
+  base_cliffiness          = (nauvis_cliff_ringbreak - 0.01) * 60
+  forest_path_cliffiness   = (forest_path_billows   - 0.03) * 12
+  bridge_path_cliffiness   = (nauvis_bridge_billows  - 0.05) * 15
+  elevation_cliffiness     = (elevation_nauvis_no_cliff - 4) / 2
+  starting_area_cliffiness = -2 + distance * segmentation_multiplier / 120
+  low_frequency_cliffiness = 1.5
+     + basis_noise{ seed0=map_seed, seed1=86883, input_scale=nauvis_segmentation_multiplier/500, output_scale=0.51 }
+     + min( slider_to_linear(cliff_frequency, -1.7, 1.7), slider_to_linear(cliff_richness, -1, 1) )
+  cliff_cutoff    = 2 * cliff_gap_size^1.5
+  cliff_gap_size  = 0.5 - 0.5 * slider_to_linear(cliff_richness, -1, 1)
+  cliff_frequency = 40 / cliff_elevation_interval     -- effective interval (post getModified*)
+
+slider_to_linear(v, lo, hi) = lo + 0.5*(hi-lo)*(1 + log2(v)/log2(6))
+
+nauvis_cliff_ringbreak = abs(nauvis_hills - nauvis_hills_offset)
+nauvis_hills_offset    = abs(multioctave_noise{ x = x + 12*nauvis_hills_offset_normalized_x,
+                                                y = y + 12*nauvis_hills_offset_normalized_y,
+                                                persistence=0.5, seed0=map_seed, seed1=900, octaves=4,
+                                                input_scale=nauvis_segmentation_multiplier/90 })
+nauvis_hills_offset_raw_x = basis_noise{ seed1='nauvis_offset_x', input_scale=nauvis_segmentation_multiplier/500 }
+nauvis_hills_offset_raw_y = basis_noise{ seed1='nauvis_offset_y', input_scale=nauvis_segmentation_multiplier/500 }
+normalize(a, b, bias)     = a / sqrt(bias + a^2 + b^2)          -- bias 0.001
+nauvis_hills_offset_normalized_x = normalize(raw_x, raw_y, 0.001)   -- and _y swaps the args
+```
+
+Already ported (reuse `src/noise/expressions/nauvisShared.ts`): `nauvis_hills`,
+`nauvis_hills_cliff_level`, `forest_path_billows`, `nauvis_bridge_billows`. New:
+`elevation_nauvis_no_cliff` (= `elevation_nauvis_function(0)`, i.e. the elevation
+tree with `added_cliff_elevation=0` - needs the `makeElevationNauvis` seam
+refactor), the offset/ringbreak chain (string seeds `'nauvis_offset_x/y'`), the seed
+86883 `basis_noise`, and `slider_to_linear`. **No `VoronoiNoise`** anywhere in the
+Nauvis cliff tree (it appears only on Space-Age planets).
+
+## Placement rule (disasm-confirmed + validated ~90% tile-for-tile)
+
+Reverse-engineered from the non-stripped binary and validated against a real
+`find_entities_filtered{type="cliff"}` dump (chunk-forced generation, default preset).
+
+### `crossesCliff(a, b, cliffinessAvg, elevation_0, interval)` @ `0x101606d08`
+
+```
+if a < 0 or b < 0: return 0
+boundary = elevation_0 + interval * floor((max(a,b) - elevation_0) / interval)   -- frintm: floor to -inf
+if boundary < elevation_0: return 0
+dA = a - boundary; dB = b - boundary
+if cliffinessAvg > 0.5:                    -- gate is > 0.5 (NOT > 0); the arg is an AVERAGE
+   if dA < 0 and dB > 0: return +1
+   if dA > 0 and dB < 0: return -1
+return 0
+```
+
+Corrections vs the initial symbol-only guess: band index is
+`floor((elev - elevation_0)/interval)` with `elevation_0` a subtracted phase (no
+half-offset); both elevations must be `>= 0`; `max(a,b) >= elevation_0`; the gate
+compares the **average** of the two corners' cliffiness to `0.5`. Because
+`cliffiness_nauvis in {0,10}`, `avg > 0.5` == "at least one corner cliffy". Return is
+signed (+1/-1/0); encode -1 as 3 for the orientation code.
+
+The inlined copy inside `crossingsForChunk` (`0x101606dc0`, `0x101607460`+,
+`0x1016075c0`+) forms `s3 = (cliffiness[A] + cliffiness[B]) * 0.5` before the call.
+
+### The lattice (confirmed 100% exact)
+
+`grid_size = {4,4}`, `grid_offset = {0, 0.5}` (from `scaled_cliff`). A 32-tile chunk
+= `8x8` cells of `4x4` tiles; fields sampled at the `9x9` cell corners; the entity is
+placed at the cell **center**:
+
+```
+corner(i,j)  world tile = ( chunkX*32 + i*4 + 0,  chunkY*32 + j*4 + 0.5 )
+cliff center world tile = ( chunkX*32 + cx*4 + 2, chunkY*32 + cy*4 + 2.5 )   -> x≡2, y≡2.5 (mod 4)
+```
+
+Every dumped cliff across both test seeds matched `x mod 4 == 2` and `y mod 4 == 2.5`
+exactly. (`generateCliffs` @ `0x10161cda8`, constants `32.0`, `grid_size/2=2.0`,
+`grid_offset` from `[proto+0xb70/0xb78]`.)
+
+### Cell -> cliff (orientation code)
+
+For cell `(cx,cy)` the four edges are the crossings on its shared corner pairs:
+`L=cross(corner(cx,cy),corner(cx,cy+1))`, `R=cross(corner(cx+1,cy),corner(cx+1,cy+1))`,
+`T=cross(corner(cx,cy),corner(cx+1,cy))`, `B=cross(corner(cx,cy+1),corner(cx+1,cy+1))`.
+`generateCliffs +292..+308` packs `code = (enc(L)<<6)|(enc(R)<<4)|(enc(T)<<2)|enc(B)`
+(2 bits each, -1 encoded as 3). `CellCliffCrossing::toMaybeCliffOrientation`
+(`0x1016067a0`) maps the 256 codes -> a `CliffOrientation` (16 of them: N-S, W-E,
+inner/outer/entrance corners) or "none". A cell whose code maps to non-none gets a
+cliff. **For the preview render we need only the boolean not-none** (which cells get a
+cliff), not the sprite orientation; extract the `code -> none/not-none` predicate from
+the table.
+
+### Slider mapping (disasm-confirmed)
+
+- `getModifiedElevationInterval` @ `0x101607684`: `interval / frequency`. Default
+  `40 / 1 = 40`.
+- `getModifiedRichness` @ `0x10160a2e0`: `richness_field * size_field`. Default
+  `1 * 1 = 1` -> `cliff_richness = 1` -> `cliff_gap_size = 0.5` ->
+  `cliff_cutoff = 2*0.5^1.5 = 0.7071`.
+- `generateCliffs +72..+80` gates the whole pass on the size (Continuity) field
+  being non-zero, so **Continuity = 0 disables all cliffs**.
+- The app's `nauvis_cliff` terrain control exposes Frequency = the `frequency` slot,
+  Continuity = the `size` slot (no richness column); `cliffSettings.richness` /
+  `cliffElevationInterval` are the base values `getModified*` scale.
+
+`cliff_smoothing = 0` on Nauvis (`planet-map-gen.lua`) and is a no-op in this path
+(the only post-pass is `fixImpossibleCells`, smoothing-independent).
+
+## Validation result and the deferred residual
+
+Reimplementing the rule (sample `cliff_elevation_nauvis` + `cliffiness_nauvis` at the
+corner lattice via the oracle, apply the crossing rule + lattice) reproduced the real
+`find_entities` cliffs:
+
+| seed   | region        | actual | matched | interior-only |
+| ------ | ------------- | ------ | ------- | ------------- |
+| 123456 | [512,768)^2   | 57     | 51 (89%)| 27/31 (87%)   |
+| 777771 | [1024,1408)^2 | 77     | 69 (90%)| 39/43 (91%)   |
+
+Lattice was 100% exact; the ~10% residual is **not** a phase error or f32 noise - it
+is `fixImpossibleCells` (`0x101606944`, called at the tail of `crossingsForChunk`):
+(a) zeroes crossings on each chunk's outer-border edges, then (b) rewrites
+"impossible" cell configurations to keep cliff faces continuous / punch passages (the
+game's own comment). Plus `tryToAddCliff` (`0x10161f42c`) drops cliffs whose
+collision box `wouldCollide` (`0x10161f85c`) - the water/existing-entity rejection.
+
+**Decision (Eric, 2026-07-20): ship the exact geometric rule and DEFER
+`fixImpossibleCells`.** Positions are lattice-exact and ~90% of cliffs match; the
+residual is a continuity tweak that is visually negligible at downsampled preview
+scale. Water rejection is approximated by the existing `WATER_TILE_COLORS`
+pixel-exclusion (cliffs are not painted on water pixels). Porting `fixImpossibleCells`
++ the exact `wouldCollide` to reach true tile-for-tile 100% is a separate follow-up.
+
+## Binary symbols (cliff placement)
+
+`CliffGenerator::crossesCliff(float,float,float,float,float)` @ `0x101606d08`;
+`::crossingsForChunk(CompiledMapGenSettings const&, ChunkPosition const&)` @
+`0x101606dc0`; `EntityMapGenerationTask::generateCliffs()` @ `0x10161cda8`,
+`::tryToAddCliff(...)` @ `0x10161f42c`, `::wouldCollide` @ `0x10161f85c`;
+`CellCliffCrossing::toMaybeCliffOrientation` @ `0x1016067a0`;
+`CliffGenerator::fixImpossibleCells` @ `0x101606944`;
+`MapGenSettingsHelpers::CliffPlacementSettings::getModifiedElevationInterval` @
+`0x101607684`, `::getModifiedRichness` @ `0x10160a2e0`. (Also present but unused by
+Nauvis cliffs: `NoiseOperations::VoronoiNoise::*`.)
+
+Disassemble with (as in the other notes):
+
+```
+BIN="$HOME/Library/Application Support/Steam/steamapps/common/Factorio/factorio.app/Contents/MacOS/factorio"
+lldb -b -o "disassemble --name '_ZN13CliffGenerator12crossesCliffEfffff'" "$BIN"
+nm "$BIN" | c++filt | grep -i cliff        # find mangled names
+```
