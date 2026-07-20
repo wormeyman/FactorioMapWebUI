@@ -199,6 +199,45 @@ describe("runRenderRequest", () => {
     expect(differing).toBeLessThan(32 * 32); // but not everywhere
   });
 
+  it("view 'resources' never paints ore over water (terrain water pixels are preserved)", () => {
+    // A large view that includes open water; every pixel the terrain drew as
+    // deepwater/water must be byte-identical in the resources render (ore excluded).
+    const terrainReq: ElevationRenderRequest = {
+      id: 13,
+      seed0: 2883961880,
+      width: 128,
+      height: 128,
+      originX: -512,
+      originY: -512,
+      tilesPerPixel: 8,
+      waterLevel: 0,
+      segmentationMultiplier: 1,
+      startingPositions: [{ x: 0, y: 0 }],
+      view: "terrain",
+    };
+    const terrain = new Uint8ClampedArray(runRenderRequest(terrainReq).buffer);
+    const withOre = new Uint8ClampedArray(
+      runRenderRequest({ ...terrainReq, view: "resources" }).buffer,
+    );
+    const water = new Set([
+      [38, 64, 73].join(","), // deepwater
+      [51, 83, 95].join(","), // water
+    ]);
+    let waterPixels = 0;
+    for (let i = 0; i < terrain.length; i += 4) {
+      if (!water.has(`${terrain[i]},${terrain[i + 1]},${terrain[i + 2]}`)) continue;
+      waterPixels++;
+      // unchanged: same bytes as the terrain render
+      expect([withOre[i], withOre[i + 1], withOre[i + 2], withOre[i + 3]]).toEqual([
+        terrain[i],
+        terrain[i + 1],
+        terrain[i + 2],
+        terrain[i + 3],
+      ]);
+    }
+    expect(waterPixels).toBeGreaterThan(0); // the view really does contain water
+  });
+
   it("view 'resources' forwards resourceControls (iron size 0 removes iron pixels)", () => {
     const base: ElevationRenderRequest = {
       id: 12,

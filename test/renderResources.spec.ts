@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
-import { renderResources } from "../src/noise/preview/renderResources";
+import { renderResources, WATER_TILE_COLORS } from "../src/noise/preview/renderResources";
 import { RESOURCE_CATALOG } from "../src/noise/resources/resourceCatalog";
+import { makeTileCatalog } from "../src/noise/tiles/catalog";
 
 /** A base filled with a sentinel color no resource uses, alpha 255. */
 function sentinelBase(w: number, h: number): ImageData {
@@ -47,6 +48,45 @@ describe("renderResources", () => {
     }
     expect(painted).toBeGreaterThan(0); // some ore appears
     expect(sentinel).toBeGreaterThan(0); // but not everywhere
+  });
+
+  it("never paints ore over water: a fully water-colored base is unchanged", () => {
+    // Fill the base with deepwater color over a region full of patches; since every
+    // pixel is a water tile, resources collide with all of them -> nothing painted.
+    const W = 64;
+    const [dr, dg, db] = WATER_TILE_COLORS[0];
+    const base = new ImageData(new Uint8ClampedArray(W * W * 4), W, W);
+    for (let i = 0; i < W * W; i++) {
+      base.data[i * 4] = dr;
+      base.data[i * 4 + 1] = dg;
+      base.data[i * 4 + 2] = db;
+      base.data[i * 4 + 3] = 255;
+    }
+    const before = Uint8ClampedArray.from(base.data);
+    renderResources(base, {
+      seed0: 123456,
+      originX: 512,
+      originY: 512,
+      tilesPerPixel: 16,
+      controls: {},
+    });
+    expect(Array.from(base.data)).toEqual(Array.from(before));
+  });
+
+  it("WATER_TILE_COLORS matches the tile catalog's water/deepwater map_colors", () => {
+    const cat = makeTileCatalog(0);
+    const water = (name: string) => cat.find((t) => t.name === name)!.color;
+    expect(WATER_TILE_COLORS).toContainEqual([
+      water("deepwater")[0],
+      water("deepwater")[1],
+      water("deepwater")[2],
+    ]);
+    expect(WATER_TILE_COLORS).toContainEqual([
+      water("water")[0],
+      water("water")[1],
+      water("water")[2],
+    ]);
+    expect(WATER_TILE_COLORS.length).toBe(2);
   });
 
   it("leaves the spawn pixel untouched (no patches inside the fade-in radius)", () => {
