@@ -483,6 +483,50 @@ async function captureElevationIsland(): Promise<void> {
 }
 
 /**
+ * The `temperature` (= `temperature_basic`) climate expression: `clamp(15 + bias +
+ * quick_multioctave_noise{...}, -20, 50)`. Routed onto elevation, exactly like
+ * `captureElevationLakes` routes `elevation_lakes` - `calculate_tile_properties`
+ * just needs SOME property name to key the dump under; the sampled values are
+ * whatever `temperature` itself computes. Same standard grid as
+ * `captureElevationLakes` (near-origin band, far rings at r=2200/3300, one
+ * deep-field point), even though `temperature` has no spawn-distance dependency,
+ * for comparability across captures.
+ */
+async function captureTemperature(): Promise<void> {
+  const seed = 123456;
+  const positions: Position[] = [];
+  for (let gy = 0; gy < 3; gy++) {
+    for (let gx = 0; gx < 3; gx++) {
+      positions.push({ x: gx * 11 - 11 + 0.5, y: gy * 13 - 13 + 0.25 });
+    }
+  }
+  for (const r of [2200, 3300]) {
+    for (let k = 0; k < 8; k++) {
+      const a = (k * Math.PI) / 4;
+      positions.push({ x: r * Math.cos(a) + 0.5, y: r * Math.sin(a) + 0.25 });
+    }
+  }
+  positions.push({ x: 12345.75, y: 6789.125 });
+
+  const workDir = await mkdtemp(join(tmpdir(), "oracle-capture-"));
+  try {
+    const temperature = await sampleExpression("temperature", positions, { workDir, seed });
+    const fixture = {
+      _comment:
+        "Ground truth from Factorio 2.1.11 via the test/oracle harness. temperature (= temperature_basic) routed onto elevation. Regenerate: node --experimental-strip-types test/oracle/capture.ts temperature",
+      seed0: seed,
+      positions,
+      temperature,
+    };
+    const out = join(FIXTURES, "oracle-temperature.seed123456.json");
+    await writeFile(out, JSON.stringify(fixture, null, 2) + "\n");
+    console.log(`wrote ${out} (${positions.length} points)`);
+  } finally {
+    await rm(workDir, { recursive: true, force: true });
+  }
+}
+
+/**
  * The native `expression_in_range(peak_multiplier, peak_maximum, expr_1..N,
  * from_1..N, to_1..N)` builtin - the one genuine unknown of Milestone 2. Sample
  * three sweeps that recover the 1-D peak/falloff shape (both the bounded (20,1)
@@ -662,5 +706,6 @@ if (want("multioctave-wrappers")) await captureMultioctaveWrappers();
 if (want("elevation-lakes")) await captureElevationLakes();
 if (want("elevation-nauvis")) await captureElevationNauvis();
 if (want("elevation-island")) await captureElevationIsland();
+if (want("temperature")) await captureTemperature();
 if (want("expression-in-range")) await captureExpressionInRange();
 if (want("tile-names")) await captureTileNames();
