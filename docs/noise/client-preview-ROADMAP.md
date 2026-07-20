@@ -171,11 +171,31 @@ Spec `docs/superpowers/specs/2026-07-19-milestone3-resources-design.md`, plan
 - [x] Validated against the pure-regular `calculate_tile_properties` oracle and a
       headless full-view render (all 6 ore types as blob patches, spawn cleared).
 
+- [x] **Ore excluded from water** (2026-07-20): resources collide with water, so
+      renderResources skips any pixel the terrain drew as deepwater/water. Reuses
+      renderTerrain's exact water decision (no re-derivation), so the ore edge lines
+      up with the drawn coastline.
+
 Remaining for M3: **M3b** (starting patches + `max(starting, regular)`) and
 **M3.5** (per-tile placement stipple - needs the un-RE'd entity-placement RNG).
 Solid-footprint (opaque where `prob >= 0.5`) ships in M3a.
 
-Done = ore patches overlaid, responding to the frequency/size/richness sliders.
+M3a follow-ups (known, deferred by priority - 2026-07-20):
+
+- [ ] **Ore excluded from cliffs** (low priority, blocked): resources also collide
+      with cliffs, but cliffs aren't rendered yet (see M4). Once they are, exclude
+      ore off cliff pixels exactly like water (same WATER_TILE_COLORS mechanism in
+      renderResources).
+- [ ] **Oil renders as tiny dots, not patches** (low priority, partly by-design):
+      crude-oil is genuinely sparse in-game (`random_probability = 1/48`,
+      `spot_size 1..1`), so it is individual wells, not a contiguous field - the
+      `>= 0.5` solid footprint just makes each spot ~1 tile. Two sub-items if we
+      ever want it to read as a patch: (a) our `regularPatches.probability()` does
+      NOT yet apply oil's `* (1/random_probability)` factor from the spec (so oil's
+      probability is currently the bare field, not the game's amplified-then-rolled
+      value); (b) a faithful oil look needs the M3.5 per-tile placement stipple.
+
+Done = ore patches overlaid on land, responding to the frequency/size/richness sliders.
 
 ## Milestone 4 - the long tail
 
