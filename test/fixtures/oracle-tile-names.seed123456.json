@@ -1,0 +1,148 @@
+{
+  "_comment": "Ground truth from Factorio 2.1.11 via the test/oracle harness. DEFAULT preset (no property_expression_names routing) - surface.get_tile(x, y).name at each position after real chunk generation. Regenerate: node --experimental-strip-types test/oracle/capture.ts tile-names",
+  "seed0": 123456,
+  "positions": [
+    {
+      "x": -90,
+      "y": -90
+    },
+    {
+      "x": -45,
+      "y": -90
+    },
+    {
+      "x": 0,
+      "y": -90
+    },
+    {
+      "x": 45,
+      "y": -90
+    },
+    {
+      "x": 90,
+      "y": -90
+    },
+    {
+      "x": -90,
+      "y": -45
+    },
+    {
+      "x": -45,
+      "y": -45
+    },
+    {
+      "x": 0,
+      "y": -45
+    },
+    {
+      "x": 45,
+      "y": -45
+    },
+    {
+      "x": 90,
+      "y": -45
+    },
+    {
+      "x": -90,
+      "y": 0
+    },
+    {
+      "x": -45,
+      "y": 0
+    },
+    {
+      "x": 0,
+      "y": 0
+    },
+    {
+      "x": 45,
+      "y": 0
+    },
+    {
+      "x": 90,
+      "y": 0
+    },
+    {
+      "x": -90,
+      "y": 45
+    },
+    {
+      "x": -45,
+      "y": 45
+    },
+    {
+      "x": 0,
+      "y": 45
+    },
+    {
+      "x": 45,
+      "y": 45
+    },
+    {
+      "x": 90,
+      "y": 45
+    },
+    {
+      "x": -90,
+      "y": 90
+    },
+    {
+      "x": -45,
+      "y": 90
+    },
+    {
+      "x": 0,
+      "y": 90
+    },
+    {
+      "x": 45,
+      "y": 90
+    },
+    {
+      "x": 90,
+      "y": 90
+    },
+    {
+      "x": 220,
+      "y": 180
+    },
+    {
+      "x": -200,
+      "y": 150
+    },
+    {
+      "x": 150,
+      "y": -220
+    }
+  ],
+  "tileNames": [
+    "grass-2",
+    "grass-2",
+    "red-desert-0",
+    "red-desert-0",
+    "grass-2",
+    "grass-2",
+    "red-desert-0",
+    "grass-2",
+    "water",
+    "grass-2",
+    "grass-2",
+    "grass-2",
+    "red-desert-0",
+    "red-desert-0",
+    "grass-2",
+    "red-desert-0",
+    "red-desert-0",
+    "red-desert-0",
+    "red-desert-0",
+    "grass-2",
+    "red-desert-0",
+    "red-desert-0",
+    "red-desert-0",
+    "red-desert-0",
+    "red-desert-0",
+    "grass-3",
+    "dirt-4",
+    "grass-1"
+  ]
+}

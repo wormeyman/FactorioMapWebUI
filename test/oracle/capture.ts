@@ -17,7 +17,7 @@ import { dirname, join } from "node:path";
 // The .ts extension is required because this file is executed directly by Node
 // (`--experimental-strip-types`), which does no extension resolution; the specs,
 // run through Vite, import extensionless. allowImportingTsExtensions permits both.
-import { oracleAvailable, type Position, sampleExpression } from "./oracle.ts";
+import { oracleAvailable, type Position, sampleExpression, sampleTileNames } from "./oracle.ts";
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), "..", "fixtures");
 
@@ -564,6 +564,51 @@ async function captureExpressionInRange(): Promise<void> {
   console.log(`wrote ${out}`);
 }
 
+/**
+ * A grid spanning several hundred tiles around the origin, meant to cross
+ * multiple biomes (water/shoreline/grass/dirt vary with moisture+aux over that
+ * range under the default settings) while keeping the chunk-generation radius
+ * (and thus capture time) modest.
+ */
+function tileGridPositions(): Position[] {
+  const out: Position[] = [];
+  for (let gy = -2; gy <= 2; gy++) {
+    for (let gx = -2; gx <= 2; gx++) {
+      out.push({ x: gx * 45, y: gy * 45 });
+    }
+  }
+  out.push({ x: 220, y: 180 }, { x: -200, y: 150 }, { x: 150, y: -220 });
+  return out;
+}
+
+/**
+ * The `get_tile` tile-name oracle: generates real chunks for the DEFAULT preset
+ * (no property routing) and dumps `surface.get_tile(x, y).name` at each grid
+ * position, so a later task can check tile-selection argmax exactly (rather
+ * than just the noise values `calculate_tile_properties` reports).
+ */
+async function captureTileNames(): Promise<void> {
+  const seed = 123456;
+  const positions = tileGridPositions();
+
+  const workDir = await mkdtemp(join(tmpdir(), "oracle-capture-"));
+  try {
+    const tileNames = await sampleTileNames(positions, { workDir, seed });
+    const fixture = {
+      _comment:
+        "Ground truth from Factorio 2.1.11 via the test/oracle harness. DEFAULT preset (no property_expression_names routing) - surface.get_tile(x, y).name at each position after real chunk generation. Regenerate: node --experimental-strip-types test/oracle/capture.ts tile-names",
+      seed0: seed,
+      positions,
+      tileNames,
+    };
+    const out = join(FIXTURES, "oracle-tile-names.seed123456.json");
+    await writeFile(out, JSON.stringify(fixture, null, 2) + "\n");
+    console.log(`wrote ${out} (${positions.length} points)`);
+  } finally {
+    await rm(workDir, { recursive: true, force: true });
+  }
+}
+
 if (!oracleAvailable()) {
   console.error("No Factorio binary found (set FACTORIO_BIN). Cannot capture fixtures.");
   process.exit(1);
@@ -583,3 +628,4 @@ if (want("elevation-lakes")) await captureElevationLakes();
 if (want("elevation-nauvis")) await captureElevationNauvis();
 if (want("elevation-island")) await captureElevationIsland();
 if (want("expression-in-range")) await captureExpressionInRange();
+if (want("tile-names")) await captureTileNames();

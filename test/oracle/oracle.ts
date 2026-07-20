@@ -14,6 +14,13 @@
  * Pure builders are exported and unit-tested without Factorio; {@link
  * sampleExpression} wires them to disk and an (injectable) spawn, so the real run
  * is gated on a local install via {@link oracleAvailable}. Not shipped in the app.
+ *
+ * A sibling path, {@link sampleTileNames}, answers a different question:
+ * `calculate_tile_properties` only ever returns noise VALUES, never the tile the
+ * game actually placed. That path generates real chunks (`request_to_generate_chunks`
+ * + `force_generate_chunk_requests`) for the DEFAULT preset (no property routing)
+ * and reads `surface.get_tile(x, y).name` back, so tile-selection logic can be
+ * checked against the exact argmax the game chose.
  */
 
 import { existsSync } from "node:fs";
@@ -175,6 +182,92 @@ export function parseDump(jsonText: string): { positions: Position[]; values: nu
 }
 
 // ---------------------------------------------------------------------------
+// Tile-name oracle: a sibling path that generates real chunks and reads back
+// `surface.get_tile(x, y).name` - the actual placed tile, which
+// calculate_tile_properties (above) cannot report. Uses the DEFAULT preset (no
+// property_expression_names routing), so this is the naturally-placed Nauvis
+// tile mix.
+// ---------------------------------------------------------------------------
+
+/** Name of the tile-name probe mod (distinct from the noise-expression probe). */
+export const TILE_PROBE_NAME = "oracle_tile_probe";
+/** File the tile-name mod writes into `<write-data>/script-output/`. */
+export const TILE_DUMP_FILE = "oracle-tile-dump.json";
+
+/** The tile-name mod's `info.json`. No noise-expression prototype is registered. */
+export function buildTileInfoJson(): object {
+  return {
+    name: TILE_PROBE_NAME,
+    version: MOD_VERSION,
+    title: "Tile Name Oracle Probe",
+    author: "FactorioMapWebUI",
+    factorio_version: "2.1",
+  };
+}
+
+/** `mod-list.json` enabling `base` plus the tile-name probe. */
+export function buildTileModList(): object {
+  return {
+    mods: [
+      { name: "base", enabled: true },
+      { name: TILE_PROBE_NAME, enabled: true },
+    ],
+  };
+}
+
+/** `--map-gen-settings` for the DEFAULT preset: just the seed, no property routing. */
+export function buildTileMapGenSettings(seed = 123456): object {
+  return { seed };
+}
+
+/**
+ * The tile-name mod's `control.lua`: on init, requests chunk generation around
+ * the origin out to `radius` chunks (auto-sized from the farthest sampled
+ * coordinate, +2 chunks of buffer, unless overridden), blocks until generation
+ * finishes, then reads `get_tile(x, y).name` at every position and writes
+ * `{ results: [{x, y, name}, ...] }` JSON, then `error(DUMPED-OK)` to exit.
+ * `get_tile` takes int32 coords and rounds non-integers down, so positions are
+ * floored before being embedded.
+ */
+export function buildTileControlLua(
+  positions: readonly Position[],
+  opts: { radius?: number; dumpFile?: string } = {},
+): string {
+  const dumpFile = opts.dumpFile ?? TILE_DUMP_FILE;
+  const maxAbs = positions.reduce((m, p) => Math.max(m, Math.abs(p.x), Math.abs(p.y)), 0);
+  const radius = opts.radius ?? Math.ceil(maxAbs / 32) + 2;
+  const posLua = positions
+    .map((p) => `    {x = ${Math.floor(p.x)}, y = ${Math.floor(p.y)}}`)
+    .join(",\n");
+  return `script.on_init(function()
+  local positions = {
+${posLua}
+  }
+  local surface = game.surfaces[1]
+  surface.request_to_generate_chunks({x = 0, y = 0}, ${radius})
+  surface.force_generate_chunk_requests()
+  local results = {}
+  for i, p in ipairs(positions) do
+    local tile = surface.get_tile(p.x, p.y)
+    results[i] = {x = p.x, y = p.y, name = tile.name}
+  end
+  helpers.write_file("${dumpFile}", helpers.table_to_json({ results = results }), false)
+  error("DUMPED-OK")
+end)
+`;
+}
+
+/** Parse the tile-name mod's dump into `{x, y, name}` entries. */
+export function parseTileDump(
+  jsonText: string,
+): { readonly x: number; readonly y: number; readonly name: string }[] {
+  const parsed = JSON.parse(jsonText) as {
+    results: { x: number; y: number; name: string }[];
+  };
+  return parsed.results;
+}
+
+// ---------------------------------------------------------------------------
 // Integration: run the real (or a fake) Factorio and read the values back.
 // ---------------------------------------------------------------------------
 
@@ -278,4 +371,52 @@ export async function sampleExpression(
     );
   }
   return parseDump(jsonText).values;
+}
+
+/**
+ * Sample the placed tile name (`surface.get_tile(x, y).name`) at `positions`
+ * through the real game, for the DEFAULT preset (no property routing) -
+ * `sampleExpression` can only report noise values, not the tile the game
+ * actually chose. ~1-2s per call depending on the chunk radius; throws if the
+ * binary is missing (gate calls with {@link oracleAvailable}) or if no dump
+ * was produced.
+ */
+export async function sampleTileNames(
+  positions: readonly Position[],
+  opts: OracleOptions,
+): Promise<string[]> {
+  const seed = opts.seed ?? 123456;
+  const factorioBin = opts.factorioBin ?? DEFAULT_FACTORIO_BIN;
+  const dataDir = opts.dataDir ?? defaultDataDir(factorioBin);
+  const spawnFn = opts.spawnFn ?? nodeSpawn;
+
+  const { workDir } = opts;
+  const modDir = join(workDir, "mods");
+  const modFilesDir = join(modDir, `${TILE_PROBE_NAME}_${MOD_VERSION}`);
+  const writeDataDir = join(workDir, "write");
+  const savePath = join(writeDataDir, "probe.zip");
+  const mapGenPath = join(workDir, "map-gen-settings.json");
+  const configPath = join(workDir, "config.ini");
+
+  await mkdir(modFilesDir, { recursive: true });
+  await mkdir(writeDataDir, { recursive: true });
+  await writeFile(join(modFilesDir, "info.json"), JSON.stringify(buildTileInfoJson(), null, 2));
+  await writeFile(join(modFilesDir, "control.lua"), buildTileControlLua(positions));
+  await writeFile(join(modDir, "mod-list.json"), JSON.stringify(buildTileModList(), null, 2));
+  await writeFile(mapGenPath, JSON.stringify(buildTileMapGenSettings(seed)));
+  await writeFile(configPath, buildConfigIni(writeDataDir, dataDir));
+
+  const args = buildFactorioArgs({ savePath, mapGenPath, seed, modDir, configPath });
+  const { stderr } = await spawnFn(factorioBin, args).done();
+
+  const dumpPath = join(writeDataDir, "script-output", TILE_DUMP_FILE);
+  let jsonText: string;
+  try {
+    jsonText = await readFile(dumpPath, "utf8");
+  } catch {
+    throw new Error(
+      `tile oracle produced no dump at ${dumpPath}. Factorio stderr tail:\n${stderr.slice(-2000)}`,
+    );
+  }
+  return parseTileDump(jsonText).map((r) => r.name);
 }
