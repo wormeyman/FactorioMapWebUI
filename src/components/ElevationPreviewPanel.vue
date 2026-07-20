@@ -36,7 +36,7 @@ const supported = computed(() => preview.value?.supported ?? false);
 // than rendering a Lakes/Island preset with the wrong climate.
 // Terrain and Resources both render through the Nauvis-only renderTerrain, so
 // both toggles gate on `terrainAvailable`.
-const view = ref<"elevation" | "terrain" | "resources">("elevation");
+const view = ref<"elevation" | "terrain" | "resources" | "enemies">("elevation");
 const terrainAvailable = computed(() => preview.value?.mapType === "nauvis");
 watch(terrainAvailable, (available) => {
   if (!available) view.value = "elevation";
@@ -74,6 +74,7 @@ async function generate() {
       startingAreaMoistureSize: info.ctx.startingAreaMoistureSize,
       startingAreaMoistureFrequency: info.ctx.startingAreaMoistureFrequency,
       resourceControls: info.resourceControls,
+      enemyControls: info.enemyControls,
     });
     const el = canvas.value;
     const g = el?.getContext("2d");
@@ -130,6 +131,17 @@ async function generate() {
           @click="view = 'resources'"
         >
           Resources
+        </FButton>
+        <FButton
+          data-test="view-enemies"
+          :variant="view === 'enemies' ? 'tool' : 'default'"
+          :disabled="!terrainAvailable"
+          :title="
+            terrainAvailable ? undefined : 'Enemies view is only available for the Nauvis map type'
+          "
+          @click="view = 'enemies'"
+        >
+          Enemies
         </FButton>
       </div>
       <span class="spacer" />

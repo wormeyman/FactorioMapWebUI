@@ -20,6 +20,13 @@ export interface ElevationPreviewCtx {
    */
   resourceControls: Record<string, ResourceControlLevers>;
   /**
+   * The enemy-base autoplace control's frequency/size (control:enemy-base:*) -
+   * consumed only by the `view: "enemies"` overlay (renderEnemies). Absent
+   * defaults to `{ frequency: 1, size: 1 }`. Faithful only on the Nauvis map
+   * type, same as the terrain/resources views.
+   */
+  enemyControls: { frequency: number; size: number };
+  /**
    * Non-seed free variables for renderElevation/renderTerrain
    * (Omit<..., "seed0">-compatible). The climate fields (aux/moisture
    * frequency+bias, starting-area moisture) are consumed only by
@@ -65,11 +72,13 @@ export function elevationCtxFromPreset(preset: Preset): ElevationPreviewCtx {
 
   const supported = mt.id === "nauvis" || mt.id === "lakes" || mt.id === "island";
   const mapType = mt.id === "nauvis" ? "nauvis" : mt.id === "island" ? "island" : "lakes";
+  const eb = preset.autoplaceControls["enemy-base"];
   return {
     supported,
     mapType,
     mapTypeLabel: mt.label,
     resourceControls: readResourceControls(preset),
+    enemyControls: eb ? { frequency: eb.frequency, size: eb.size } : { frequency: 1, size: 1 },
     ctx: {
       waterLevel: 10 * Math.log2(size),
       segmentationMultiplier: water?.frequency ?? 1,

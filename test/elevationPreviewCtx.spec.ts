@@ -90,6 +90,15 @@ describe("elevationCtxFromPreset", () => {
     expect(r.resourceControls.coal).toEqual({ frequency: 1, size: 1, richness: 1 });
   });
 
+  it("reads enemy-base frequency/size, defaulting to 1/1 when absent", () => {
+    const p = lakesPreset();
+    delete p.autoplaceControls["enemy-base"];
+    expect(elevationCtxFromPreset(p).enemyControls).toEqual({ frequency: 1, size: 1 });
+
+    p.autoplaceControls["enemy-base"] = { frequency: 2, size: 0.5, richness: 1 };
+    expect(elevationCtxFromPreset(p).enemyControls).toEqual({ frequency: 2, size: 0.5 });
+  });
+
   it("reads control:aux/moisture/starting_area_moisture:* off the preset's property_expression_names", () => {
     const p = lakesPreset();
     p.propertyExpressionNames["control:aux:frequency"] = "4.000000";

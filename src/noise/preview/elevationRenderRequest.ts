@@ -1,6 +1,7 @@
 import type { Point } from "../distanceFromNearestPoint";
 import type { ResourceControlLevers } from "../resources/resolveResource";
 import { renderElevation } from "./renderElevation";
+import { renderEnemies } from "./renderEnemies";
 import { renderResources } from "./renderResources";
 import { renderTerrain } from "./renderTerrain";
 
@@ -33,20 +34,27 @@ export interface ElevationRenderRequest {
   mapType?: "lakes" | "nauvis" | "island";
   /**
    * Which render to run: the water/land elevation mask ("elevation"), the full
-   * terrain-tile color render ("terrain"), or the terrain with the resource-patch
-   * overlay composited on top ("resources"). Default "elevation". renderTerrain
-   * (and therefore "resources") always uses the Nauvis climate + tile catalog (see
-   * renderTerrain.ts), so it is only faithful when `mapType` is "nauvis" - callers
-   * (the preview panel) disable those toggles for lakes/island presets rather than
-   * send an unfaithful request here.
+   * terrain-tile color render ("terrain"), the terrain with the resource-patch
+   * overlay composited on top ("resources"), or the terrain with the enemy-base
+   * footprint overlay composited on top ("enemies"). Default "elevation".
+   * renderTerrain (and therefore "resources"/"enemies") always uses the Nauvis
+   * climate + tile catalog (see renderTerrain.ts), so it is only faithful when
+   * `mapType` is "nauvis" - callers (the preview panel) disable those toggles for
+   * lakes/island presets rather than send an unfaithful request here.
    */
-  view?: "elevation" | "terrain" | "resources";
+  view?: "elevation" | "terrain" | "resources" | "enemies";
   /**
    * Per-resource control levers (control:<res>:frequency|size|richness), keyed by
    * controlName - consumed only when `view: "resources"`. Missing entries default
    * to 1/1/1 inside the resolver.
    */
   resourceControls?: Record<string, ResourceControlLevers>;
+  /**
+   * The enemy-base autoplace control's frequency/size (control:enemy-base:*) -
+   * consumed only when `view: "enemies"`. Defaults to `{ frequency: 1, size: 1 }`
+   * when omitted.
+   */
+  enemyControls?: { frequency: number; size: number };
 }
 
 /** The rendered pixels, with `buffer` posted back as a transferable. */
@@ -64,7 +72,7 @@ export interface ElevationRenderResult {
  */
 export function runRenderRequest(req: ElevationRenderRequest): ElevationRenderResult {
   let image: ImageData;
-  if (req.view === "terrain" || req.view === "resources") {
+  if (req.view === "terrain" || req.view === "resources" || req.view === "enemies") {
     image = renderTerrain({
       seed0: req.seed0,
       width: req.width,
@@ -94,6 +102,16 @@ export function runRenderRequest(req: ElevationRenderRequest): ElevationRenderRe
         segmentationMultiplier: req.segmentationMultiplier,
         waterLevel: req.waterLevel,
         startingLakePositions: req.startingLakePositions,
+      });
+    }
+    if (req.view === "enemies") {
+      renderEnemies(image, {
+        seed0: req.seed0,
+        originX: req.originX,
+        originY: req.originY,
+        tilesPerPixel: req.tilesPerPixel,
+        controls: req.enemyControls ?? { frequency: 1, size: 1 },
+        startingPositions: req.startingPositions,
       });
     }
   } else {

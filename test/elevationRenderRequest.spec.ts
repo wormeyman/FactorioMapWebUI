@@ -6,6 +6,7 @@ import {
 import { renderElevation, LAND_RGBA, WATER_RGBA } from "../src/noise/preview/renderElevation";
 import { renderTerrain } from "../src/noise/preview/renderTerrain";
 import { RESOURCE_CATALOG } from "../src/noise/resources/resourceCatalog";
+import { ENEMY_MAP_COLOR } from "../src/noise/enemies/enemyCatalog";
 
 const REQ: ElevationRenderRequest = {
   id: 7,
@@ -270,6 +271,31 @@ describe("runRenderRequest", () => {
     );
     expect(countIron(withIron)).toBeGreaterThan(0);
     expect(countIron(noIron)).toBe(0);
+  });
+
+  it("view 'enemies' overlays the enemy-base footprint on the terrain", () => {
+    // World point (1000, 1040), seed 123456: renderEnemies.spec.ts's own fixture
+    // ("paints a pixel inside a base spot") proves ebp clears the footprint
+    // threshold there; the terrain color at that point is [141, 104, 60, 255]
+    // (land, not water), so the overlay is free to paint.
+    const req: ElevationRenderRequest = {
+      id: 14,
+      seed0: 123456,
+      width: 1,
+      height: 1,
+      originX: 1000,
+      originY: 1040,
+      tilesPerPixel: 1,
+      waterLevel: 0,
+      segmentationMultiplier: 1,
+      startingPositions: [{ x: 0, y: 0 }],
+      view: "enemies",
+      enemyControls: { frequency: 1, size: 1 },
+    };
+    const terrain = new Uint8ClampedArray(runRenderRequest({ ...req, view: "terrain" }).buffer);
+    const withEnemies = new Uint8ClampedArray(runRenderRequest(req).buffer);
+    expect(Array.from(withEnemies)).not.toEqual(Array.from(terrain));
+    expect(Array.from(withEnemies)).toEqual([...ENEMY_MAP_COLOR, 255]);
   });
 
   it("view 'elevation' (explicit or default/omitted) keeps the water/land mask", () => {

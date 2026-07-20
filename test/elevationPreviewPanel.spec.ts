@@ -136,6 +136,32 @@ describe("ElevationPreviewPanel", () => {
     expect(putImageData).toHaveBeenCalledOnce();
   });
 
+  it("passes view:'enemies' + enemyControls after selecting the Enemies toggle (Nauvis)", async () => {
+    const putImageData = stubCanvas();
+    const renderer = okRenderer();
+    const w = setup("nauvis", renderer);
+    expect(w.find('[data-test="view-enemies"]').attributes("disabled")).toBeUndefined();
+
+    await w.find('[data-test="view-enemies"]').trigger("click");
+    await w.find('[data-test="generate"]').trigger("click");
+    await flushPromises();
+
+    expect(renderer.render).toHaveBeenCalledOnce();
+    const arg = (renderer.render as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg).toMatchObject({ view: "enemies", mapType: "nauvis" });
+    expect(arg.enemyControls).toEqual({ frequency: 1, size: 1 });
+    expect(putImageData).toHaveBeenCalledOnce();
+  });
+
+  it("disables the Enemies toggle off-Nauvis (Lakes/Island)", async () => {
+    expect(
+      setup("lakes", okRenderer()).find('[data-test="view-enemies"]').attributes("disabled"),
+    ).toBeDefined();
+    expect(
+      setup("island", okRenderer()).find('[data-test="view-enemies"]').attributes("disabled"),
+    ).toBeDefined();
+  });
+
   it("disables the Resources toggle off-Nauvis (Lakes/Island)", async () => {
     expect(
       setup("lakes", okRenderer()).find('[data-test="view-resources"]').attributes("disabled"),
