@@ -8,7 +8,13 @@ import {
   regularDensityAt,
   regularSpotHeightTypicalAt,
   regularSpotQuantityBaseAt,
+  startingAmount,
+  startingAreaSpotQuantity,
   startingBlobAmplitude,
+  startingDensityAt,
+  startingFavorabilityBaseAt,
+  startingModulation,
+  startingSpotRadius,
 } from "../src/noise/resources/resourceMath";
 
 const iron = RESOURCE_CATALOG[0];
@@ -71,4 +77,31 @@ describe("resourceMath", () => {
     const qb2 = regularSpotQuantityBaseAt(500, iron, { frequency: 3, size: 1 });
     expect(qb2).toBeCloseTo(qb1, 3);
   });
+});
+
+describe("starting-patch local functions (iron, default controls)", () => {
+  // starting_amount = 20000 * 10 * (1 + 1) * 1 = 400000
+  it("startingAmount", () => expect(startingAmount(iron, one)).toBeCloseTo(400000, 6));
+  // starting_area_spot_quantity = 400000 / 0.5 / 1 = 800000
+  it("startingAreaSpotQuantity", () =>
+    expect(startingAreaSpotQuantity(iron, one)).toBeCloseTo(800000, 6));
+  // starting_modulation = 1 inside 120, 0 outside
+  it("startingModulation", () => {
+    expect(startingModulation(50)).toBe(1);
+    expect(startingModulation(120)).toBe(0); // 120 > 120 is false
+    expect(startingModulation(200)).toBe(0);
+  });
+  // density at d=50 = 400000 / (pi * 120^2) * 1 = 400000 / 45238.934 = 8.8419...
+  it("startingDensityAt inside", () =>
+    expect(startingDensityAt(50, iron, one)).toBeCloseTo(400000 / (Math.PI * 120 * 120), 6));
+  it("startingDensityAt outside is 0", () => expect(startingDensityAt(200, iron, one)).toBe(0));
+  // radius = (1.5/7) * cbrt(800000) ~= 0.214286 * 92.832 ~= 19.89 (fastCbrt ~ exact to ~1e-4)
+  it("startingSpotRadius", () =>
+    expect(startingSpotRadius(iron, one)).toBeCloseTo((1.5 / 7) * Math.cbrt(800000), 2));
+  // favorability base at d=60, elev=11: clamp((11-1)/10,0,1)*1*2 - 60/120 = 1*2 - 0.5 = 1.5
+  it("startingFavorabilityBaseAt land near spawn", () =>
+    expect(startingFavorabilityBaseAt(60, 11, iron, one)).toBeCloseTo(1.5, 6));
+  // at d=200 (outside): clamp * 0 * 2 - 200/120 = -1.6667
+  it("startingFavorabilityBaseAt outside", () =>
+    expect(startingFavorabilityBaseAt(200, 11, iron, one)).toBeCloseTo(-200 / 120, 6));
 });

@@ -106,14 +106,65 @@ export function regularBlobAmplitudeAt(
   return REGULAR_BLOB_AMPLITUDE_MULTIPLIER * Math.min(atMax, atD);
 }
 
+/** starting_amount: total resource "stuff" allotted to the starting area, before the split. */
+export function startingAmount(params: ResourceParams, controls: ResourceControls): number {
+  return 20000 * params.baseDensity * (controls.frequency + 1) * controls.size;
+}
+
+/** starting_area_spot_quantity: starting_amount spread across the starting-area spots. */
+export function startingAreaSpotQuantity(
+  params: ResourceParams,
+  controls: ResourceControls,
+): number {
+  return startingAmount(params, controls) / STARTING_PATCHES_SPLIT / controls.frequency;
+}
+
+/** starting_modulation(distance): 1 inside the starting-area placement radius, 0 outside (inclusive of the boundary). */
+export function startingModulation(distance: number): number {
+  return distance < STARTING_RESOURCE_PLACEMENT_RADIUS ? 1 : 0;
+}
+
+/** starting_density_at(distance): starting_amount spread over the starting-area disc, gated by starting_modulation. */
+export function startingDensityAt(
+  distance: number,
+  params: ResourceParams,
+  controls: ResourceControls,
+): number {
+  return (
+    (startingAmount(params, controls) /
+      (Math.PI * STARTING_RESOURCE_PLACEMENT_RADIUS * STARTING_RESOURCE_PLACEMENT_RADIUS)) *
+    startingModulation(distance)
+  );
+}
+
+/** starting_spot_radius: the typical starting-area spot radius (fastapprox cube root, matching regularSpotHeightTypicalAt). */
+export function startingSpotRadius(params: ResourceParams, controls: ResourceControls): number {
+  return params.startingRqFactor * fastCbrt(startingAreaSpotQuantity(params, controls));
+}
+
+/**
+ * starting_favorability_base_at(distance, elevation_lakes): the non-random part of the
+ * starting-area spot favorability. The `random_penalty_at(0.5, 1)` batch term (Task 3)
+ * is added to this by the caller.
+ */
+// _params/_controls: unused today (this is purely the distance/elevation term), but kept
+// in the signature for a stable (distance, elevationLakes, params, controls) shape across
+// the starting-patch local functions - random_penalty_at (Task 3) will need them here too.
+export function startingFavorabilityBaseAt(
+  distance: number,
+  elevationLakes: number,
+  _params: ResourceParams,
+  _controls: ResourceControls,
+): number {
+  return clamp((elevationLakes - 1) / 10, 0, 1) * startingModulation(distance) * 2 - distance / 120;
+}
+
 /** starting_blob_amplitude - a scalar; referenced by basement_value even for regular-only. */
 export function startingBlobAmplitude(params: ResourceParams, controls: ResourceControls): number {
-  const startingAmount = 20000 * params.baseDensity * (controls.frequency + 1) * controls.size;
-  const startingAreaSpotQuantity = startingAmount / STARTING_PATCHES_SPLIT / controls.frequency;
   return (
     (STARTING_BLOB_AMPLITUDE_MULTIPLIER /
       ((Math.PI / 3) * params.startingRqFactor * params.startingRqFactor)) *
-    fastCbrt(startingAreaSpotQuantity)
+    fastCbrt(startingAreaSpotQuantity(params, controls))
   );
 }
 
