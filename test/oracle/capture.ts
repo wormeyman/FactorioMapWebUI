@@ -570,6 +570,52 @@ async function captureAux(): Promise<void> {
 }
 
 /**
+ * The `moisture` (= `moisture_nauvis`) climate expression - the most complex
+ * climate tree (a base quick_multioctave_noise term, a starting-area bias
+ * blend keyed on `distance_from_nearest_point{points = starting_positions}`,
+ * and a forest-path/hills/bridge-billows cutout, all from the shared Nauvis
+ * sub-tree). Routed onto elevation, same standard grid as `captureAux`
+ * (near-origin band, far rings at r=2200/3300, one deep-field point) for
+ * comparability across captures. At the default preset every starting-area
+ * lever is at its degenerate value (`slider_to_linear(1, ...) = 0`), so this
+ * captures the whole closure at defaults - the starting-area levers
+ * themselves are not exercised by this fixture (no UI surfaces them yet).
+ */
+async function captureMoisture(): Promise<void> {
+  const seed = 123456;
+  const positions: Position[] = [];
+  for (let gy = 0; gy < 3; gy++) {
+    for (let gx = 0; gx < 3; gx++) {
+      positions.push({ x: gx * 11 - 11 + 0.5, y: gy * 13 - 13 + 0.25 });
+    }
+  }
+  for (const r of [2200, 3300]) {
+    for (let k = 0; k < 8; k++) {
+      const a = (k * Math.PI) / 4;
+      positions.push({ x: r * Math.cos(a) + 0.5, y: r * Math.sin(a) + 0.25 });
+    }
+  }
+  positions.push({ x: 12345.75, y: 6789.125 });
+
+  const workDir = await mkdtemp(join(tmpdir(), "oracle-capture-"));
+  try {
+    const moisture = await sampleExpression("moisture", positions, { workDir, seed });
+    const fixture = {
+      _comment:
+        "Ground truth from Factorio 2.1.11 via the test/oracle harness. moisture (= moisture_nauvis) routed onto elevation. Regenerate: node --experimental-strip-types test/oracle/capture.ts moisture",
+      seed0: seed,
+      positions,
+      moisture,
+    };
+    const out = join(FIXTURES, "oracle-moisture.seed123456.json");
+    await writeFile(out, JSON.stringify(fixture, null, 2) + "\n");
+    console.log(`wrote ${out} (${positions.length} points)`);
+  } finally {
+    await rm(workDir, { recursive: true, force: true });
+  }
+}
+
+/**
  * The native `expression_in_range(peak_multiplier, peak_maximum, expr_1..N,
  * from_1..N, to_1..N)` builtin - the one genuine unknown of Milestone 2. Sample
  * three sweeps that recover the 1-D peak/falloff shape (both the bounded (20,1)
@@ -751,5 +797,6 @@ if (want("elevation-nauvis")) await captureElevationNauvis();
 if (want("elevation-island")) await captureElevationIsland();
 if (want("temperature")) await captureTemperature();
 if (want("aux")) await captureAux();
+if (want("moisture")) await captureMoisture();
 if (want("expression-in-range")) await captureExpressionInRange();
 if (want("tile-names")) await captureTileNames();
