@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vite-plus/test";
 import { crossesCliff, makeCliffPlacement } from "../src/noise/cliffs/cliffPlacement";
+import entFixture from "./fixtures/oracle-cliff-entities.seed123456.json";
+
+const key = (p: { x: number; y: number }) => `${p.x},${p.y}`;
 
 describe("crossesCliff", () => {
   const I = 40,
@@ -38,4 +41,39 @@ describe("makeCliffPlacement lattice", () => {
     });
     expect(pl.placedCells(0, 0, 512, 512).length).toBe(0);
   });
+});
+
+// End-to-end validation of the whole placement rule (both cliff fields +
+// crossesCliff + the orientation-code table) against the game's REAL cliff
+// entities, dumped over a 16x16-chunk region at the default preset via
+// find_entities_filtered{type="cliff"} (oracle-cliff-entities.seed123456.json).
+// The spike measured ~89-90% agreement; the residual is the DEFERRED
+// fixImpossibleCells + water rejection (docs/noise/cliffs-NOTES.md). The >=0.85
+// bound is a drift guard, NOT a threshold to tune down - a large drop means the
+// field port or the crossing rule regressed.
+describe("cliff placement vs find_entities (~90% drift guard)", () => {
+  for (const c of entFixture.cases) {
+    it(`reproduces >=85% of real cliffs seed=${c.seed}`, () => {
+      const r = entFixture.region;
+      const pl = makeCliffPlacement({
+        seed0: c.seed,
+        controls: { frequency: 1, continuity: 1 },
+        settings: { cliffElevation0: 10, cliffElevationInterval: 40, richness: 1 },
+      });
+      const placed = pl.placedCells(r.x0, r.y0, r.x1, r.y1);
+
+      // Sanity on the oracle dump itself: every real cliff sits on the 4-tile
+      // cliff lattice (x mod 4 == 2, y mod 4 == 2.5).
+      for (const p of c.cliffs) {
+        expect(((p.x % 4) + 4) % 4).toBe(2);
+        expect(((p.y % 4) + 4) % 4).toBeCloseTo(2.5, 9);
+      }
+
+      const predicted = new Set(placed.map(key));
+      const actual = c.cliffs.map(key);
+      const matched = actual.filter((k) => predicted.has(k)).length;
+      const frac = matched / actual.length;
+      expect(frac).toBeGreaterThanOrEqual(0.85);
+    });
+  }
 });

@@ -20,6 +20,8 @@ import { dirname, join } from "node:path";
 import {
   oracleAvailable,
   type Position,
+  type Region,
+  sampleCliffEntities,
   sampleExpression,
   sampleTileNames,
   type TileSample,
@@ -1299,6 +1301,42 @@ async function captureCliffOffsetRaw(): Promise<void> {
   console.log(`wrote ${out} (${positions.length} points, ${cases.length} seeds)`);
 }
 
+/**
+ * The end-to-end cliff PLACEMENT ground truth: every real cliff entity the game
+ * placed in a region, at the DEFAULT preset, via a chunk-forced
+ * `find_entities_filtered{type="cliff"}` dump (see `sampleCliffEntities`). The
+ * CI-safe spec runs `makeCliffPlacement(...).placedCells` over the same region
+ * and asserts the placed set reproduces >= 85% of these real cliffs (the ~90%
+ * from the spike; the residual is the DEFERRED `fixImpossibleCells` + water
+ * rejection - see docs/noise/cliffs-NOTES.md). Region `[512,1024)^2` = 16x16
+ * chunks: enough cliffs (tens to low hundreds) with bounded generation time. Two
+ * seeds. Every dumped position must land on the cliff lattice (x≡2, y≡2.5 mod 4).
+ */
+async function captureCliffEntities(): Promise<void> {
+  const region: Region = { x0: 512, y0: 512, x1: 1024, y1: 1024 };
+  const seeds = [123456, 777771];
+  const cases: { seed: number; cliffs: Position[] }[] = [];
+  for (const seed of seeds) {
+    const workDir = await mkdtemp(join(tmpdir(), "oracle-capture-"));
+    try {
+      const cliffs = await sampleCliffEntities(region, { workDir, seed });
+      cases.push({ seed, cliffs });
+      console.log(`  captured cliff-entities seed=${seed} (${cliffs.length} cliffs)`);
+    } finally {
+      await rm(workDir, { recursive: true, force: true });
+    }
+  }
+  const fixture = {
+    _comment:
+      "Ground truth from Factorio 2.1.11 via test/oracle. Every cliff entity (find_entities_filtered{type='cliff'}) the game placed in the region at the DEFAULT preset, after chunk-forced generation. Positions are cliff cell centers (x mod 4 == 2, y mod 4 == 2.5). The CI spec runs makeCliffPlacement().placedCells over region and asserts >= 85% of these are reproduced (residual = deferred fixImpossibleCells + water rejection). Regenerate: node --experimental-strip-types test/oracle/capture.ts cliff-entities",
+    region,
+    cases,
+  };
+  const out = join(FIXTURES, "oracle-cliff-entities.seed123456.json");
+  await writeFile(out, JSON.stringify(fixture, null, 2) + "\n");
+  console.log(`wrote ${out} (${cases.length} seeds)`);
+}
+
 if (!oracleAvailable()) {
   console.error("No Factorio binary found (set FACTORIO_BIN). Cannot capture fixtures.");
   process.exit(1);
@@ -1330,3 +1368,4 @@ if (want("enemy-base")) await captureEnemyBase();
 if (want("cliff-elevation")) await captureCliffElevation();
 if (want("cliffiness")) await captureCliffiness();
 if (want("cliff-offset-raw")) await captureCliffOffsetRaw();
+if (want("cliff-entities")) await captureCliffEntities();

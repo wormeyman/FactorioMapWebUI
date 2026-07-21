@@ -275,6 +275,92 @@ export function parseTileDump(
 }
 
 // ---------------------------------------------------------------------------
+// Cliff-entity oracle: a sibling path that generates real chunks over a region
+// and reads back every ACTUAL placed cliff entity via
+// `surface.find_entities_filtered{ type = "cliff", area = ... }` - the ground
+// truth for the end-to-end placement rule (fields + crossesCliff + orientation
+// table), which neither `calculate_tile_properties` (values only) nor
+// `get_tile` (tiles only) can report. Uses the DEFAULT preset (no
+// property_expression_names routing), so real cliff placement runs.
+// ---------------------------------------------------------------------------
+
+/** Name of the cliff-entity probe mod (distinct from the noise / tile-name probes). */
+export const CLIFF_PROBE_NAME = "oracle_cliff_probe";
+/** File the cliff-entity mod writes into `<write-data>/script-output/`. */
+export const CLIFF_DUMP_FILE = "oracle-cliff-dump.json";
+
+/** A world-tile axis-aligned region `[x0, x1) x [y0, y1)`. */
+export interface Region {
+  readonly x0: number;
+  readonly y0: number;
+  readonly x1: number;
+  readonly y1: number;
+}
+
+/** The cliff-entity mod's `info.json`. No noise-expression prototype is registered. */
+export function buildCliffInfoJson(): object {
+  return {
+    name: CLIFF_PROBE_NAME,
+    version: MOD_VERSION,
+    title: "Cliff Entity Oracle Probe",
+    author: "FactorioMapWebUI",
+    factorio_version: "2.1",
+  };
+}
+
+/** `mod-list.json` enabling `base` plus the cliff-entity probe. */
+export function buildCliffModList(): object {
+  return {
+    mods: [
+      { name: "base", enabled: true },
+      { name: CLIFF_PROBE_NAME, enabled: true },
+    ],
+  };
+}
+
+/**
+ * The cliff-entity mod's `control.lua`: on init, force-generate every 32-tile
+ * chunk overlapping `region` (`request_to_generate_chunks` per chunk with
+ * radius 0, then a single blocking `force_generate_chunk_requests()`), then read
+ * every placed cliff back with `find_entities_filtered{ type = "cliff", area =
+ * {{x0,y0},{x1,y1}} }` and write `{ cliffs: [{x, y}, ...] }` JSON (the entity's
+ * `position`, which for a cliff is the cell CENTER on the game's 4-tile grid),
+ * then `error(DUMPED-OK)` to exit. Chunk generation over the whole region (not a
+ * per-point neighborhood like the tile path) is what makes real cliffs appear.
+ */
+export function buildCliffControlLua(region: Region, opts: { dumpFile?: string } = {}): string {
+  const dumpFile = opts.dumpFile ?? CLIFF_DUMP_FILE;
+  return `script.on_init(function()
+  local surface = game.surfaces[1]
+  local x0, y0, x1, y1 = ${region.x0}, ${region.y0}, ${region.x1}, ${region.y1}
+  local cx0 = math.floor(x0 / 32)
+  local cy0 = math.floor(y0 / 32)
+  local cx1 = math.ceil(x1 / 32) - 1
+  local cy1 = math.ceil(y1 / 32) - 1
+  for cy = cy0, cy1 do
+    for cx = cx0, cx1 do
+      surface.request_to_generate_chunks({x = cx * 32 + 16, y = cy * 32 + 16}, 0)
+    end
+  end
+  surface.force_generate_chunk_requests()
+  local ents = surface.find_entities_filtered{ type = "cliff", area = {{x0, y0}, {x1, y1}} }
+  local cliffs = {}
+  for i, e in ipairs(ents) do
+    cliffs[i] = {x = e.position.x, y = e.position.y}
+  end
+  helpers.write_file("${dumpFile}", helpers.table_to_json({ cliffs = cliffs }), false)
+  error("DUMPED-OK")
+end)
+`;
+}
+
+/** Parse the cliff-entity mod's dump into `{x, y}` cliff positions. */
+export function parseCliffDump(jsonText: string): Position[] {
+  const parsed = JSON.parse(jsonText) as { cliffs: Position[] };
+  return parsed.cliffs;
+}
+
+// ---------------------------------------------------------------------------
 // Integration: run the real (or a fake) Factorio and read the values back.
 // ---------------------------------------------------------------------------
 
@@ -443,4 +529,55 @@ export async function sampleTileNames(
     );
   }
   return parseTileDump(jsonText);
+}
+
+/**
+ * Sample every ACTUAL cliff entity the game placed in `region`, through the real
+ * game, for the DEFAULT preset (no property routing) - the end-to-end ground
+ * truth for the cliff placement rule (`makeCliffPlacement`), which neither
+ * `sampleExpression` (values) nor `sampleTileNames` (tiles) can report. Forces
+ * generation of every 32-tile chunk overlapping the region, then returns each
+ * cliff's `position` (the cell center on the 4-tile grid). Slower than a
+ * point-sample (chunk generation over the whole region: seconds to tens of
+ * seconds for a 16x16-chunk region); throws if the binary is missing (gate with
+ * {@link oracleAvailable}) or if no dump was produced.
+ */
+export async function sampleCliffEntities(
+  region: Region,
+  opts: OracleOptions,
+): Promise<Position[]> {
+  const seed = opts.seed ?? 123456;
+  const factorioBin = opts.factorioBin ?? DEFAULT_FACTORIO_BIN;
+  const dataDir = opts.dataDir ?? defaultDataDir(factorioBin);
+  const spawnFn = opts.spawnFn ?? nodeSpawn;
+
+  const { workDir } = opts;
+  const modDir = join(workDir, "mods");
+  const modFilesDir = join(modDir, `${CLIFF_PROBE_NAME}_${MOD_VERSION}`);
+  const writeDataDir = join(workDir, "write");
+  const savePath = join(writeDataDir, "probe.zip");
+  const mapGenPath = join(workDir, "map-gen-settings.json");
+  const configPath = join(workDir, "config.ini");
+
+  await mkdir(modFilesDir, { recursive: true });
+  await mkdir(writeDataDir, { recursive: true });
+  await writeFile(join(modFilesDir, "info.json"), JSON.stringify(buildCliffInfoJson(), null, 2));
+  await writeFile(join(modFilesDir, "control.lua"), buildCliffControlLua(region));
+  await writeFile(join(modDir, "mod-list.json"), JSON.stringify(buildCliffModList(), null, 2));
+  await writeFile(mapGenPath, JSON.stringify(buildTileMapGenSettings(seed)));
+  await writeFile(configPath, buildConfigIni(writeDataDir, dataDir));
+
+  const args = buildFactorioArgs({ savePath, mapGenPath, seed, modDir, configPath });
+  const { stderr } = await spawnFn(factorioBin, args).done();
+
+  const dumpPath = join(writeDataDir, "script-output", CLIFF_DUMP_FILE);
+  let jsonText: string;
+  try {
+    jsonText = await readFile(dumpPath, "utf8");
+  } catch {
+    throw new Error(
+      `cliff oracle produced no dump at ${dumpPath}. Factorio stderr tail:\n${stderr.slice(-2000)}`,
+    );
+  }
+  return parseCliffDump(jsonText);
 }
