@@ -1105,6 +1105,46 @@ async function captureEnemyBase(): Promise<void> {
   console.log(`wrote ${out} (${positions.length} points, ${cases.length} seeds)`);
 }
 
+/**
+ * cliff_elevation_nauvis ground truth. Grid over [0,512) at stride 16, at the
+ * cliff CORNER lattice offset (x on 4s, y on 4s+0.5) so the same fixture doubles
+ * as corner-value ground truth for placement (Task 6). Two seeds.
+ */
+async function captureCliffElevation(): Promise<void> {
+  const positions: Position[] = [];
+  // Grid over [0,512) stride 16, at the cliff CORNER lattice offset (x on 4s, y on 4s+0.5)
+  // so the same fixture doubles as corner-value ground truth for placement.
+  for (let iy = 0; iy < 32; iy++)
+    for (let ix = 0; ix < 32; ix++) positions.push({ x: ix * 16, y: iy * 16 + 0.5 });
+  const seeds = [123456, 777771];
+  const cases: { seed: number; values: number[] }[] = [];
+  for (const seed of seeds) {
+    const workDir = await mkdtemp(join(tmpdir(), "oracle-capture-"));
+    try {
+      const values = await sampleExpression("cliff_elevation_nauvis", positions, { workDir, seed });
+      cases.push({ seed, values });
+      console.log(`  captured cliff-elevation seed=${seed}`);
+    } finally {
+      await rm(workDir, { recursive: true, force: true });
+    }
+  }
+  const out = join(FIXTURES, "oracle-cliff-elevation.seed123456.json");
+  await writeFile(
+    out,
+    JSON.stringify(
+      {
+        _comment:
+          "Ground truth from Factorio 2.1.11 via test/oracle. cliff_elevation_nauvis routed onto elevation, default settings. Regenerate: node --experimental-strip-types test/oracle/capture.ts cliff-elevation",
+        positions,
+        cases,
+      },
+      null,
+      2,
+    ) + "\n",
+  );
+  console.log(`wrote ${out} (${positions.length} points, ${cases.length} seeds)`);
+}
+
 if (!oracleAvailable()) {
   console.error("No Factorio binary found (set FACTORIO_BIN). Cannot capture fixtures.");
   process.exit(1);
@@ -1132,3 +1172,4 @@ if (want("resource-regular")) await captureResourceRegular();
 if (want("resource-starting")) await captureResourceStarting();
 if (want("tile-names")) await captureTileNames();
 if (want("enemy-base")) await captureEnemyBase();
+if (want("cliff-elevation")) await captureCliffElevation();
