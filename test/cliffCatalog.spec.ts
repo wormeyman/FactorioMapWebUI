@@ -3,6 +3,7 @@ import {
   CLIFF_MAP_COLOR,
   getModifiedElevationInterval,
   getModifiedRichness,
+  isCliffPlaced,
   sliderToLinear,
 } from "../src/noise/cliffs/cliffCatalog";
 
@@ -22,4 +23,26 @@ describe("cliff catalog math", () => {
     expect(getModifiedRichness(1, 0)).toBe(0); // continuity 0 -> cliff_richness 0 (cliffs disabled)
   });
   it("map color drift guard", () => expect([...CLIFF_MAP_COLOR]).toEqual([144, 119, 87]));
+});
+
+describe("cliff orientation predicate", () => {
+  it("empty cell places nothing", () => expect(isCliffPlaced(0)).toBe(false));
+  it("table covers all 256 codes", () => {
+    for (let c = 0; c < 256; c++) expect(typeof isCliffPlaced(c)).toBe("boolean");
+    // out-of-range guards to false rather than throwing
+    expect(isCliffPlaced(256)).toBe(false);
+    expect(isCliffPlaced(-1)).toBe(false);
+  });
+  // A clean straight wall: Top and Bottom both cross the SAME sign (a wall spanning
+  // the cell top-to-bottom). code 5 = (enc(+1)<<2)|enc(+1) = (1<<2)|1 -> confirmed
+  // placing in the disassembled toMaybeCliffOrientation table (0x1016067a0).
+  it("a straight-wall code places", () => expect(isCliffPlaced(5)).toBe(true));
+  // Exactly 20 of the 256 codes map to a real orientation (ground truth from the binary).
+  it("has the extracted 20 placing codes", () => {
+    const placing = [];
+    for (let c = 0; c < 256; c++) if (isCliffPlaced(c)) placing.push(c);
+    expect(placing).toEqual([
+      1, 3, 4, 5, 12, 15, 16, 17, 28, 48, 51, 52, 64, 67, 68, 80, 192, 193, 204, 240,
+    ]);
+  });
 });
