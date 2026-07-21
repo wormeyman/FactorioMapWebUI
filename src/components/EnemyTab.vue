@@ -269,6 +269,16 @@ const INFO = {
   --col-box: 72px;
 }
 
+/* Phone: see AdvancedTab - the fixed slider and box columns leave the label track
+   nothing at 390px and the row overruns the viewport. Same breakpoint as the
+   control tables in factorio.css. */
+@media (max-width: 600px) {
+  .enemy-tab {
+    --col-slider: 96px;
+    --col-box: 60px;
+  }
+}
+
 /* Mode checkboxes + Starting area size ride inside the enemy-bases table (via
    ControlTable's footer-rows slot) so they share its column widths. Match the
    table cells' 6px 8px padding. */

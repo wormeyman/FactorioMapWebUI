@@ -107,6 +107,11 @@ function rerollSeed() {
 <style scoped>
 .preset-bar {
   display: flex;
+  /* Wrap at every width, not behind a media query: without it the bar clips its
+     trailing controls (Create, Seed, New seed) on any viewport too narrow to fit
+     one line, and it is inert on desktop where they already fit. Same fix as the
+     preview toolbar in 4718547. */
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   padding: 8px;

@@ -24,6 +24,12 @@ function onChange(event: Event) {
 <style scoped>
 .f-number {
   width: 72px;
+  /* Let the box shrink when its container is narrower than 72px - on a phone the
+     Enemy and Advanced rows narrow their value column, and a fixed width would
+     push the row past the viewport. Unconditional because it is a no-op wherever
+     there is room. */
+  max-width: 100%;
+  min-width: 0;
   padding: 3px 6px;
   border: none;
   font: inherit;

@@ -250,6 +250,17 @@ const INFO = {
   --col-box: 72px;
 }
 
+/* Phone: 220 + 72 + two 8px gaps leaves the label track nothing to work with at
+   390px, so the row runs past the viewport. Narrowing both columns gives the
+   label ~186px and keeps the row inside the screen. Same breakpoint as the
+   control tables in factorio.css. */
+@media (max-width: 600px) {
+  .advanced {
+    --col-slider: 96px;
+    --col-box: 60px;
+  }
+}
+
 .advanced h3 {
   margin: 12px 0 8px;
   font-size: 14px;
