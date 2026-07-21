@@ -1,6 +1,6 @@
 <!-- src/components/ElevationPreviewPanel.vue -->
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, ref } from "vue";
 import { elevationCtxFromPreset } from "../model/elevationPreviewCtx";
 import { usePresetsStore } from "../store/presets";
 import FButton from "../ui/FButton.vue";
@@ -32,15 +32,20 @@ const supported = computed(() => preview.value?.supported ?? false);
 
 // The terrain render (renderTerrain, Task 11) always evaluates the Nauvis
 // climate + tile catalog, regardless of the active preset's actual map type -
-// it is only faithful for mapType "nauvis". Gate the toggle on that rather
-// than rendering a Lakes/Island preset with the wrong climate.
-// Terrain and Resources both render through the Nauvis-only renderTerrain, so
-// both toggles gate on `terrainAvailable`.
-const view = ref<"elevation" | "terrain" | "resources" | "enemies" | "cliffs" | "all">("elevation");
+// it is only faithful for mapType "nauvis". Terrain, Resources, Enemies,
+// Cliffs, and All each render through the Nauvis-only renderTerrain, so all
+// five toggles gate on `terrainAvailable`.
+// The user's desired view. Defaults to the full composite, which is the closest
+// thing to the game's own map preview - and with dev mode off (the default) it
+// is the only view a user ever gets, since the toggles are hidden.
+const view = ref<"elevation" | "terrain" | "resources" | "enemies" | "cliffs" | "all">("all");
 const terrainAvailable = computed(() => preview.value?.mapType === "nauvis");
-watch(terrainAvailable, (available) => {
-  if (!available) view.value = "elevation";
-});
+// What actually renders. renderTerrain always evaluates the Nauvis climate + tile
+// catalog regardless of the preset's map type, so every non-elevation view
+// collapses to "elevation" off-Nauvis rather than rendering the wrong climate.
+// Deriving this (instead of the old watch that reset `view`) means a round trip
+// through a Lakes preset no longer destroys the chosen view.
+const effectiveView = computed(() => (terrainAvailable.value ? view.value : "elevation"));
 
 async function generate() {
   const preset = store.activePreset;
@@ -58,7 +63,7 @@ async function generate() {
     const result = await renderer.render({
       seed0,
       mapType: info.mapType,
-      view: view.value,
+      view: effectiveView.value,
       width: PREVIEW_PX,
       height: PREVIEW_PX,
       originX: -half,
@@ -105,14 +110,14 @@ async function generate() {
       <div class="view-toggle" role="group" aria-label="Preview view">
         <FButton
           data-test="view-elevation"
-          :variant="view === 'elevation' ? 'tool' : 'default'"
+          :variant="effectiveView === 'elevation' ? 'tool' : 'default'"
           @click="view = 'elevation'"
         >
           Elevation
         </FButton>
         <FButton
           data-test="view-terrain"
-          :variant="view === 'terrain' ? 'tool' : 'default'"
+          :variant="effectiveView === 'terrain' ? 'tool' : 'default'"
           :disabled="!terrainAvailable"
           :title="
             terrainAvailable ? undefined : 'Terrain view is only available for the Nauvis map type'
@@ -123,7 +128,7 @@ async function generate() {
         </FButton>
         <FButton
           data-test="view-resources"
-          :variant="view === 'resources' ? 'tool' : 'default'"
+          :variant="effectiveView === 'resources' ? 'tool' : 'default'"
           :disabled="!terrainAvailable"
           :title="
             terrainAvailable
@@ -136,7 +141,7 @@ async function generate() {
         </FButton>
         <FButton
           data-test="view-enemies"
-          :variant="view === 'enemies' ? 'tool' : 'default'"
+          :variant="effectiveView === 'enemies' ? 'tool' : 'default'"
           :disabled="!terrainAvailable"
           :title="
             terrainAvailable ? undefined : 'Enemies view is only available for the Nauvis map type'
@@ -147,7 +152,7 @@ async function generate() {
         </FButton>
         <FButton
           data-test="view-cliffs"
-          :variant="view === 'cliffs' ? 'tool' : 'default'"
+          :variant="effectiveView === 'cliffs' ? 'tool' : 'default'"
           :disabled="!terrainAvailable"
           :title="
             terrainAvailable ? undefined : 'Cliffs view is only available for the Nauvis map type'
@@ -158,7 +163,7 @@ async function generate() {
         </FButton>
         <FButton
           data-test="view-all"
-          :variant="view === 'all' ? 'tool' : 'default'"
+          :variant="effectiveView === 'all' ? 'tool' : 'default'"
           :disabled="!terrainAvailable"
           :title="
             terrainAvailable

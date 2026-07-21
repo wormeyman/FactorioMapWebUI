@@ -244,6 +244,34 @@ describe("ElevationPreviewPanel", () => {
     expect(w.find('[data-test="view-terrain"]').attributes("disabled")).toBeDefined();
   });
 
+  it("defaults to the composite All view on a Nauvis preset with no toggle clicked", async () => {
+    stubCanvas();
+    const renderer = okRenderer();
+    const w = setup("nauvis", renderer);
+    await w.find('[data-test="generate"]').trigger("click");
+    await flushPromises();
+    const arg = (renderer.render as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg).toMatchObject({ view: "all", mapType: "nauvis" });
+  });
+
+  it("restores the chosen view when a preset switches away from Nauvis and back", async () => {
+    stubCanvas();
+    const renderer = okRenderer();
+    const w = setup("nauvis", renderer);
+    const store = usePresetsStore();
+
+    await w.find('[data-test="view-terrain"]').trigger("click");
+    writeMapType(store.activePreset!.propertyExpressionNames, "lakes");
+    await w.vm.$nextTick();
+    writeMapType(store.activePreset!.propertyExpressionNames, "nauvis");
+    await w.vm.$nextTick();
+
+    await w.find('[data-test="generate"]').trigger("click");
+    await flushPromises();
+    const arg = (renderer.render as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg).toMatchObject({ view: "terrain" });
+  });
+
   it("falls back to Elevation view when switching to a preset whose map type disables Terrain", async () => {
     const putImageData = stubCanvas();
     const renderer = okRenderer();
