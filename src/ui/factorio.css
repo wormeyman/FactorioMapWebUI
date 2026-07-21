@@ -116,13 +116,19 @@ body {
  * (601px gives ~89px per slider, 600px gives ~137px).
  */
 @media (max-width: 600px) {
+  /* 96, not 120: the extra 24px goes to the three value columns, taking the slider
+     track from 51px to 59px. It also makes the labels wrap CONSISTENTLY below the
+     icon - at 120 the short names ("Stone", "Coal") sat inline with the icon while
+     longer ones wrapped, giving a ragged left column - and leaves the "Frequency"
+     heading wide enough to sit on one line. Costs ~150px of table height, since
+     every label now takes two lines instead of some taking one. */
   .control-table thead th:first-child,
   .control-table tbody td.label {
-    width: 120px;
+    width: 96px;
   }
 
   /* The indent lines the "Resource" header up over the checkbox-gutter-indented
-     row labels; against a 120px column the original 30px eats too much of it. */
+     row labels; against a 96px column the original 30px eats too much of it. */
   .control-table thead th:first-child {
     padding-left: 22px;
   }
