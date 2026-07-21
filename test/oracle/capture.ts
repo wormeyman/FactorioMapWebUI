@@ -427,6 +427,70 @@ async function captureElevationNauvis(): Promise<void> {
 }
 
 /**
+ * The `elevation_nauvis_no_cliff` tree (= `elevation_nauvis_function(added_cliff_elevation
+ * = 0)`, the cliffiness field's dependency - see Task 6/`cliff_elevation_nauvis`) routed
+ * onto `elevation`, plus the two free-var distances the CI spec needs. Same standard grid
+ * as `captureElevationNauvis` (near-origin band where the game places real starting lakes,
+ * far rings at r=2200/3300 where starting_lake_distance saturates at 1024, one deep-field
+ * point), captured at two seeds so the seam is validated beyond the single default seed.
+ */
+async function captureElevationNauvisNoCliff(): Promise<void> {
+  const positions: Position[] = [];
+  for (let gy = 0; gy < 3; gy++) {
+    for (let gx = 0; gx < 3; gx++) {
+      positions.push({ x: gx * 11 - 11 + 0.5, y: gy * 13 - 13 + 0.25 });
+    }
+  }
+  for (const r of [2200, 3300]) {
+    for (let k = 0; k < 8; k++) {
+      const a = (k * Math.PI) / 4;
+      positions.push({ x: r * Math.cos(a) + 0.5, y: r * Math.sin(a) + 0.25 });
+    }
+  }
+  positions.push({ x: 12345.75, y: 6789.125 });
+
+  const seeds = [123456, 777771];
+  const cases: {
+    seed: number;
+    elevation: number[];
+    distance: number[];
+    startingLakeDistance: number[];
+  }[] = [];
+  for (const seed of seeds) {
+    const sample = async (expression: string): Promise<number[]> => {
+      const workDir = await mkdtemp(join(tmpdir(), "oracle-capture-"));
+      try {
+        return await sampleExpression(expression, positions, { workDir, seed });
+      } finally {
+        await rm(workDir, { recursive: true, force: true });
+      }
+    };
+
+    const elevation = await sample("elevation_nauvis_no_cliff");
+    console.log(`  captured elevation_nauvis_no_cliff tree seed=${seed}`);
+    const distance = await sample(
+      "distance_from_nearest_point{x = x, y = y, points = starting_positions}",
+    );
+    console.log(`  captured distance (starting_positions) seed=${seed}`);
+    const startingLakeDistance = await sample(
+      "distance_from_nearest_point{x = x, y = y, points = starting_lake_positions, maximum_distance = 1024}",
+    );
+    console.log(`  captured starting_lake_distance seed=${seed}`);
+    cases.push({ seed, elevation, distance, startingLakeDistance });
+  }
+
+  const fixture = {
+    _comment:
+      "Ground truth from Factorio 2.1.11 via the test/oracle harness. elevation_nauvis_no_cliff (= elevation_nauvis_function(added_cliff_elevation = 0), the cliffiness field's dependency) and the two free-var distances, routed onto elevation. Regenerate: node --experimental-strip-types test/oracle/capture.ts elevation-nauvis-no-cliff",
+    positions,
+    cases,
+  };
+  const out = join(FIXTURES, "oracle-elevation-nauvis-no-cliff.seed123456.json");
+  await writeFile(out, JSON.stringify(fixture, null, 2) + "\n");
+  console.log(`wrote ${out} (${positions.length} points, ${cases.length} seeds)`);
+}
+
+/**
  * The full `elevation_island` tree routed onto `elevation`, plus the two free-var
  * distances. Same grid as captureElevationLakes/Nauvis (near-origin band, far rings
  * at r=2200/3300, one deep-field point). elevation_island = elevation_lakes with
@@ -1162,6 +1226,7 @@ if (want("variable-persistence")) await captureVariablePersistenceMultioctave();
 if (want("multioctave-wrappers")) await captureMultioctaveWrappers();
 if (want("elevation-lakes")) await captureElevationLakes();
 if (want("elevation-nauvis")) await captureElevationNauvis();
+if (want("elevation-nauvis-no-cliff")) await captureElevationNauvisNoCliff();
 if (want("elevation-island")) await captureElevationIsland();
 if (want("temperature")) await captureTemperature();
 if (want("aux")) await captureAux();

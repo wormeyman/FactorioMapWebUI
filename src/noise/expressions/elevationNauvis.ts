@@ -27,6 +27,13 @@ export interface ElevationNauvisParams {
    * `startingLakePositions`. Pass `[]` for far-field-only behavior.
    */
   readonly startingLakePositions?: Point[];
+  /**
+   * Whether `nauvis_hills_plateaus` feeds `added_cliff_elevation` (default `true`,
+   * matching the game's `elevation_nauvis`). `false` forces `added_cliff_elevation = 0`,
+   * matching `elevation_nauvis_no_cliff` (= `elevation_nauvis_function(0)`) - the
+   * cliffiness field's dependency (see `cliff_elevation_nauvis`).
+   */
+  readonly withCliffElevation?: boolean;
 }
 
 /**
@@ -120,7 +127,8 @@ export function makeElevationNauvis(
     // nauvis_hills -> nauvis_plateaus -> nauvis_hills_plateaus (= added_cliff_elevation)
     const nauvisHills = nz.hills(x, y);
     const nauvisPlateaus = nz.plateaus(x, y);
-    const addedCliffElevation = 0.1 * nauvisHills + 0.8 * nauvisPlateaus;
+    const addedCliffElevation =
+      (params.withCliffElevation ?? true) ? 0.1 * nauvisHills + 0.8 * nauvisPlateaus : 0;
 
     // elevation_nauvis_function body (elevation_magnitude = 20, wlc_amplitude = 2)
     const distance = distanceFromNearestPoint(x, y, startingPositions);

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import fixture from "./fixtures/oracle-elevation-nauvis.seed123456.json";
+import noCliffFixture from "./fixtures/oracle-elevation-nauvis-no-cliff.seed123456.json";
 import { makeElevationNauvis } from "../src/noise/expressions/elevationNauvis";
 
 // Parity-test only where the game's own starting_lake_distance saturated at 1024;
@@ -67,5 +68,78 @@ describe("elevationNauvis reproduces the game's elevation_nauvis tree", () => {
     // (startingLakes.ts). A tight 1e-4 bound (still ~35x headroom) makes this assertion
     // actually guard that path - a drift in the computed lake positions would trip it.
     expect(worst, `worst ${worstLabel}`).toBeLessThan(1e-4);
+  });
+});
+
+// elevation_nauvis_no_cliff = elevation_nauvis_function(added_cliff_elevation = 0) - the
+// cliffiness field's dependency (Task 6 / cliff_elevation_nauvis). Same standard grid and
+// same combined abs tolerance bands as the elevation_nauvis block above (far-field 8e-3 is
+// the f32-coordinate floor amplified by elevation_magnitude=20; near-field 1e-4 guards the
+// computed starting_lake_positions path). Positions are identical between the two fixtures
+// (same standard grid), which lets the structural check below index them 1:1.
+describe("elevationNauvis(withCliffElevation:false) reproduces elevation_nauvis_no_cliff", () => {
+  for (const c of noCliffFixture.cases) {
+    const evalAt = makeElevationNauvis({ seed0: c.seed, withCliffElevation: false });
+    const noCliffSaturated = (i: number) => c.startingLakeDistance[i] >= 1024;
+
+    it(`matches the numeric elevation to the f32 coordinate floor (far field, seed=${c.seed})`, () => {
+      let worst = 0;
+      let worstLabel = "";
+      for (let i = 0; i < noCliffFixture.positions.length; i++) {
+        if (!noCliffSaturated(i)) continue;
+        const p = noCliffFixture.positions[i];
+        const err = Math.abs(evalAt(p.x, p.y) - c.elevation[i]);
+        if (err > worst) {
+          worst = err;
+          worstLabel = `@(${p.x},${p.y})`;
+        }
+      }
+      expect(worst, `worst ${worstLabel}`).toBeLessThan(8e-3);
+    });
+
+    it(`matches near-spawn elevation too (computed starting lakes, seed=${c.seed})`, () => {
+      let worst = 0;
+      let worstLabel = "";
+      let checked = 0;
+      for (let i = 0; i < noCliffFixture.positions.length; i++) {
+        if (noCliffSaturated(i)) continue;
+        const p = noCliffFixture.positions[i];
+        const err = Math.abs(evalAt(p.x, p.y) - c.elevation[i]);
+        checked++;
+        if (err > worst) {
+          worst = err;
+          worstLabel = `@(${p.x},${p.y})`;
+        }
+      }
+      expect(checked).toBeGreaterThanOrEqual(6);
+      expect(worst, `worst ${worstLabel}`).toBeLessThan(1e-4);
+    });
+  }
+
+  it("differs from elevation_nauvis (with-cliff) where added_cliff_elevation != 0, and matches where the outer min() masks it", () => {
+    // fixture (seed 123456, WITH cliff term) and noCliffFixture (seed 123456, no-cliff
+    // term) share the exact same standard grid, so positions[i] line up 1:1. The final
+    // elevation is min(wlc_elevation, starting_lake); wherever starting_lake wins,
+    // added_cliff_elevation (which only feeds wlc_elevation) has no effect and the two
+    // trees coincide even though the term itself is nonzero - hence "NOT assumed" that
+    // no-cliff <= with-cliff, and this checks BOTH outcomes actually occur.
+    expect(fixture.positions).toEqual(noCliffFixture.positions);
+    const noCliff123456 = noCliffFixture.cases.find((c) => c.seed === fixture.seed0);
+    expect(noCliff123456).toBeDefined();
+    let numDiffer = 0;
+    let numEqual = 0;
+    for (let i = 0; i < fixture.positions.length; i++) {
+      const withCliff = fixture.elevation[i];
+      const noCliff = noCliff123456!.elevation[i];
+      if (Math.abs(withCliff - noCliff) < 1e-6) {
+        numEqual++;
+      } else {
+        numDiffer++;
+      }
+    }
+    // Observed on the current fixture: 17 differ, 9 equal - both outcomes are real, not
+    // an artifact of a too-small grid.
+    expect(numDiffer).toBeGreaterThan(0);
+    expect(numEqual).toBeGreaterThan(0);
   });
 });
