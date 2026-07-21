@@ -80,4 +80,35 @@ describe("tiled render equals untiled render", () => {
     const req = baseReq({ view: "cliffs" });
     expect(renderTiled(req, 32)).toEqual(renderWhole(req));
   });
+
+  // Cliffs were the suspected seam case. These prove the other renderers really
+  // are per-pixel pure functions of world coordinates, with no hidden dependence
+  // on the extent of the box they are handed.
+  const VIEWS = ["elevation", "terrain", "resources", "enemies", "cliffs", "all"] as const;
+
+  for (const view of VIEWS) {
+    it(`matches byte for byte on the ${view} view`, () => {
+      const req = baseReq({ view });
+      expect(renderTiled(req, 32)).toEqual(renderWhole(req));
+    });
+  }
+
+  it("matches on a ragged grid where the tile size does not divide the image", () => {
+    const req = baseReq({ view: "all", width: 100, height: 70 });
+    expect(renderTiled(req, 32)).toEqual(renderWhole(req));
+  });
+
+  it("matches at a tile size of 1 pixel", () => {
+    const req = baseReq({ view: "all", width: 8, height: 8 });
+    expect(renderTiled(req, 1)).toEqual(renderWhole(req));
+  });
+
+  // The only case where the cliff halo is not 2 world tiles, so the one that
+  // catches a halo scaled wrongly. It does NOT exercise the floating-point
+  // precondition documented in tiling.ts - integer origins times an integer
+  // scale stay exact, and nothing in the app produces a fractional scale.
+  it("matches when tilesPerPixel is not 1", () => {
+    const req = baseReq({ view: "all", width: 32, height: 32, tilesPerPixel: 4 });
+    expect(renderTiled(req, 8)).toEqual(renderWhole(req));
+  });
 });
