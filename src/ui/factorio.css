@@ -102,20 +102,31 @@ body {
 }
 
 /*
- * Phone layout. The pinned label (210px) and Appears-on (92px) columns above eat
+ * Narrow layout. The pinned label (210px) and Appears-on (92px) columns above eat
  * 302px of a phone's ~358px of content width, leaving ~18px per slider - and
  * FPercentSlider is `width: 100%` with a 14px thumb and no min-width, so it
  * collapses to a hairline. Tightening the two pinned columns gives ~67px per
  * slider at 390px, which is draggable.
  *
- * 600px, not 520px: the wide columns need 210 + 92 + 3 sliders at ~80px = 542px
- * plus 32px of app/editor padding, so ~574px of viewport. A 520px breakpoint
- * would leave a dead band at 521-620px still using the wide columns but with only
- * ~62px per slider - narrower than phones get below the breakpoint, i.e. the
- * layout would get worse as the screen got bigger. At 600 there is no such band
- * (601px gives ~89px per slider, 600px gives ~137px).
+ * Keyed to the EDITOR COLUMN, not the viewport, because the editor column is what
+ * actually constrains these tables and the two diverge badly above App.vue's 960px
+ * stack breakpoint: at a 978px viewport the two-column grid gives the editor only
+ * 480px, so the wide columns left 38px per slider - measured, in both WebKit and
+ * Blink, and narrower than any phone gets. A viewport query cannot see that, since
+ * the viewport is at its widest exactly when the column is at its narrowest.
+ *
+ * 568px is the editor content width at which the OLD `@media (max-width: 600px)`
+ * used to fire, so nothing tightens later than it did before. Below it the wide
+ * columns are unaffordable: they hit the ~50px-per-slider floor at 500px of table
+ * width and reach only 73px at 569px, versus ~130px tightened.
+ *
+ * A container query also removes an engine disagreement the viewport query had.
+ * Safari's media queries measure the viewport EXCLUDING the classic scrollbar and
+ * Chrome's include it, so `max-width: 600px` fired at 553px of editor width in
+ * Chrome but 568px in Safari. A container query measures this element's own
+ * content box, which has no scrollbar in it either way.
  */
-@media (max-width: 600px) {
+@container editor (max-width: 568px) {
   /* 96, not 120: the extra 24px goes to the three value columns, taking the slider
      track from 51px to 59px. It also makes the labels wrap CONSISTENTLY below the
      icon - at 120 the short names ("Stone", "Coal") sat inline with the icon while
@@ -157,9 +168,14 @@ body {
   .control-table thead th.appears-on-th {
     font-size: 0;
   }
+}
 
-  /* Re-pointed in one place so the client canvas and the server PNG stay the same
-     size as each other - the invariant the .f-preview-media comment protects. */
+/* Stays a VIEWPORT query, and cannot become a container query: :root is an
+   ancestor of the editor container, and @container only ever matches descendants
+   of the container it names, so this rule would simply never apply.
+   Re-pointed in one place so the client canvas and the server PNG stay the same
+   size as each other - the invariant the .f-preview-media comment protects. */
+@media (max-width: 600px) {
   :root {
     --f-preview-media-max: 100%;
   }
