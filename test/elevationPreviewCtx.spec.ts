@@ -99,6 +99,25 @@ describe("elevationCtxFromPreset", () => {
     expect(elevationCtxFromPreset(p).enemyControls).toEqual({ frequency: 2, size: 0.5 });
   });
 
+  it("reads nauvis_cliff frequency/size->continuity, defaulting to 1/1 when absent", () => {
+    const p = lakesPreset();
+    delete p.autoplaceControls["nauvis_cliff"];
+    expect(elevationCtxFromPreset(p).cliffControls).toEqual({ frequency: 1, continuity: 1 });
+
+    p.autoplaceControls["nauvis_cliff"] = { frequency: 2, size: 0.5, richness: 1 };
+    expect(elevationCtxFromPreset(p).cliffControls).toEqual({ frequency: 2, continuity: 0.5 });
+  });
+
+  it("exposes cliffSettings from preset.cliffSettings", () => {
+    const p = lakesPreset();
+    p.cliffSettings = { cliffElevation0: 12, cliffElevationInterval: 30, richness: 2 };
+    expect(elevationCtxFromPreset(p).cliffSettings).toEqual({
+      cliffElevation0: 12,
+      cliffElevationInterval: 30,
+      richness: 2,
+    });
+  });
+
   it("reads control:aux/moisture/starting_area_moisture:* off the preset's property_expression_names", () => {
     const p = lakesPreset();
     p.propertyExpressionNames["control:aux:frequency"] = "4.000000";

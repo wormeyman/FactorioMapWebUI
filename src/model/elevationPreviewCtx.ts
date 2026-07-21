@@ -5,6 +5,11 @@ import { readResourceControls } from "./resourceReads";
 import type { ResourceControlLevers } from "../noise/resources/resolveResource";
 import type { Preset } from "./types";
 import { ENEMY_CONTROL_NAME, type EnemyControls } from "../noise/enemies/enemyCatalog";
+import {
+  CLIFF_CONTROL_NAME,
+  type CliffControls,
+  type CliffSettingsInput,
+} from "../noise/cliffs/cliffCatalog";
 
 export interface ElevationPreviewCtx {
   /** false => the active map type has no client renderer (unknown/modded map type). */
@@ -27,6 +32,20 @@ export interface ElevationPreviewCtx {
    * type, same as the terrain/resources views.
    */
   enemyControls: EnemyControls;
+  /**
+   * The `nauvis_cliff` autoplace control's frequency/size (control:nauvis_cliff:*,
+   * size doubles as continuity) - consumed only by the `view: "cliffs"` overlay
+   * (renderCliffs). Absent defaults to `{ frequency: 1, continuity: 1 }`.
+   * Faithful only on the Nauvis map type, same as the terrain/resources/enemies
+   * views.
+   */
+  cliffControls: CliffControls;
+  /**
+   * The cliff-related MapGenSettings fields (cliff_elevation_0,
+   * cliff_elevation_interval, cliff richness), read straight off
+   * `preset.cliffSettings` - consumed only by the `view: "cliffs"` overlay.
+   */
+  cliffSettings: CliffSettingsInput;
   /**
    * Non-seed free variables for renderElevation/renderTerrain
    * (Omit<..., "seed0">-compatible). The climate fields (aux/moisture
@@ -74,12 +93,21 @@ export function elevationCtxFromPreset(preset: Preset): ElevationPreviewCtx {
   const supported = mt.id === "nauvis" || mt.id === "lakes" || mt.id === "island";
   const mapType = mt.id === "nauvis" ? "nauvis" : mt.id === "island" ? "island" : "lakes";
   const eb = preset.autoplaceControls[ENEMY_CONTROL_NAME];
+  const cc = preset.autoplaceControls[CLIFF_CONTROL_NAME];
   return {
     supported,
     mapType,
     mapTypeLabel: mt.label,
     resourceControls: readResourceControls(preset),
     enemyControls: eb ? { frequency: eb.frequency, size: eb.size } : { frequency: 1, size: 1 },
+    cliffControls: cc
+      ? { frequency: cc.frequency, continuity: cc.size }
+      : { frequency: 1, continuity: 1 },
+    cliffSettings: {
+      cliffElevation0: preset.cliffSettings.cliffElevation0,
+      cliffElevationInterval: preset.cliffSettings.cliffElevationInterval,
+      richness: preset.cliffSettings.richness,
+    },
     ctx: {
       waterLevel: 10 * Math.log2(size),
       segmentationMultiplier: water?.frequency ?? 1,

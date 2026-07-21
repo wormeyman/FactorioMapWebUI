@@ -7,6 +7,7 @@ import { renderElevation, LAND_RGBA, WATER_RGBA } from "../src/noise/preview/ren
 import { renderTerrain } from "../src/noise/preview/renderTerrain";
 import { RESOURCE_CATALOG } from "../src/noise/resources/resourceCatalog";
 import { ENEMY_MAP_COLOR } from "../src/noise/enemies/enemyCatalog";
+import { CLIFF_MAP_COLOR } from "../src/noise/cliffs/cliffCatalog";
 
 const REQ: ElevationRenderRequest = {
   id: 7,
@@ -296,6 +297,67 @@ describe("runRenderRequest", () => {
     const withEnemies = new Uint8ClampedArray(runRenderRequest(req).buffer);
     expect(Array.from(withEnemies)).not.toEqual(Array.from(terrain));
     expect(Array.from(withEnemies)).toEqual([...ENEMY_MAP_COLOR, 255]);
+  });
+
+  it("view 'cliffs' overlays the cliff footprint on the terrain", () => {
+    // 64x64 px at 1 tile/px over world [960,1024)x[512,576) - the same dense
+    // sub-window renderCliffs.spec.ts uses (~39 cliffs at seed 123456).
+    const req: ElevationRenderRequest = {
+      id: 15,
+      seed0: 123456,
+      width: 64,
+      height: 64,
+      originX: 960,
+      originY: 512,
+      tilesPerPixel: 1,
+      waterLevel: 0,
+      segmentationMultiplier: 1,
+      startingPositions: [{ x: 0, y: 0 }],
+      view: "cliffs",
+      cliffControls: { frequency: 1, continuity: 1 },
+      cliffSettings: { cliffElevation0: 10, cliffElevationInterval: 40, richness: 1 },
+    };
+    const terrain = new Uint8ClampedArray(runRenderRequest({ ...req, view: "terrain" }).buffer);
+    const withCliffs = new Uint8ClampedArray(runRenderRequest(req).buffer);
+    expect(Array.from(withCliffs)).not.toEqual(Array.from(terrain));
+
+    let painted = 0;
+    for (let i = 0; i < withCliffs.length; i += 4) {
+      if (
+        withCliffs[i] === CLIFF_MAP_COLOR[0] &&
+        withCliffs[i + 1] === CLIFF_MAP_COLOR[1] &&
+        withCliffs[i + 2] === CLIFF_MAP_COLOR[2] &&
+        withCliffs[i + 3] === 255
+      ) {
+        painted++;
+      }
+    }
+    expect(painted).toBeGreaterThan(0);
+  });
+
+  it("view 'cliffs' defaults cliffControls/cliffSettings when omitted", () => {
+    const req: ElevationRenderRequest = {
+      id: 16,
+      seed0: 123456,
+      width: 64,
+      height: 64,
+      originX: 960,
+      originY: 512,
+      tilesPerPixel: 1,
+      waterLevel: 0,
+      segmentationMultiplier: 1,
+      startingPositions: [{ x: 0, y: 0 }],
+      view: "cliffs",
+    };
+    const withDefaults = new Uint8ClampedArray(runRenderRequest(req).buffer);
+    const explicit = new Uint8ClampedArray(
+      runRenderRequest({
+        ...req,
+        cliffControls: { frequency: 1, continuity: 1 },
+        cliffSettings: { cliffElevation0: 10, cliffElevationInterval: 40, richness: 1 },
+      }).buffer,
+    );
+    expect(Array.from(withDefaults)).toEqual(Array.from(explicit));
   });
 
   it("view 'elevation' (explicit or default/omitted) keeps the water/land mask", () => {

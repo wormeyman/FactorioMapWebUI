@@ -36,7 +36,7 @@ const supported = computed(() => preview.value?.supported ?? false);
 // than rendering a Lakes/Island preset with the wrong climate.
 // Terrain and Resources both render through the Nauvis-only renderTerrain, so
 // both toggles gate on `terrainAvailable`.
-const view = ref<"elevation" | "terrain" | "resources" | "enemies">("elevation");
+const view = ref<"elevation" | "terrain" | "resources" | "enemies" | "cliffs">("elevation");
 const terrainAvailable = computed(() => preview.value?.mapType === "nauvis");
 watch(terrainAvailable, (available) => {
   if (!available) view.value = "elevation";
@@ -75,6 +75,8 @@ async function generate() {
       startingAreaMoistureFrequency: info.ctx.startingAreaMoistureFrequency,
       resourceControls: info.resourceControls,
       enemyControls: info.enemyControls,
+      cliffControls: info.cliffControls,
+      cliffSettings: info.cliffSettings,
     });
     const el = canvas.value;
     const g = el?.getContext("2d");
@@ -142,6 +144,17 @@ async function generate() {
           @click="view = 'enemies'"
         >
           Enemies
+        </FButton>
+        <FButton
+          data-test="view-cliffs"
+          :variant="view === 'cliffs' ? 'tool' : 'default'"
+          :disabled="!terrainAvailable"
+          :title="
+            terrainAvailable ? undefined : 'Cliffs view is only available for the Nauvis map type'
+          "
+          @click="view = 'cliffs'"
+        >
+          Cliffs
         </FButton>
       </div>
       <span class="spacer" />

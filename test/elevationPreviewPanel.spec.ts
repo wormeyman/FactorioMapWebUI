@@ -153,6 +153,37 @@ describe("ElevationPreviewPanel", () => {
     expect(putImageData).toHaveBeenCalledOnce();
   });
 
+  it("passes view:'cliffs' + cliffControls/cliffSettings after selecting the Cliffs toggle (Nauvis)", async () => {
+    const putImageData = stubCanvas();
+    const renderer = okRenderer();
+    const w = setup("nauvis", renderer);
+    expect(w.find('[data-test="view-cliffs"]').attributes("disabled")).toBeUndefined();
+
+    await w.find('[data-test="view-cliffs"]').trigger("click");
+    await w.find('[data-test="generate"]').trigger("click");
+    await flushPromises();
+
+    expect(renderer.render).toHaveBeenCalledOnce();
+    const arg = (renderer.render as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg).toMatchObject({ view: "cliffs", mapType: "nauvis" });
+    expect(arg.cliffControls).toEqual({ frequency: 1, continuity: 1 });
+    expect(arg.cliffSettings).toEqual({
+      cliffElevation0: 10,
+      cliffElevationInterval: 40,
+      richness: 1,
+    });
+    expect(putImageData).toHaveBeenCalledOnce();
+  });
+
+  it("disables the Cliffs toggle off-Nauvis (Lakes/Island)", async () => {
+    expect(
+      setup("lakes", okRenderer()).find('[data-test="view-cliffs"]').attributes("disabled"),
+    ).toBeDefined();
+    expect(
+      setup("island", okRenderer()).find('[data-test="view-cliffs"]').attributes("disabled"),
+    ).toBeDefined();
+  });
+
   it("disables the Enemies toggle off-Nauvis (Lakes/Island)", async () => {
     expect(
       setup("lakes", okRenderer()).find('[data-test="view-enemies"]').attributes("disabled"),
