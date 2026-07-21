@@ -243,6 +243,12 @@ async function generate() {
 .preview-toolbar {
   display: flex;
   align-items: center;
+  /* In dev mode the row carries the six view toggles as well as the seed, the
+     elapsed readout, the Debug checkbox and Generate - about 700px of content,
+     more than the panel gets below a ~1420px window. Without wrapping, Generate
+     is pushed outside the panel and becomes unclickable. Nothing wraps at widths
+     where the row already fits, so the normal (non-dev) toolbar is unaffected. */
+  flex-wrap: wrap;
   gap: 8px;
 }
 .spacer {
