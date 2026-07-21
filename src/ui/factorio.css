@@ -100,3 +100,61 @@ body {
   max-width: var(--f-preview-media-max);
   image-rendering: pixelated;
 }
+
+/*
+ * Phone layout. The pinned label (210px) and Appears-on (92px) columns above eat
+ * 302px of a phone's ~358px of content width, leaving ~18px per slider - and
+ * FPercentSlider is `width: 100%` with a 14px thumb and no min-width, so it
+ * collapses to a hairline. Tightening the two pinned columns gives ~67px per
+ * slider at 390px, which is draggable.
+ *
+ * 600px, not 520px: the wide columns need 210 + 92 + 3 sliders at ~80px = 542px
+ * plus 32px of app/editor padding, so ~574px of viewport. A 520px breakpoint
+ * would leave a dead band at 521-620px still using the wide columns but with only
+ * ~62px per slider - narrower than phones get below the breakpoint, i.e. the
+ * layout would get worse as the screen got bigger. At 600 there is no such band
+ * (601px gives ~89px per slider, 600px gives ~137px).
+ */
+@media (max-width: 600px) {
+  .control-table thead th:first-child,
+  .control-table tbody td.label {
+    width: 120px;
+  }
+
+  /* The indent lines the "Resource" header up over the checkbox-gutter-indented
+     row labels; against a 120px column the original 30px eats too much of it. */
+  .control-table thead th:first-child {
+    padding-left: 22px;
+  }
+
+  /* Narrowed rather than hidden: the planet icon is the only thing distinguishing
+     the duplicate resource names (two Coal rows, two Stone rows across planets). */
+  .control-table thead th.appears-on-th,
+  .control-table tbody td.appears-on {
+    width: 36px;
+  }
+
+  /* The value columns land at ~67px here, narrower than the header words
+     themselves ("Frequency", "Richness"). With table-layout:fixed those overflow
+     their cell instead of widening it, so the headings visibly collide - shrink
+     them and let them wrap. */
+  .control-table thead th {
+    font-size: 11px;
+    white-space: normal;
+    overflow-wrap: break-word;
+  }
+
+  /* ...except this one, whose 36px column would wrap "Appears on" to four lines
+     and drive the whole header row taller. The column holds only a planet icon,
+     so drop the heading visually. The text stays in the DOM for screen readers
+     rather than being removed from the markup. */
+  .control-table thead th.appears-on-th {
+    font-size: 0;
+  }
+
+  /* Re-pointed in one place so the client canvas and the server PNG stay the same
+     size as each other - the invariant the .f-preview-media comment protects. */
+  :root {
+    --f-preview-media-max: 100%;
+  }
+}

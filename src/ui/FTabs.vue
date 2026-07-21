@@ -21,11 +21,18 @@ const emit = defineEmits<{ "update:modelValue": [value: string] }>();
 <style scoped>
 .f-tabs {
   display: flex;
+  /* Five tabs in a row are 507px wide, which was the single widest thing in the
+     editor column and set the whole page's minimum layout width on a phone.
+     Wrapping at every size (not behind a media query) - inert wherever they fit. */
+  flex-wrap: wrap;
   gap: 4px;
 }
 
 .f-tab {
-  padding: 6px 20px;
+  /* The 20px side padding is what makes the row 507px; on a narrow viewport trade
+     it for fitting more tabs per line. Vertical padding is untouched, so the tap
+     target keeps its height. */
+  padding: 6px clamp(8px, 4vw, 20px);
   border: none;
   font: inherit;
   font-weight: 700;

@@ -93,12 +93,38 @@ const showImport = ref(false);
   flex: 1;
 }
 
+/*
+ * The two columns need 480 + 420 + 8 gap = 908, plus 16 of .app padding = 924 of
+ * usable width, and neither minmax floor ever yields - which pinned the whole
+ * page at a 1130px layout width on every device, so even a tablet in portrait
+ * scrolled sideways. Below the breakpoint they stack instead.
+ *
+ * 960, not 900: a media query measures the viewport INCLUDING the scrollbar,
+ * while the 924 above is usable width EXCLUDING it. With a 15px scrollbar the
+ * two-column layout needs ~939 of device width, so a 900 breakpoint left
+ * 901-939 rendering two columns in too little room (measured: 30px of overflow
+ * at 901). 960 clears it with headroom for wider scrollbars.
+ *
+ * Editor above the preview panel, in DOM order: the editor is what the user came
+ * to use, and the server-preview panel is a large mostly-empty box until Generate
+ * is pressed.
+ */
+@media (max-width: 960px) {
+  .body {
+    grid-template-columns: 1fr;
+  }
+}
+
 .editor {
   display: flex;
   flex-direction: column;
   gap: 8px;
   background: var(--f-panel);
   padding: 8px;
+  /* Grid items default to min-width:auto, so a 1fr column still refuses to shrink
+     below its content's min-content width - which is how one wide child could
+     otherwise push the whole page wider than the viewport. */
+  min-width: 0;
 }
 
 .tab-content {
@@ -108,5 +134,7 @@ const showImport = ref(false);
 .preview {
   background: var(--f-panel);
   padding: 8px;
+  /* See .editor - grid items need this to be allowed to shrink. */
+  min-width: 0;
 }
 </style>

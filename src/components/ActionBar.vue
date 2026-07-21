@@ -78,6 +78,9 @@ onBeforeUnmount(() => clearTimeout(clearTimer));
 <style scoped>
 .action-bar {
   display: flex;
+  /* Wrap at every width, not behind a media query - see PresetBar. Without it
+     the action buttons clip off the right edge on a narrow viewport. */
+  flex-wrap: wrap;
   gap: 8px;
   justify-content: flex-end;
   padding: 8px;
