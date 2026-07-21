@@ -125,6 +125,16 @@ const showImport = ref(false);
      below its content's min-content width - which is how one wide child could
      otherwise push the whole page wider than the viewport. */
   min-width: 0;
+
+  /* Query container for the control tables (see the @container block in
+     factorio.css). The tables live in here, so what actually constrains them is
+     this column's width, not the viewport's - and above the 960px breakpoint the
+     two are very different: at a 978px viewport this column is only 480px wide.
+     Safe to make a containment context: the only absolutely-positioned elements
+     under here are the slider internals, each inside its own position:relative
+     track, and FInfo tooltips are native title attributes. */
+  container-type: inline-size;
+  container-name: editor;
 }
 
 .tab-content {
