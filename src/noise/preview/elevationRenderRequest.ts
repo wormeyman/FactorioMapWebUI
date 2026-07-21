@@ -1,4 +1,5 @@
 import type { Point } from "../distanceFromNearestPoint";
+import { CLIFF_MARK_RADIUS_PX } from "../cliffs/cliffCatalog";
 import type { CliffControls, CliffSettingsInput } from "../cliffs/cliffCatalog";
 import type { EnemyControls } from "../enemies/enemyCatalog";
 import type { ResourceControlLevers } from "../resources/resolveResource";
@@ -73,6 +74,21 @@ export interface ElevationRenderRequest {
    * 40, richness: 1 }` (the game's defaults) when omitted.
    */
   cliffSettings?: CliffSettingsInput;
+  /**
+   * The full image this request is one tile of, when the renderer is tiling.
+   * Absent means the request *is* the whole image (the single-render path).
+   *
+   * Used for exactly one thing: clamping the widened cliff cell-query box, so a
+   * tiled render reproduces the untiled render byte for byte - including at the
+   * image border, where the untiled render drops cliff cells centered outside
+   * the image. `tilesPerPixel` is shared with the request.
+   */
+  fullImage?: {
+    readonly originX: number;
+    readonly originY: number;
+    readonly width: number;
+    readonly height: number;
+  };
 }
 
 /** The rendered pixels, with `buffer` posted back as a transferable. */
@@ -81,6 +97,47 @@ export interface ElevationRenderResult {
   buffer: ArrayBuffer;
   width: number;
   height: number;
+}
+
+/**
+ * The world box to enumerate cliff cells over for `req`: its own pixel box,
+ * widened by the cliff mark radius so marks are not clipped at tile seams, then
+ * intersected with the full image so the outer border keeps the untiled
+ * behavior.
+ *
+ * The halo is exact rather than conservative. A cell at world `wx` maps to pixel
+ * `cx = floor((wx - originX) / tpp)` and paints `cx - r .. cx + r`, so it touches
+ * the tile on the low side exactly when `wx - originX >= -r * tpp` (because
+ * `floor(v) >= -r` iff `v >= -r` for integer `r`), and on the high side exactly
+ * when `wx < x1 + r * tpp`. Those pair with `placedCells`' inclusive-lower,
+ * exclusive-upper filter, so widening by `r * tpp` adds every cell that can
+ * paint here and none that cannot.
+ *
+ * Exported for direct unit testing: the tiled-equals-untiled gate pins the
+ * widening (drop it and the gate fails) but cannot pin the clamp, which only
+ * changes pixels when a cliff cell happens to sit just outside the image border
+ * next to non-water terrain.
+ */
+export function cliffCellQueryBox(req: ElevationRenderRequest): {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+} {
+  const tpp = req.tilesPerPixel;
+  const x0 = req.originX;
+  const y0 = req.originY;
+  const x1 = req.originX + req.width * tpp;
+  const y1 = req.originY + req.height * tpp;
+  const full = req.fullImage;
+  if (!full) return { x0, y0, x1, y1 };
+  const halo = CLIFF_MARK_RADIUS_PX * tpp;
+  return {
+    x0: Math.max(x0 - halo, full.originX),
+    y0: Math.max(y0 - halo, full.originY),
+    x1: Math.min(x1 + halo, full.originX + full.width * tpp),
+    y1: Math.min(y1 + halo, full.originY + full.height * tpp),
+  };
 }
 
 /**
@@ -154,6 +211,7 @@ export function runRenderRequest(req: ElevationRenderRequest): ElevationRenderRe
         waterLevel: req.waterLevel,
         startingPositions: req.startingPositions,
         startingLakePositions: req.startingLakePositions,
+        cellQueryBox: cliffCellQueryBox(req),
       });
     }
   } else {

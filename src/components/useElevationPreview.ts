@@ -3,6 +3,7 @@ import type {
   ElevationRenderRequest,
   ElevationRenderResult,
 } from "../noise/preview/elevationRenderRequest";
+import { createRenderPool, type RenderPool, type TilePaint } from "./renderPool";
 
 /** The minimal Worker surface the renderer uses, so tests can inject a fake. */
 export interface WorkerLike {
@@ -13,8 +14,28 @@ export interface WorkerLike {
 }
 
 export interface ElevationRenderer {
-  render(req: Omit<ElevationRenderRequest, "id">): Promise<ElevationRenderResult>;
+  /**
+   * Render tiled across the pool, calling `onTile` per finished tile so the
+   * caller can paint progressively. Resolves true when every tile landed, false
+   * when a newer render superseded this one.
+   */
+  render(req: Omit<ElevationRenderRequest, "id">, onTile: (t: TilePaint) => void): Promise<boolean>;
   dispose(): void;
+}
+
+/** Square tile edge in pixels. 128 gives 64 tiles at the fixed 1024px preview. */
+export const DEFAULT_TILE_SIZE = 128;
+
+/**
+ * One worker per core, less one so the main thread stays free to blit tiles and
+ * keep the UI responsive. Falls back to 4 cores when the browser will not say.
+ *
+ * `cores` is a required parameter rather than a defaulted one: passing
+ * `undefined` to a defaulted parameter silently re-applies the default, which
+ * would make the fallback untestable.
+ */
+export function defaultPoolSize(cores: number | undefined): number {
+  return Math.max(1, (cores ?? 4) - 1);
 }
 
 function createRenderWorker(): WorkerLike {
@@ -28,50 +49,90 @@ function createRenderWorker(): WorkerLike {
 }
 
 /**
- * Own a single worker and match each response to its request by id. A response
- * with no pending id is dropped (a superseded render), so a late result never
- * paints over a newer one. Lifecycle-free; callers own dispose().
+ * Own a pool of `size` workers - one per pool slot, created lazily on first use
+ * and reused for the renderer's lifetime - and drive them through a RenderPool.
+ * Lifecycle-free; callers own dispose().
  */
 export function createElevationRenderer(
   createWorker: () => WorkerLike = createRenderWorker,
+  size: number = defaultPoolSize(
+    typeof navigator === "undefined" ? undefined : navigator.hardwareConcurrency,
+  ),
+  tileSize: number = DEFAULT_TILE_SIZE,
 ): ElevationRenderer {
-  const worker = createWorker();
+  const workers: (WorkerLike | null)[] = Array.from({ length: size }, () => null);
+
+  // Keyed by request id, NOT by slot. A slot can legitimately hold two in-flight
+  // tiles at once: when a new render supersedes an older one, the older tile is
+  // still awaiting its worker while the newer tile is dispatched into the same
+  // slot. A one-entry-per-slot map would overwrite the older tile's resolver,
+  // stranding its promise forever so the superseded render never settles and the
+  // panel sticks on "Rendering..." - a real hang, found in review. A worker
+  // handles its messages in order, so both entries resolve in turn.
   const pending = new Map<
     number,
-    { resolve: (r: ElevationRenderResult) => void; reject: (e: unknown) => void }
+    { slot: number; resolve: (r: ElevationRenderResult) => void; reject: (e: unknown) => void }
   >();
-  let nextId = 1;
 
-  function rejectAllPending(message: string) {
-    const entries = [...pending.values()];
-    pending.clear();
-    for (const { reject } of entries) reject(new Error(message));
+  // Collect first, then settle: rejecting inside the loop would mutate `pending`
+  // while iterating it.
+  function rejectSlot(slot: number, message: string) {
+    const doomed: { id: number; reject: (e: unknown) => void }[] = [];
+    for (const [id, entry] of pending) {
+      if (entry.slot === slot) doomed.push({ id, reject: entry.reject });
+    }
+    for (const { id, reject } of doomed) {
+      pending.delete(id);
+      reject(new Error(message));
+    }
   }
 
-  worker.onmessage = (e: MessageEvent) => {
-    const result = e.data as ElevationRenderResult;
-    const entry = pending.get(result.id);
-    if (entry) {
+  function dropWorker(slot: number) {
+    const w = workers[slot];
+    workers[slot] = null;
+    if (w) w.terminate();
+  }
+
+  function ensureWorker(slot: number): WorkerLike {
+    const existing = workers[slot];
+    if (existing) return existing;
+    const w = createWorker();
+    w.onmessage = (e: MessageEvent) => {
+      const result = e.data as ElevationRenderResult;
+      const entry = pending.get(result.id);
+      // An id with no pending entry is a reply to an already-settled request.
+      if (!entry) return;
       pending.delete(result.id);
       entry.resolve(result);
-    }
-  };
+    };
+    // A worker crash would otherwise leave its tiles' promises pending forever.
+    // Every tile this slot holds fails, not just the newest.
+    w.onerror = () => {
+      dropWorker(slot);
+      rejectSlot(slot, "Elevation render worker error");
+    };
+    workers[slot] = w;
+    return w;
+  }
 
-  // A real worker crash would otherwise leave render()'s promise pending
-  // forever; reject every in-flight request so the panel's catch fires.
-  worker.onerror = () => rejectAllPending("Elevation render worker error");
+  const pool: RenderPool = createRenderPool({
+    size,
+    tileSize,
+    execute: (req, slot) =>
+      new Promise<ElevationRenderResult>((resolve, reject) => {
+        pending.set(req.id, { slot, resolve, reject });
+        ensureWorker(slot).postMessage(req);
+      }),
+  });
 
   return {
-    render(req) {
-      const id = nextId++;
-      return new Promise<ElevationRenderResult>((resolve, reject) => {
-        pending.set(id, { resolve, reject });
-        worker.postMessage({ ...req, id } satisfies ElevationRenderRequest);
-      });
-    },
+    render: (req, onTile) => pool.render(req, onTile),
     dispose() {
-      rejectAllPending("Elevation renderer disposed");
-      worker.terminate();
+      pool.dispose();
+      for (let slot = 0; slot < size; slot++) {
+        dropWorker(slot);
+        rejectSlot(slot, "Elevation renderer disposed");
+      }
     },
   };
 }

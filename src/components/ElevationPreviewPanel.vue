@@ -76,42 +76,53 @@ async function generate() {
   elapsedMs.value = null;
   const startedAt = performance.now();
   try {
-    const result = await renderer.render({
-      seed0,
-      mapType: info.mapType,
-      view: effectiveView.value,
-      width: PREVIEW_PX,
-      height: PREVIEW_PX,
-      originX: -half,
-      originY: -half,
-      tilesPerPixel: TILES_PER_PIXEL,
-      waterLevel: info.ctx.waterLevel,
-      segmentationMultiplier: info.ctx.segmentationMultiplier,
-      startingPositions: info.ctx.startingPositions,
-      moistureFrequency: info.ctx.moistureFrequency,
-      moistureBias: info.ctx.moistureBias,
-      auxFrequency: info.ctx.auxFrequency,
-      auxBias: info.ctx.auxBias,
-      startingAreaMoistureSize: info.ctx.startingAreaMoistureSize,
-      startingAreaMoistureFrequency: info.ctx.startingAreaMoistureFrequency,
-      resourceControls: info.resourceControls,
-      enemyControls: info.enemyControls,
-      cliffControls: info.cliffControls,
-      cliffSettings: info.cliffSettings,
-    });
     const el = canvas.value;
     const g = el?.getContext("2d");
-    if (el && g) {
-      el.width = result.width;
-      el.height = result.height;
-      g.putImageData(
-        new ImageData(new Uint8ClampedArray(result.buffer), result.width, result.height),
-        0,
-        0,
-      );
-      hasRendered.value = true;
-      // Measured across the whole round trip (worker post, compute, transfer,
-      // blit) - that is the latency a user feels, and what tiling has to move.
+    if (!el || !g) return;
+    // Size and clear up front: tiles arrive one at a time and paint straight
+    // into this canvas, so it has to be the right size before the first lands.
+    el.width = PREVIEW_PX;
+    el.height = PREVIEW_PX;
+    g.clearRect(0, 0, PREVIEW_PX, PREVIEW_PX);
+
+    const completed = await renderer.render(
+      {
+        seed0,
+        mapType: info.mapType,
+        view: effectiveView.value,
+        width: PREVIEW_PX,
+        height: PREVIEW_PX,
+        originX: -half,
+        originY: -half,
+        tilesPerPixel: TILES_PER_PIXEL,
+        waterLevel: info.ctx.waterLevel,
+        segmentationMultiplier: info.ctx.segmentationMultiplier,
+        startingPositions: info.ctx.startingPositions,
+        moistureFrequency: info.ctx.moistureFrequency,
+        moistureBias: info.ctx.moistureBias,
+        auxFrequency: info.ctx.auxFrequency,
+        auxBias: info.ctx.auxBias,
+        startingAreaMoistureSize: info.ctx.startingAreaMoistureSize,
+        startingAreaMoistureFrequency: info.ctx.startingAreaMoistureFrequency,
+        resourceControls: info.resourceControls,
+        enemyControls: info.enemyControls,
+        cliffControls: info.cliffControls,
+        cliffSettings: info.cliffSettings,
+      },
+      (tile) => {
+        g.putImageData(
+          new ImageData(new Uint8ClampedArray(tile.buffer), tile.width, tile.height),
+          tile.dx,
+          tile.dy,
+        );
+        // Reveal the canvas as soon as there is anything on it, so the fill-in
+        // is visible rather than hidden until the last tile.
+        hasRendered.value = true;
+      },
+    );
+    if (completed) {
+      // Measured across the whole round trip (dispatch, compute, transfer,
+      // blit) - that is the latency a user feels, and what tiling had to move.
       elapsedMs.value = Math.round(performance.now() - startedAt);
     }
   } catch {

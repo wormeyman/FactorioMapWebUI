@@ -13,6 +13,7 @@ function stubCanvas() {
   const putImageData = vi.fn();
   vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
     putImageData,
+    clearRect: vi.fn(),
   } as unknown as CanvasRenderingContext2D);
   return putImageData;
 }
@@ -31,19 +32,63 @@ function setup(mapTypeId: string, renderer: ElevationRenderer, opts: { dev?: boo
   return mount(ElevationPreviewPanel, { props: { renderer } });
 }
 
-function okRenderer(): ElevationRenderer {
+/** Emits four 512x512 tiles covering the 1024x1024 preview, then completes. */
+function okRenderer(tileOrder: number[][] = TILES): ElevationRenderer {
   return {
-    render: vi.fn(async () => ({
-      id: 1,
-      buffer: new ArrayBuffer(1024 * 1024 * 4),
-      width: 1024,
-      height: 1024,
-    })),
+    render: vi.fn(async (_req, onTile) => {
+      for (const [dx, dy] of tileOrder) {
+        onTile({ dx, dy, width: 512, height: 512, buffer: new ArrayBuffer(512 * 512 * 4) });
+      }
+      return true;
+    }),
     dispose: vi.fn(),
   };
 }
 
+const TILES = [
+  [0, 0],
+  [512, 0],
+  [0, 512],
+  [512, 512],
+];
+
 describe("ElevationPreviewPanel", () => {
+  it("blits each tile at its own offset even when they arrive out of order", async () => {
+    const putImageData = stubCanvas();
+    // Tiles land bottom-right first: a panel that tracked "the last offset" or
+    // reused one tile object across callbacks would put them in the wrong place.
+    const renderer = okRenderer([
+      [512, 512],
+      [0, 512],
+      [512, 0],
+      [0, 0],
+    ]);
+    const w = setup("nauvis", renderer);
+    await w.find('[data-test="generate"]').trigger("click");
+    await flushPromises();
+
+    expect(putImageData.mock.calls.map((c) => [c[1], c[2]])).toEqual([
+      [512, 512],
+      [0, 512],
+      [512, 0],
+      [0, 0],
+    ]);
+    // The elapsed readout is stamped once, after the last tile.
+    expect(w.find('[data-test="preview-elapsed"]').exists()).toBe(true);
+  });
+
+  it("does not stamp the elapsed readout for a superseded render", async () => {
+    stubCanvas();
+    const renderer: ElevationRenderer = {
+      render: vi.fn(async () => false),
+      dispose: vi.fn(),
+    };
+    const w = setup("nauvis", renderer);
+    await w.find('[data-test="generate"]').trigger("click");
+    await flushPromises();
+    expect(w.find('[data-test="preview-elapsed"]').exists()).toBe(false);
+  });
+
   it("renders a Lakes preset to the canvas on Generate", async () => {
     const putImageData = stubCanvas();
     const renderer = okRenderer();
@@ -62,7 +107,7 @@ describe("ElevationPreviewPanel", () => {
       originX: -512,
       originY: -512,
     });
-    expect(putImageData).toHaveBeenCalledOnce();
+    expect(putImageData).toHaveBeenCalledTimes(4);
     expect(w.find('[data-test="preview-seed"]').text()).toContain("123456");
   });
 
@@ -75,7 +120,7 @@ describe("ElevationPreviewPanel", () => {
     expect(renderer.render).toHaveBeenCalledOnce();
     const arg = (renderer.render as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(arg).toMatchObject({ seed0: 123456, mapType: "nauvis" });
-    expect(putImageData).toHaveBeenCalledOnce();
+    expect(putImageData).toHaveBeenCalledTimes(4);
   });
 
   it("centers the view on world origin (0,0), not the preset spawn point", async () => {
@@ -121,7 +166,7 @@ describe("ElevationPreviewPanel", () => {
     expect(renderer.render).toHaveBeenCalledOnce();
     const arg = (renderer.render as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(arg).toMatchObject({ view: "terrain", mapType: "nauvis" });
-    expect(putImageData).toHaveBeenCalledOnce();
+    expect(putImageData).toHaveBeenCalledTimes(4);
   });
 
   it("passes view:'resources' + resourceControls after selecting the Resources toggle (Nauvis)", async () => {
@@ -139,7 +184,7 @@ describe("ElevationPreviewPanel", () => {
     expect(arg).toMatchObject({ view: "resources", mapType: "nauvis" });
     // Every catalog resource has a lever entry (defaults 1/1/1).
     expect(arg.resourceControls["iron-ore"]).toEqual({ frequency: 1, size: 1, richness: 1 });
-    expect(putImageData).toHaveBeenCalledOnce();
+    expect(putImageData).toHaveBeenCalledTimes(4);
   });
 
   it("passes view:'enemies' + enemyControls after selecting the Enemies toggle (Nauvis)", async () => {
@@ -156,7 +201,7 @@ describe("ElevationPreviewPanel", () => {
     const arg = (renderer.render as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(arg).toMatchObject({ view: "enemies", mapType: "nauvis" });
     expect(arg.enemyControls).toEqual({ frequency: 1, size: 1 });
-    expect(putImageData).toHaveBeenCalledOnce();
+    expect(putImageData).toHaveBeenCalledTimes(4);
   });
 
   it("passes view:'cliffs' + cliffControls/cliffSettings after selecting the Cliffs toggle (Nauvis)", async () => {
@@ -178,7 +223,7 @@ describe("ElevationPreviewPanel", () => {
       cliffElevationInterval: 40,
       richness: 1,
     });
-    expect(putImageData).toHaveBeenCalledOnce();
+    expect(putImageData).toHaveBeenCalledTimes(4);
   });
 
   it("disables the Cliffs toggle off-Nauvis (Lakes/Island)", async () => {
@@ -207,7 +252,7 @@ describe("ElevationPreviewPanel", () => {
     expect(arg.resourceControls["iron-ore"]).toEqual({ frequency: 1, size: 1, richness: 1 });
     expect(arg.enemyControls).toEqual({ frequency: 1, size: 1 });
     expect(arg.cliffControls).toEqual({ frequency: 1, continuity: 1 });
-    expect(putImageData).toHaveBeenCalledOnce();
+    expect(putImageData).toHaveBeenCalledTimes(4);
   });
 
   it("disables the All toggle off-Nauvis (Lakes/Island)", async () => {
@@ -293,7 +338,7 @@ describe("ElevationPreviewPanel", () => {
     await flushPromises();
     const arg = (renderer.render as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(arg).toMatchObject({ view: "elevation", mapType: "lakes" });
-    expect(putImageData).toHaveBeenCalledOnce();
+    expect(putImageData).toHaveBeenCalledTimes(4);
   });
 
   it("shows an error when the render rejects", async () => {
