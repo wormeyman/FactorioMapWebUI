@@ -139,6 +139,13 @@ truth for "random each new map": `null` = random, which encodes to wire `0`.
 `src/ui/` is a Factorio-styled component kit (`F*` components + `factorio.css`).
 Sliders bind through the store so edits reach `activeExchangeString`.
 
+`src/store/ui.ts` (Pinia `useUiStore`) holds UI-only preferences - currently
+just `devMode` - and persists immediately under `fmw.devMode`, unlike the
+preset store's Save-gated persistence. Dev mode reveals the preview panel's six
+view toggles and the elapsed-ms render readout; it is toggled by the toolbar
+"Debug" checkbox and can be seeded from the URL with `?dev=1` (or forced off
+with `?dev=0`).
+
 The **Enemy tab** (`src/components/EnemyTab.vue`) is the one tab that edits
 MapSettings _tail_ fields (`mapSettings.enemyEvolution` / `enemyExpansion`),
 overlaid back onto the tail at encode time by `writeEnemyToTail` - so untouched

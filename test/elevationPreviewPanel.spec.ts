@@ -382,4 +382,37 @@ describe("ElevationPreviewPanel", () => {
     await flushPromises();
     expect(w.find('[data-test="preview-elapsed"]').exists()).toBe(false);
   });
+
+  it("always renders the composite view once dev mode is turned back off, even after picking a non-composite toggle", async () => {
+    stubCanvas();
+    const renderer = okRenderer();
+    const w = setup("nauvis", renderer); // dev mode on by default
+
+    await w.find('[data-test="view-elevation"]').trigger("click");
+    await w.find('[data-test="dev-mode"] input').setValue(false);
+
+    await w.find('[data-test="generate"]').trigger("click");
+    await flushPromises();
+
+    expect(renderer.render).toHaveBeenCalledOnce();
+    const arg = (renderer.render as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg).toMatchObject({ view: "all", mapType: "nauvis" });
+  });
+
+  it("reveals the view toggles when the URL carries ?dev=1, without an explicit setDevMode call", () => {
+    localStorage.clear();
+    history.replaceState(null, "", "/?dev=1");
+    setActivePinia(createPinia());
+    const store = usePresetsStore();
+    store.createFromBuiltin("Default", "t");
+    store.activePreset!.seed = 123456;
+    writeMapType(store.activePreset!.propertyExpressionNames, "nauvis");
+    const w = mount(ElevationPreviewPanel, { props: { renderer: okRenderer() } });
+
+    try {
+      expect(w.find('[data-test="view-all"]').exists()).toBe(true);
+    } finally {
+      history.replaceState(null, "", "/");
+    }
+  });
 });

@@ -45,12 +45,21 @@ const supported = computed(() => preview.value?.supported ?? false);
 // is the only view a user ever gets, since the toggles are hidden.
 const view = ref<"elevation" | "terrain" | "resources" | "enemies" | "cliffs" | "all">("all");
 const terrainAvailable = computed(() => preview.value?.mapType === "nauvis");
-// What actually renders. renderTerrain always evaluates the Nauvis climate + tile
-// catalog regardless of the preset's map type, so every non-elevation view
-// collapses to "elevation" off-Nauvis rather than rendering the wrong climate.
+// What actually renders, in priority order:
+//   1. Off-Nauvis (Lakes/Island), always "elevation" - renderTerrain always
+//      evaluates the Nauvis climate + tile catalog regardless of the preset's
+//      map type, so every non-elevation view would be unfaithful there.
+//   2. On Nauvis with dev mode on, the user's chosen `view` - `view` is
+//      component state that outlives the toggles being hidden, so this only
+//      applies while the toggles are actually visible to explain it.
+//   3. On Nauvis with dev mode off, always "all" - the toggles are hidden from
+//      ordinary users, so `view` could otherwise be stuck on a stale
+//      non-composite pick from a prior dev-mode session with no way back.
 // Deriving this (instead of the old watch that reset `view`) means a round trip
 // through a Lakes preset no longer destroys the chosen view.
-const effectiveView = computed(() => (terrainAvailable.value ? view.value : "elevation"));
+const effectiveView = computed(() =>
+  !terrainAvailable.value ? "elevation" : ui.devMode ? view.value : "all",
+);
 
 async function generate() {
   const preset = store.activePreset;

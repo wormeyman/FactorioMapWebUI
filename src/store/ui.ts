@@ -1,11 +1,6 @@
 import { defineStore } from "pinia";
 import { DEV_MODE_STORAGE_KEY, resolveDevMode } from "../model/devMode";
 
-/** `window.location.search`, or "" where there is no DOM. */
-function currentSearch(): string {
-  return typeof window === "undefined" ? "" : window.location.search;
-}
-
 function readStored(): string | null {
   try {
     return localStorage.getItem(DEV_MODE_STORAGE_KEY);
@@ -25,7 +20,7 @@ function readStored(): string | null {
  */
 export const useUiStore = defineStore("ui", {
   state: () => ({
-    devMode: resolveDevMode(currentSearch(), readStored()),
+    devMode: resolveDevMode(window.location.search, readStored()),
   }),
   actions: {
     setDevMode(value: boolean) {
