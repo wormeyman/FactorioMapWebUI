@@ -7,6 +7,7 @@
     "dev": "vp dev",
     "build": "vp build",
     "test": "vp test",
+    "perf": "FMW_PERF=1 vp test test/render-cost.perf.spec.ts && cat perf-result.txt",
     "check": "vp check --fix",
     "preview:dev": "concurrently -k -n worker,app -c blue,green \"pnpm run preview:worker\" \"pnpm run preview:app\"",
     "preview:worker": "pnpm --filter @fmw/preview-worker exec wrangler dev --var ALLOWED_ORIGIN:http://localhost:5173",

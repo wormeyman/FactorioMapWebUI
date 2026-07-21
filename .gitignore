@@ -39,3 +39,4 @@ lerna-debug.log*
 *.sln
 *.sw?
 /factorioLuaAPI
+/perf-result.txt
