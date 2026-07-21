@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vite-plus/test";
 import {
+  cliffCellQueryBox,
   runRenderRequest,
   type ElevationRenderRequest,
 } from "../src/noise/preview/elevationRenderRequest";
@@ -423,5 +424,55 @@ describe("runRenderRequest", () => {
     for (const i of cliffs) expect(all.has(i)).toBe(true);
     const union = new Set<number>([...resources, ...enemies, ...cliffs]);
     expect(all.size).toBe(union.size);
+  });
+});
+
+describe("cliffCellQueryBox", () => {
+  const full = { originX: -64, originY: -64, width: 128, height: 128 };
+  const req = (over: Partial<ElevationRenderRequest>): ElevationRenderRequest => ({
+    id: 0,
+    seed0: 1,
+    width: 32,
+    height: 32,
+    originX: -64,
+    originY: -64,
+    tilesPerPixel: 1,
+    waterLevel: 0,
+    segmentationMultiplier: 1,
+    startingPositions: [{ x: 0, y: 0 }],
+    ...over,
+  });
+
+  it("is the plain pixel box when the request is the whole image", () => {
+    expect(cliffCellQueryBox(req({}))).toEqual({ x0: -64, y0: -64, x1: -32, y1: -32 });
+  });
+
+  it("widens an interior tile by the mark radius on every side", () => {
+    // Interior tile at pixel offset (32, 32) of the 128x128 image.
+    const box = cliffCellQueryBox(req({ originX: -32, originY: -32, fullImage: full }));
+    expect(box).toEqual({ x0: -34, y0: -34, x1: 2, y1: 2 });
+  });
+
+  it("clamps to the image edge instead of widening past it", () => {
+    // Top-left tile: the low sides must NOT be widened past the image origin,
+    // because the untiled render drops cells centered outside the image.
+    const box = cliffCellQueryBox(req({ fullImage: full }));
+    expect(box.x0).toBe(full.originX);
+    expect(box.y0).toBe(full.originY);
+    expect(box.x1).toBe(-30); // interior side still widened
+    expect(box.y1).toBe(-30);
+  });
+
+  it("clamps the far edge of the last tile", () => {
+    const box = cliffCellQueryBox(req({ originX: 32, originY: 32, fullImage: full }));
+    expect(box.x1).toBe(full.originX + full.width); // tpp 1
+    expect(box.y1).toBe(full.originY + full.height);
+  });
+
+  it("scales the halo by tilesPerPixel", () => {
+    const box = cliffCellQueryBox(
+      req({ originX: -32, originY: -32, tilesPerPixel: 4, fullImage: full }),
+    );
+    expect(box.x0).toBe(-32 - 8); // CLIFF_MARK_RADIUS_PX * 4
   });
 });

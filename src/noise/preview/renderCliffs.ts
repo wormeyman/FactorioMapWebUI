@@ -39,6 +39,20 @@ export interface RenderCliffsOptions {
   readonly waterLevel?: number;
   readonly startingPositions?: readonly Point[];
   readonly startingLakePositions?: readonly Point[];
+  /**
+   * World box to enumerate placed cliff cells over. Defaults to the pixel grid's
+   * own world box. The tiled renderer widens this by CLIFF_MARK_RADIUS_PX tiles
+   * (clamped to the full image) so a cell centered just outside this tile still
+   * paints the part of its mark that falls inside - without it, cliff marks are
+   * clipped at tile seams. The paint loop already clips to the pixel grid, so a
+   * wider query cannot paint outside the tile.
+   */
+  readonly cellQueryBox?: {
+    readonly x0: number;
+    readonly y0: number;
+    readonly x1: number;
+    readonly y1: number;
+  };
 }
 
 export function renderCliffs(base: ImageData, opts: RenderCliffsOptions): void {
@@ -64,11 +78,13 @@ export function renderCliffs(base: ImageData, opts: RenderCliffsOptions): void {
     startingLakePositions: opts.startingLakePositions,
   });
 
-  const x0 = originX;
-  const y0 = originY;
-  const x1 = originX + width * tpp;
-  const y1 = originY + height * tpp;
-  const cells = placement.placedCells(x0, y0, x1, y1);
+  const box = opts.cellQueryBox ?? {
+    x0: originX,
+    y0: originY,
+    x1: originX + width * tpp,
+    y1: originY + height * tpp,
+  };
+  const cells = placement.placedCells(box.x0, box.y0, box.x1, box.y1);
 
   const r = CLIFF_MARK_RADIUS_PX;
   for (const { x: wx, y: wy } of cells) {
