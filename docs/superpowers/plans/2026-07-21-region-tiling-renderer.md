@@ -51,6 +51,17 @@
 
 Task 1 measures per-tile setup overhead. Its result decides whether **Task 8** (the scene split) runs at all: ratio at or below 1.15 means skip Task 8; above 1.15 means do it. Tasks 2-7 and 9 run regardless.
 
+**GATE RESOLVED - Task 8 is CANCELLED.** Task 1 has been run. Measured ratios of tiled (64 x 128px) against one whole 1024x1024 render:
+
+| view      | whole    | tiled    | ratio |
+| --------- | -------- | -------- | ----- |
+| terrain   | 7810 ms  | 8081 ms  | 1.035 |
+| all       | 10683 ms | 11422 ms | 1.069 |
+
+Both are far under the 1.15 threshold, so rebuilding the resolver stack per tile is not worth engineering away. Task 8 is struck. Do not implement it; its section is retained below only as a record of the rejected option.
+
+Consequences: the worker stays a 7-line file, no renderer gains a `deps` parameter, and the ~3.5-7% extra total CPU is accepted as the cost of tiling. Hold the final browser number against that - the theoretical floor for the composite view is roughly `10.7s / poolSize * 1.069`, and any large gap above it is dispatch and blit overhead, not compute.
+
 ---
 
 ### Task 1: Measure per-tile setup overhead (the phase-A gate)
@@ -268,6 +279,17 @@ export interface TileBox extends ImageBox {
  * trailing row and column are narrower when the size is not divisible, so the
  * tiles cover the image exactly once with no overlap.
  */
+/**
+ * Byte-identity precondition: a tile computes world coordinates as
+ * `(originX + dx * tilesPerPixel) + px * tilesPerPixel`, while the untiled
+ * render computes `originX + (dx + px) * tilesPerPixel`. Those agree exactly
+ * only when the intermediate products are exactly representable in f64 - true
+ * for integer origins and integer `tilesPerPixel`, which is all the app uses
+ * (the preview is fixed at 1). A fractional `tilesPerPixel` (a zoom feature,
+ * say) could make the two disagree in the last bit and silently break the
+ * tiled-equals-untiled invariant. Do not generalize this without extending the
+ * equality gate to the new scale.
+ */
 export function planTiles(full: ImageBox, tileSize: number): TileBox[] {
   if (!(tileSize > 0)) throw new Error("planTiles: tileSize must be positive");
   const tiles: TileBox[] = [];
@@ -372,44 +394,74 @@ So the halo is `CLIFF_MARK_RADIUS_PX * tilesPerPixel`, exact on both sides, no r
 
 The gate is only meaningful if a missing halo actually fails it. Create `test/findSeam.spec.ts` as a throwaway, run it to print the constants, then delete it. (It lives in `test/` rather than the scratchpad because that is the only place the project's test runner will resolve `src/**` imports from.)
 
+Do **not** search for cliff cells near a seam by coordinate. Proximity is necessary but not sufficient: the mark only changes pixels if the clipped part lands on non-water terrain, and a cell near the vertical seam tells you nothing about the horizontal one. Search on the property that actually matters - that a haloless tiled render **differs** from the whole render:
+
 ```ts
 import { it } from "vite-plus/test";
-import { makeCliffPlacement } from "../src/noise/cliffs/cliffPlacement";
+import { runRenderRequest } from "../src/noise/preview/elevationRenderRequest";
 
-// Throwaway: prints an (origin, seed) whose cliff cells sit within 2 tiles of
-// the interior seam of a 64x64 image tiled at 32. Delete this file afterwards.
-it("find a seam-straddling cliff region", () => {
+// Throwaway: finds a region where rendering in tiles WITHOUT a halo actually
+// produces different bytes than rendering it whole. That is exactly the failure
+// the gate must detect, so searching on it directly guarantees the gate can
+// fail. Delete this file once the constants are recorded.
+it("find a region where haloless tiling visibly differs", () => {
   const SIZE = 64;
   const TILE = 32;
-  for (const seed0 of [123456, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) {
-    const placement = makeCliffPlacement({
-      seed0,
-      controls: { frequency: 1, continuity: 1 },
-      settings: { cliffElevation0: 10, cliffElevationInterval: 40, richness: 1 },
-      segmentationMultiplier: 1,
-      waterLevel: 0,
-      startingPositions: [{ x: 0, y: 0 }],
-    });
+  const base = {
+    id: 0,
+    width: SIZE,
+    height: SIZE,
+    tilesPerPixel: 1,
+    waterLevel: 0,
+    segmentationMultiplier: 1,
+    startingPositions: [{ x: 0, y: 0 }],
+    mapType: "nauvis" as const,
+    view: "cliffs" as const,
+  };
+
+  for (const seed0 of [123456, 1, 2, 3, 4, 5]) {
     for (let oy = -512; oy <= 512; oy += SIZE) {
       for (let ox = -512; ox <= 512; ox += SIZE) {
-        const cells = placement.placedCells(ox, oy, ox + SIZE, oy + SIZE);
-        const seamX = ox + TILE;
-        const seamY = oy + TILE;
-        const straddleX = cells.some((c) => Math.abs(c.x - seamX) <= 2);
-        const straddleY = cells.some((c) => Math.abs(c.y - seamY) <= 2);
-        if (straddleX && straddleY) {
-          console.log(`FOUND seed0=${seed0} originX=${ox} originY=${oy} cells=${cells.length}`);
+        const whole = new Uint8ClampedArray(
+          runRenderRequest({ ...base, seed0, originX: ox, originY: oy }).buffer,
+        );
+        // Tile it with no fullImage, i.e. no halo - today's behavior.
+        const tiled = new Uint8ClampedArray(whole.length);
+        for (let dy = 0; dy < SIZE; dy += TILE) {
+          for (let dx = 0; dx < SIZE; dx += TILE) {
+            const t = new Uint8ClampedArray(
+              runRenderRequest({
+                ...base,
+                seed0,
+                originX: ox + dx,
+                originY: oy + dy,
+                width: TILE,
+                height: TILE,
+              }).buffer,
+            );
+            for (let y = 0; y < TILE; y++) {
+              tiled.set(
+                t.subarray(y * TILE * 4, (y + 1) * TILE * 4),
+                ((dy + y) * SIZE + dx) * 4,
+              );
+            }
+          }
+        }
+        let diff = 0;
+        for (let i = 0; i < whole.length; i++) if (whole[i] !== tiled[i]) diff++;
+        if (diff > 0) {
+          console.log(`FOUND seed0=${seed0} originX=${ox} originY=${oy} differingBytes=${diff}`);
           return;
         }
       }
     }
   }
-  throw new Error("no seam-straddling region found - widen the search");
+  throw new Error("no differing region found - widen the search");
 });
 ```
 
 Run: `pnpm vp test test/findSeam.spec.ts`
-Expected: prints one `FOUND seed0=... originX=... originY=...` line. Record those three numbers; they are used as `SEAM_SEED`, `SEAM_ORIGIN_X`, `SEAM_ORIGIN_Y` below. Then `rm test/findSeam.spec.ts`.
+Expected: prints one `FOUND seed0=... originX=... originY=... differingBytes=N` line with `N` comfortably above zero. Record the three numbers as `SEAM_SEED`, `SEAM_ORIGIN_X`, `SEAM_ORIGIN_Y` below, then `rm test/findSeam.spec.ts`. Because the search criterion **is** the gate's assertion, Step 3's "verify it fails" is now guaranteed rather than hoped for.
 
 - [ ] **Step 2: Write the failing gate test**
 
@@ -562,7 +614,7 @@ Add to `ElevationRenderRequest`:
   };
 ```
 
-Add this function above `runRenderRequest`:
+Add this function above `runRenderRequest`, **exported** so the clamp can be unit-tested directly (the equality gate cannot pin it - see Step 6a):
 
 ```ts
 /**
@@ -575,7 +627,7 @@ Add this function above `runRenderRequest`:
  * `wx < x1 + r * tpp`, matching placedCells' inclusive-lower/exclusive-upper
  * filter.
  */
-function cliffCellQueryBox(req: ElevationRenderRequest): {
+export function cliffCellQueryBox(req: ElevationRenderRequest): {
   x0: number;
   y0: number;
   x1: number;
@@ -608,6 +660,69 @@ And pass it in the `renderCliffs` call inside `runRenderRequest`, adding one pro
 
 Run: `pnpm vp test test/tiledEquality.spec.ts`
 Expected: PASS.
+
+- [ ] **Step 6a: Pin the clamp with direct unit tests**
+
+The equality gate proves the **widening** exists (delete it and the gate fails). It does **not** prove the **clamp** exists: dropping the `Math.max`/`Math.min` against `fullImage` only changes pixels if the test region happens to have a placed cliff cell within 2 tiles outside its border *and* a non-water pixel adjacent to it. That is luck, not coverage - and the clamp is the half that preserves byte-identity with the game-validated baseline. Pin it directly.
+
+Add to `test/elevationRenderRequest.spec.ts`:
+
+```ts
+import { cliffCellQueryBox } from "../src/noise/preview/elevationRenderRequest";
+
+describe("cliffCellQueryBox", () => {
+  const full = { originX: -64, originY: -64, width: 128, height: 128 };
+  const req = (over: Partial<ElevationRenderRequest>): ElevationRenderRequest => ({
+    id: 0,
+    seed0: 1,
+    width: 32,
+    height: 32,
+    originX: -64,
+    originY: -64,
+    tilesPerPixel: 1,
+    waterLevel: 0,
+    segmentationMultiplier: 1,
+    startingPositions: [{ x: 0, y: 0 }],
+    ...over,
+  });
+
+  it("is the plain pixel box when the request is the whole image", () => {
+    expect(cliffCellQueryBox(req({}))).toEqual({ x0: -64, y0: -64, x1: -32, y1: -32 });
+  });
+
+  it("widens an interior tile by the mark radius on every side", () => {
+    // Interior tile at pixel offset (32,32) of the 128x128 image.
+    const box = cliffCellQueryBox(req({ originX: -32, originY: -32, fullImage: full }));
+    expect(box).toEqual({ x0: -34, y0: -34, x1: -34 + 36, y1: -34 + 36 });
+  });
+
+  it("clamps to the image edge instead of widening past it", () => {
+    // Top-left tile: the low sides must NOT be widened past the image origin,
+    // because the untiled render drops cells centered outside the image.
+    const box = cliffCellQueryBox(req({ fullImage: full }));
+    expect(box.x0).toBe(full.originX);
+    expect(box.y0).toBe(full.originY);
+    expect(box.x1).toBe(-32 + 2); // interior side still widened
+    expect(box.y1).toBe(-32 + 2);
+  });
+
+  it("clamps the far edge of the last tile", () => {
+    const box = cliffCellQueryBox(req({ originX: 32, originY: 32, fullImage: full }));
+    expect(box.x1).toBe(full.originX + full.width); // tpp 1
+    expect(box.y1).toBe(full.originY + full.height);
+  });
+
+  it("scales the halo by tilesPerPixel", () => {
+    const box = cliffCellQueryBox(
+      req({ originX: -32, originY: -32, tilesPerPixel: 4, fullImage: full }),
+    );
+    expect(box.x0).toBe(-32 - 8); // CLIFF_MARK_RADIUS_PX * 4
+  });
+});
+```
+
+Run: `pnpm vp test test/elevationRenderRequest.spec.ts`
+Expected: PASS. Verify the clamp cases genuinely fail if the `Math.max`/`Math.min` are removed - a gate that cannot fail proves nothing.
 
 - [ ] **Step 7: Run the existing cliff and request tests**
 
@@ -685,7 +800,7 @@ Add inside the existing `describe` in `test/tiledEquality.spec.ts`:
 Run: `pnpm vp test test/tiledEquality.spec.ts`
 Expected: PASS, 10 tests.
 
-If any view fails, **stop and report it** - that is a real finding about a renderer having hidden box dependence, not something to paper over by loosening the assertion. The `tilesPerPixel: 4` case is the most likely to expose one, since it changes the halo scale.
+If any view fails, **stop and report it** - that is a real finding about a renderer having hidden box dependence, not something to paper over by loosening the assertion. The `tilesPerPixel: 4` case is the most likely to expose a halo that was scaled wrongly (it is the only case where the halo is not 2 world tiles). Note it does **not** exercise the floating-point precondition documented in `tiling.ts` - integer origins times an integer scale stay exact; only a fractional `tilesPerPixel` could break that, and nothing in the app produces one.
 
 - [ ] **Step 3: Commit**
 
@@ -910,6 +1025,10 @@ describe("createRenderPool", () => {
     await pool.render(REQ, () => {});
     expect(slots).toEqual(new Set([0]));
   });
+
+  it("rejects a non-positive pool size", () => {
+    expect(() => createRenderPool({ size: 0, tileSize: 2, execute: instant })).toThrow(/size/);
+  });
 });
 ```
 
@@ -972,6 +1091,10 @@ export interface RenderPool {
 }
 
 export function createRenderPool(opts: RenderPoolOptions): RenderPool {
+  // Without this, size 0 would dispatch nothing and silently resolve false -
+  // a render that looks superseded rather than misconfigured.
+  if (!(opts.size > 0)) throw new Error("createRenderPool: size must be positive");
+
   // Bumped by every new render and by dispose(); slots of an older generation
   // stop dispatching and their results are dropped, so a superseded render can
   // never paint over a newer one.
@@ -1194,6 +1317,46 @@ describe("createElevationRenderer", () => {
     expect(workers).toHaveLength(1);
   });
 
+  // Regression test for a hang found in review: with one pending entry per slot,
+  // a second render overwrote the first render's resolver, so the first render's
+  // promise never settled and the panel would stick on "Rendering..." forever.
+  it("settles a superseded render instead of stranding it", async () => {
+    const workers: (WorkerLike & { posted: ElevationRenderRequest[] })[] = [];
+    const r = createElevationRenderer(
+      () => {
+        const w = fakeWorker();
+        workers.push(w);
+        return w;
+      },
+      1,
+      4, // one tile per render
+    );
+
+    const first = r.render(REQ, () => {});
+    await Promise.resolve();
+    const firstPosted = workers[0].posted.splice(0);
+    expect(firstPosted).toHaveLength(1);
+
+    // Supersede before the first tile comes back.
+    const second = r.render(REQ, () => {});
+    await Promise.resolve();
+
+    // Now answer both, oldest first, exactly as a real worker would.
+    for (const req of [...firstPosted, ...workers[0].posted.splice(0)]) {
+      workers[0].onmessage!({
+        data: {
+          id: req.id,
+          buffer: new ArrayBuffer(req.width * req.height * 4),
+          width: req.width,
+          height: req.height,
+        },
+      } as MessageEvent);
+    }
+
+    expect(await first).toBe(false); // superseded, painted nothing
+    expect(await second).toBe(true);
+  });
+
   it("rejects the render when a worker errors", async () => {
     const workers: (WorkerLike & { posted: ElevationRenderRequest[] })[] = [];
     const r = createElevationRenderer(
@@ -1340,11 +1503,30 @@ export function createElevationRenderer(
   tileSize: number = DEFAULT_TILE_SIZE,
 ): ElevationRenderer {
   const workers: (WorkerLike | null)[] = Array.from({ length: size }, () => null);
-  const pending: ({ id: number; reject: (e: unknown) => void } | null)[] = Array.from(
-    { length: size },
-    () => null,
-  );
-  const resolvers: ((r: ElevationRenderResult) => void)[] = [];
+
+  // Keyed by request id, NOT by slot. A slot can legitimately hold two in-flight
+  // tiles at once: when a new render supersedes an older one, the older tile is
+  // still awaiting its worker while the newer tile is dispatched into the same
+  // slot. A one-entry-per-slot map would overwrite the older tile's resolver,
+  // stranding its promise forever so the superseded render never settles and the
+  // panel sticks on "Rendering..." - a real hang, found in review. A worker
+  // handles its messages in order, so both entries resolve in turn.
+  const pending = new Map<
+    number,
+    {
+      slot: number;
+      resolve: (r: ElevationRenderResult) => void;
+      reject: (e: unknown) => void;
+    }
+  >();
+
+  function rejectSlot(slot: number, message: string) {
+    for (const [id, entry] of [...pending]) {
+      if (entry.slot !== slot) continue;
+      pending.delete(id);
+      entry.reject(new Error(message));
+    }
+  }
 
   function dropWorker(slot: number) {
     const w = workers[slot];
@@ -1358,18 +1540,17 @@ export function createElevationRenderer(
     const w = createWorker();
     w.onmessage = (e: MessageEvent) => {
       const result = e.data as ElevationRenderResult;
-      const p = pending[slot];
-      // A response with no matching pending entry is from a superseded render.
-      if (!p || p.id !== result.id) return;
-      pending[slot] = null;
-      resolvers[slot](result);
+      const entry = pending.get(result.id);
+      // An id with no pending entry is a reply to an already-settled request.
+      if (!entry) return;
+      pending.delete(result.id);
+      entry.resolve(result);
     };
-    // A worker crash would otherwise leave its tile's promise pending forever.
+    // A worker crash would otherwise leave its tiles' promises pending forever.
+    // Every tile this slot holds fails, not just the newest.
     w.onerror = () => {
-      const p = pending[slot];
-      pending[slot] = null;
       dropWorker(slot);
-      if (p) p.reject(new Error("Elevation render worker error"));
+      rejectSlot(slot, "Elevation render worker error");
     };
     workers[slot] = w;
     return w;
@@ -1380,8 +1561,7 @@ export function createElevationRenderer(
     tileSize,
     execute: (req, slot) =>
       new Promise<ElevationRenderResult>((resolve, reject) => {
-        pending[slot] = { id: req.id, reject };
-        resolvers[slot] = resolve;
+        pending.set(req.id, { slot, resolve, reject });
         ensureWorker(slot).postMessage(req);
       }),
   });
@@ -1391,10 +1571,8 @@ export function createElevationRenderer(
     dispose() {
       pool.dispose();
       for (let slot = 0; slot < size; slot++) {
-        const p = pending[slot];
-        pending[slot] = null;
         dropWorker(slot);
-        if (p) p.reject(new Error("Elevation renderer disposed"));
+        rejectSlot(slot, "Elevation renderer disposed");
       }
     },
   };
@@ -1516,6 +1694,36 @@ Add this test inside the main `describe`:
     expect(w.find('[data-test="preview-elapsed"]').exists()).toBe(true);
   });
 
+  it("blits each tile at its own offset even when they arrive out of order", async () => {
+    const putImageData = stubCanvas();
+    // Tiles land bottom-right first: a panel that tracked "the last offset" or
+    // shared one tile object across callbacks would put them in the wrong place.
+    const renderer: ElevationRenderer = {
+      render: vi.fn(async (_req, onTile) => {
+        for (const [dx, dy] of [
+          [512, 512],
+          [0, 512],
+          [512, 0],
+          [0, 0],
+        ]) {
+          onTile({ dx, dy, width: 512, height: 512, buffer: new ArrayBuffer(512 * 512 * 4) });
+        }
+        return true;
+      }),
+      dispose: vi.fn(),
+    };
+    const w = setup("nauvis", renderer);
+    await w.find('[data-test="generate"]').trigger("click");
+    await flushPromises();
+
+    expect(putImageData.mock.calls.map((c) => [c[1], c[2]])).toEqual([
+      [512, 512],
+      [0, 512],
+      [512, 0],
+      [0, 0],
+    ]);
+  });
+
   it("does not stamp the elapsed readout for a superseded render", async () => {
     stubCanvas();
     const renderer: ElevationRenderer = {
@@ -1630,9 +1838,16 @@ EOF
 
 ---
 
-### Task 8: Split scene from geometry (CONDITIONAL - only if Task 1's ratio exceeded 1.15)
+### Task 8: Split scene from geometry - CANCELLED, DO NOT IMPLEMENT
 
-**Skip this task entirely if both ratios from Task 1 were at or below 1.15.** Say so explicitly in the task report and move to Task 9.
+**Task 1 measured ratios of 1.035 (terrain) and 1.069 (all), both under the 1.15 threshold. This task is struck.** It is kept below only as a record of what was considered and why it was rejected, so a later reader does not re-derive it. Skip straight to Task 9.
+
+A review of this section while it was still live also found two defects worth recording, in case it is ever revived: the `sceneKey` "fails loudly" comment was false (the project has no type-check step, so a newly added request field would be silently omitted from the key and tiles of different scenes would share a stale resolver stack - it needed to be a test asserting `Object.keys` against an allowlist, not a comment), and neither proposed test actually exercised a cache **hit**, so the one risk that mattered - mutable state accumulating in a reused dep - had zero coverage.
+
+---
+
+<details>
+<summary>Rejected design, retained for the record</summary>
 
 Each tile currently rebuilds every resolver. This task builds them once per worker per settings-change instead, capping duplication at pool size rather than tile count. The approach is additive: each renderer gains an optional pre-built dependency, defaulting to building its own, so every existing test keeps passing untouched.
 
@@ -1994,6 +2209,8 @@ Claude-Session: https://claude.ai/code/session_018iddrFzgnNsqpgH2XuBzrB
 EOF
 ```
 
+</details>
+
 ---
 
 ### Task 9: Verify in the browser and record the result
@@ -2074,3 +2291,18 @@ Checked against the design doc:
 - Browser perf measurement against the ~12.5s baseline - Task 9.
 
 Known deviation from the spec, called out where it happens: `ElevationRenderer.render` changes signature (Task 6). The spec claimed the shape could be preserved; progressive painting makes that impossible.
+
+## External Review - findings applied
+
+A reviewer with no context on this work read the plan against the source. Applied:
+
+1. **Confirmed hang (Task 6).** One pending entry per slot meant a second render overwrote the first render's resolver, stranding its promise so a superseded render never settled and the panel would stick on "Rendering..." forever. Latent today only because the Generate button is disabled while loading. Fixed by keying pending requests on request id rather than slot, since a slot legitimately holds two in-flight tiles across a supersede. Regression test added.
+2. **Untested halo clamp (Task 3).** The equality gate pins the widening but not the clamp - deleting the clamp only changes pixels by luck. Added Step 6a: `cliffCellQueryBox` is now exported and unit-tested for both the widened and the clamped sides.
+3. **Elevation view unmeasured (Task 1).** The gate benched only `terrain` and `all`, then Task 8 asserted without evidence that the elevation path had "nothing to hoist" - contradicted by `renderElevation.ts`'s own docstring about heavy octave closures and by `computeStartingLakes` running per construction. `elevation` was added to the benchmark.
+4. **Weak seam search (Task 3, Step 1).** The old search checked X and Y straddles on possibly different cells and ignored whether the clipped mark landed on water, so a "found" region could still yield a gate that passes without the halo. Replaced with a search on the actual criterion: haloless tiling differing byte-wise from the whole render.
+5. **Perf output clobbered (Task 1).** The block overwrote `perf-result.txt` with the bare accumulated rows, dropping the header and summary the first block wrote. Now appends.
+6. Minor: `size: 0` guard on `createRenderPool`; the floating-point precondition for byte-identity documented in `tiling.ts`; an out-of-order tile test at the panel level, which the design doc asked for and the plan had omitted.
+
+Verified by the reviewer and holding up, so not changed: the halo derivation is exact on both sides (checked against `placedCells`' inclusive-lower/exclusive-upper filter and `renderCliffs`' `Math.floor`, including at `tilesPerPixel: 4` with the half-integer cell-center Y); all four layer renderers are genuinely pure per-pixel functions of world coordinates, with every cache region-keyed on world coordinates rather than the render box; widening the cell query returns a strict superset with unchanged per-cell decisions; and the microtask ordering in the concurrency tests is sound.
+
+Findings 4, 5 and 11 of the review concerned Task 8 only and are moot now that the measurement cancelled it; they are summarized in that section for the record.
