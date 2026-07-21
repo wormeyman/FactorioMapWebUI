@@ -1209,6 +1209,57 @@ async function captureCliffElevation(): Promise<void> {
   console.log(`wrote ${out} (${positions.length} points, ${cases.length} seeds)`);
 }
 
+/**
+ * The Nauvis cliff-ringbreak offset chain. Samples the four named expressions of
+ * the domain-warped offset field at a shared grid, at two seeds:
+ *   - `nauvis_hills_offset_raw_x` / `nauvis_hills_offset_raw_y`: the two
+ *     `basis_noise{seed1 = 'nauvis_offset_x'/'nauvis_offset_y', input_scale =
+ *     nauvis_segmentation_multiplier / 500}` warp fields (string basis-noise
+ *     seeds, resolved to crc32(name) = 593691028 / 1415852290). Capturing them
+ *     directly lets the CI spec re-confirm those seed1 constants.
+ *   - `nauvis_hills_offset`: abs of the seed1=900 multioctave field re-evaluated
+ *     at the warped coordinate (x + 12*normalize(rawX,rawY), y + 12*normalize(rawY,rawX)).
+ *   - `nauvis_cliff_ringbreak`: abs(nauvis_hills - nauvis_hills_offset), the
+ *     base_cliffiness input for Task 6.
+ * Routed onto elevation, default settings. Grid is the standard scattered grid.
+ */
+async function captureCliffOffsetRaw(): Promise<void> {
+  const positions = gridPositions();
+  const seeds = [123456, 777771];
+  const cases: {
+    seed: number;
+    rawX: number[];
+    rawY: number[];
+    hillsOffset: number[];
+    ringbreak: number[];
+  }[] = [];
+  for (const seed of seeds) {
+    const sample = async (expression: string): Promise<number[]> => {
+      const workDir = await mkdtemp(join(tmpdir(), "oracle-capture-"));
+      try {
+        return await sampleExpression(expression, positions, { workDir, seed });
+      } finally {
+        await rm(workDir, { recursive: true, force: true });
+      }
+    };
+    const rawX = await sample("nauvis_hills_offset_raw_x");
+    const rawY = await sample("nauvis_hills_offset_raw_y");
+    const hillsOffset = await sample("nauvis_hills_offset");
+    const ringbreak = await sample("nauvis_cliff_ringbreak");
+    cases.push({ seed, rawX, rawY, hillsOffset, ringbreak });
+    console.log(`  captured cliff-offset-raw seed=${seed}`);
+  }
+  const fixture = {
+    _comment:
+      "Ground truth from Factorio 2.1.11 via test/oracle. The Nauvis cliff-ringbreak offset chain (nauvis_hills_offset_raw_x/raw_y, nauvis_hills_offset, nauvis_cliff_ringbreak) routed onto elevation, default settings. raw_x/raw_y are basis_noise with string seed1 'nauvis_offset_x'/'nauvis_offset_y' (= crc32(name) = 593691028 / 1415852290). Regenerate: node --experimental-strip-types test/oracle/capture.ts cliff-offset-raw",
+    positions,
+    cases,
+  };
+  const out = join(FIXTURES, "oracle-cliff-offset-raw.seed123456.json");
+  await writeFile(out, JSON.stringify(fixture, null, 2) + "\n");
+  console.log(`wrote ${out} (${positions.length} points, ${cases.length} seeds)`);
+}
+
 if (!oracleAvailable()) {
   console.error("No Factorio binary found (set FACTORIO_BIN). Cannot capture fixtures.");
   process.exit(1);
@@ -1238,3 +1289,4 @@ if (want("resource-starting")) await captureResourceStarting();
 if (want("tile-names")) await captureTileNames();
 if (want("enemy-base")) await captureEnemyBase();
 if (want("cliff-elevation")) await captureCliffElevation();
+if (want("cliff-offset-raw")) await captureCliffOffsetRaw();

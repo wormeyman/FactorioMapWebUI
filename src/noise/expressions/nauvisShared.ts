@@ -1,8 +1,23 @@
-import { basisNoiseTablesFromSeed } from "../basisNoise";
+import { basisNoise, basisNoiseTablesFromSeed } from "../basisNoise";
 import { basisNoiseExpr } from "../eval/primitives";
 import { clamp } from "../eval/math";
 import { makeMultioctaveNoise } from "../multioctaveNoise";
 import type { BasisNoiseTables } from "../basisNoise";
+
+/**
+ * `basis_noise` `seed1` for `nauvis_hills_offset_raw_x` - the game passes the
+ * STRING `'nauvis_offset_x'`, which Factorio hashes into the numeric seed1 with
+ * standard CRC32 (identical to `src/codec/crc32.ts`). Resolved once and hardcoded
+ * (spike-confirmed against the oracle, ~1e-7):
+ * `crc32(utf8("nauvis_offset_x")) = 593691028` (0x2360A1D4). See docs/noise/cliffs-NOTES.md.
+ */
+export const NAUVIS_OFFSET_X_SEED1 = 593691028;
+/**
+ * `basis_noise` `seed1` for `nauvis_hills_offset_raw_y` - the string
+ * `'nauvis_offset_y'` hashed with CRC32:
+ * `crc32(utf8("nauvis_offset_y")) = 1415852290` (0x5460AAC2).
+ */
+export const NAUVIS_OFFSET_Y_SEED1 = 1415852290;
 
 export interface NauvisSharedParams {
   /** Map seed (= map_seed / seed0). */
@@ -24,6 +39,18 @@ export interface NauvisShared {
   readonly bridgeBillows: (x: number, y: number) => number;
   /** New: abs of a 4-octave multioctave noise (seed1 1800), no offset_x. */
   readonly forestPathBillows: (x: number, y: number) => number;
+  /**
+   * `nauvis_hills_offset`: the `hills` seed1=900 multioctave field re-evaluated at
+   * a domain-warped coordinate `(x + 12*nx, y + 12*ny)`, then abs. `nx`/`ny` come
+   * from two `basis_noise` warp fields (seed1 = crc32("nauvis_offset_x"/"_y")).
+   */
+  readonly hillsOffset: (x: number, y: number) => number;
+  /**
+   * `nauvis_cliff_ringbreak`: `abs(hills(x,y) - hillsOffset(x,y))` - the
+   * `base_cliffiness` input. Low along a band perpendicular to the offset
+   * direction, which breaks small ring features.
+   */
+  readonly cliffRingbreak: (x: number, y: number) => number;
 }
 
 /**
@@ -68,6 +95,13 @@ export function makeNauvisShared(params: NauvisSharedParams): NauvisShared {
     outputScale: 1,
   });
 
+  // The two `basis_noise` warp fields (`nauvis_hills_offset_raw_x/raw_y`), used to
+  // domain-warp the seed1=900 hills field into `nauvis_hills_offset`. input_scale
+  // = nauvisSeg / 500; string seed1s resolve to the crc32 constants above.
+  const offsetXTables: BasisNoiseTables = basisNoiseTablesFromSeed(seed0, NAUVIS_OFFSET_X_SEED1);
+  const offsetYTables: BasisNoiseTables = basisNoiseTablesFromSeed(seed0, NAUVIS_OFFSET_Y_SEED1);
+  const offsetInputScale = nauvisSeg / 500;
+
   const hills = (x: number, y: number): number => Math.abs(hillsNoise(x, y));
 
   const cliffLevel = (x: number, y: number): number =>
@@ -91,5 +125,31 @@ export function makeNauvisShared(params: NauvisSharedParams): NauvisShared {
   const forestPathBillows = (x: number, y: number): number =>
     Math.abs(forestPathBillowsNoise(x, y));
 
-  return { nauvisSeg, hills, cliffLevel, plateaus, bridgeBillows, forestPathBillows };
+  // `normalize(primary, secondary, bias=0.001)` from noise-programs.lua:
+  // primary / sqrt(bias + primary^2 + secondary^2).
+  const normalize = (a: number, b: number): number => a / Math.sqrt(0.001 + a * a + b * b);
+
+  const hillsOffset = (x: number, y: number): number => {
+    const rawX = basisNoise(x * offsetInputScale, y * offsetInputScale, offsetXTables);
+    const rawY = basisNoise(x * offsetInputScale, y * offsetInputScale, offsetYTables);
+    const nx = normalize(rawX, rawY);
+    const ny = normalize(rawY, rawX);
+    // Re-evaluate the seed1=900 octave field (same params as `hills`) at the WARPED
+    // coordinate - NOT the abs-wrapped `hills(x,y)`, which is memoized at (x,y).
+    return Math.abs(hillsNoise(x + 12 * nx, y + 12 * ny));
+  };
+
+  const cliffRingbreak = (x: number, y: number): number =>
+    Math.abs(hills(x, y) - hillsOffset(x, y));
+
+  return {
+    nauvisSeg,
+    hills,
+    cliffLevel,
+    plateaus,
+    bridgeBillows,
+    forestPathBillows,
+    hillsOffset,
+    cliffRingbreak,
+  };
 }
