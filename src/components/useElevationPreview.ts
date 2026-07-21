@@ -74,11 +74,16 @@ export function createElevationRenderer(
     { slot: number; resolve: (r: ElevationRenderResult) => void; reject: (e: unknown) => void }
   >();
 
+  // Collect first, then settle: rejecting inside the loop would mutate `pending`
+  // while iterating it.
   function rejectSlot(slot: number, message: string) {
-    for (const [id, entry] of [...pending]) {
-      if (entry.slot !== slot) continue;
+    const doomed: { id: number; reject: (e: unknown) => void }[] = [];
+    for (const [id, entry] of pending) {
+      if (entry.slot === slot) doomed.push({ id, reject: entry.reject });
+    }
+    for (const { id, reject } of doomed) {
       pending.delete(id);
-      entry.reject(new Error(message));
+      reject(new Error(message));
     }
   }
 
