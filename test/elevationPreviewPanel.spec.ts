@@ -348,4 +348,38 @@ describe("ElevationPreviewPanel", () => {
     expect(w.find('[data-test="view-all"]').exists()).toBe(true);
     expect(useUiStore().devMode).toBe(true);
   });
+
+  it("reports the elapsed render time after a render, and nothing before one", async () => {
+    stubCanvas();
+    const w = setup("nauvis", okRenderer());
+    expect(w.find('[data-test="preview-elapsed"]').exists()).toBe(false);
+
+    await w.find('[data-test="generate"]').trigger("click");
+    await flushPromises();
+
+    // The clock is real, so assert the shape, not a duration.
+    expect(w.find('[data-test="preview-elapsed"]').text()).toMatch(/^\d[\d,]* ms$/);
+  });
+
+  it("hides the elapsed readout when dev mode is off", async () => {
+    stubCanvas();
+    const w = setup("nauvis", okRenderer(), { dev: false });
+    await w.find('[data-test="generate"]').trigger("click");
+    await flushPromises();
+    expect(w.find('[data-test="preview-elapsed"]').exists()).toBe(false);
+  });
+
+  it("reports no elapsed time when the render fails", async () => {
+    stubCanvas();
+    const renderer: ElevationRenderer = {
+      render: vi.fn(async () => {
+        throw new Error("boom");
+      }),
+      dispose: vi.fn(),
+    };
+    const w = setup("nauvis", renderer);
+    await w.find('[data-test="generate"]').trigger("click");
+    await flushPromises();
+    expect(w.find('[data-test="preview-elapsed"]').exists()).toBe(false);
+  });
 });

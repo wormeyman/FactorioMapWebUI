@@ -27,6 +27,8 @@ const loading = ref(false);
 const error = ref<string | null>(null);
 const seed = ref<number | null>(null);
 const hasRendered = ref(false);
+/** Wall-clock ms of the last completed render, or null before/behind a failure. */
+const elapsedMs = ref<number | null>(null);
 
 const preview = computed(() =>
   store.activePreset ? elevationCtxFromPreset(store.activePreset) : null,
@@ -62,6 +64,8 @@ async function generate() {
 
   loading.value = true;
   error.value = null;
+  elapsedMs.value = null;
+  const startedAt = performance.now();
   try {
     const result = await renderer.render({
       seed0,
@@ -97,6 +101,9 @@ async function generate() {
         0,
       );
       hasRendered.value = true;
+      // Measured across the whole round trip (worker post, compute, transfer,
+      // blit) - that is the latency a user feels, and what tiling has to move.
+      elapsedMs.value = Math.round(performance.now() - startedAt);
     }
   } catch {
     error.value = "Preview failed.";
@@ -110,6 +117,13 @@ async function generate() {
   <div class="elevation-preview">
     <div class="preview-toolbar">
       <span v-if="seed !== null" class="seed" data-test="preview-seed">Seed: {{ seed }}</span>
+      <span
+        v-if="ui.devMode && elapsedMs !== null"
+        class="seed"
+        data-test="preview-elapsed"
+        title="Wall-clock time from render request to canvas blit"
+        >{{ elapsedMs.toLocaleString("en-US") }} ms</span
+      >
       <div v-if="ui.devMode" class="view-toggle" role="group" aria-label="Preview view">
         <FButton
           data-test="view-elevation"
