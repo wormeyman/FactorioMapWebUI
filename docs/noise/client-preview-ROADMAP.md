@@ -271,9 +271,10 @@ Done = ore patches overlaid on land, responding to the frequency/size/richness s
 
 ## Milestone 4 - the long tail
 
-- [x] Cliffs (`cliffiness` / cliff elevation bands) - DONE (2026-07-20, branch
-      `feat/m4-cliffs`). Done = a Nauvis-gated `view: "cliffs"` footprint overlay
-      painting `CLIFF_MAP_COLOR = [144,119,87]`, driven by the two oracle-validated
+- [x] Cliffs (`cliffiness` / cliff elevation bands) - DONE (2026-07-20; merged to
+      main + deployed live, main tip `e783901`). Done = a Nauvis-gated
+      `view: "cliffs"` footprint overlay painting `CLIFF_MAP_COLOR = [144,119,87]`
+      (a 5x5 block per cell for preview legibility), driven by the two oracle-validated
       noise fields (`cliff_elevation_nauvis`, `cliffiness_nauvis`) plus a
       disasm-derived geometric placement rule (`crossesCliff` + the 4-tile grid +
       `toMaybeCliffOrientation` none/not-none predicate), levers wired
