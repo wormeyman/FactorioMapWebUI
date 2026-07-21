@@ -3,7 +3,9 @@
 import { computed, ref } from "vue";
 import { elevationCtxFromPreset } from "../model/elevationPreviewCtx";
 import { usePresetsStore } from "../store/presets";
+import { useUiStore } from "../store/ui";
 import FButton from "../ui/FButton.vue";
+import FCheckbox from "../ui/FCheckbox.vue";
 import { useElevationPreview, type ElevationRenderer } from "./useElevationPreview";
 
 // Fixed view matched to the server --generate-map-preview: 1024 tiles across at
@@ -19,6 +21,7 @@ const props = defineProps<{ renderer?: ElevationRenderer }>();
 const renderer = props.renderer ?? useElevationPreview();
 
 const store = usePresetsStore();
+const ui = useUiStore();
 const canvas = ref<HTMLCanvasElement | null>(null);
 const loading = ref(false);
 const error = ref<string | null>(null);
@@ -107,7 +110,7 @@ async function generate() {
   <div class="elevation-preview">
     <div class="preview-toolbar">
       <span v-if="seed !== null" class="seed" data-test="preview-seed">Seed: {{ seed }}</span>
-      <div class="view-toggle" role="group" aria-label="Preview view">
+      <div v-if="ui.devMode" class="view-toggle" role="group" aria-label="Preview view">
         <FButton
           data-test="view-elevation"
           :variant="effectiveView === 'elevation' ? 'tool' : 'default'"
@@ -176,6 +179,12 @@ async function generate() {
         </FButton>
       </div>
       <span class="spacer" />
+      <FCheckbox
+        data-test="dev-mode"
+        label="Debug"
+        :model-value="ui.devMode"
+        @update:model-value="ui.setDevMode($event)"
+      />
       <FButton
         data-test="generate"
         variant="confirm"
