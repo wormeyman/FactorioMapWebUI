@@ -6,7 +6,7 @@
 // which sets FMW_PERF=1, runs this file, and prints the table it writes to
 // perf-result.txt (gitignored). This is the baseline to measure region-tiling
 // (or any render optimization) against - see the render-tiling design doc.
-import { writeFileSync } from "node:fs";
+import { appendFileSync, writeFileSync } from "node:fs";
 import { it } from "vite-plus/test";
 import { runRenderRequest } from "../src/noise/preview/elevationRenderRequest";
 import { renderTerrain } from "../src/noise/preview/renderTerrain";
@@ -109,4 +109,48 @@ perfIt(
     );
   },
   600000,
+);
+
+// Phase-A gate for the region-tiling plan: how much does rebuilding every
+// resolver per tile cost? Renders the same 1024x1024 area as 64 128x128 tiles
+// and compares against the single whole-image render. A ratio near 1.0 means
+// per-tile setup is noise; a high ratio means the resolver stack has to be
+// hoisted out of the per-tile path. iters=1 because each pass is already 64
+// renders. "elevation" is included because it is the view every non-Nauvis
+// preset uses, and its per-render setup (compiled octave closures, starting-lake
+// computation) is the most likely to dominate a small total.
+perfIt(
+  "tile overhead: 64 x 128x128 vs one 1024x1024",
+  () => {
+    const TILE = 128;
+    const out: string[] = ["", "tile overhead (64 x 128 tiles vs one whole render)"];
+    for (const view of ["elevation", "terrain", "all"] as const) {
+      const whole = time(`whole ${view}`, () => runRenderRequest({ ...base, view }), 1);
+      const tiled = time(
+        `tiled ${view} (64 x ${TILE})`,
+        () => {
+          for (let dy = 0; dy < N; dy += TILE) {
+            for (let dx = 0; dx < N; dx += TILE) {
+              runRenderRequest({
+                ...base,
+                view,
+                width: TILE,
+                height: TILE,
+                originX: -HALF + dx,
+                originY: -HALF + dy,
+              });
+            }
+          }
+        },
+        1,
+      );
+      out.push(`${`whole ${view}`.padEnd(30)} ${whole.toFixed(0).padStart(6)} ms`);
+      out.push(`${`tiled ${view}`.padEnd(30)} ${tiled.toFixed(0).padStart(6)} ms`);
+      out.push(`${`ratio ${view}`.padEnd(30)} ${(tiled / whole).toFixed(3).padStart(6)}`);
+    }
+    // Append: the first block already wrote the header and summary, and
+    // overwriting here would drop them from the file `pnpm perf` cats.
+    appendFileSync("perf-result.txt", out.join("\n") + "\n");
+  },
+  900000,
 );
