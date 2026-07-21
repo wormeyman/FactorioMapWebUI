@@ -235,10 +235,12 @@ ships in M3a/b and stands as the M3 end state.
 
 M3a follow-ups (known, deferred by priority - 2026-07-20):
 
-- [ ] **Ore excluded from cliffs** (low priority, blocked): resources also collide
-      with cliffs, but cliffs aren't rendered yet (see M4). Once they are, exclude
-      ore off cliff pixels exactly like water (same WATER_TILE_COLORS mechanism in
-      renderResources).
+- [ ] **Ore excluded from cliffs** (low priority, deferred): resources also collide
+      with cliffs in-game. Cliffs now render (M4, `view: "cliffs"`), but this
+      exclusion is still not wired into `renderResources` - it would reuse the same
+      `WATER_TILE_COLORS`-style pixel-exclusion mechanism, gated on the M4 cliff
+      placement (which is itself only ~94% exact pending the deferred
+      `fixImpossibleCells`, see the M4 section below).
 - [ ] **Oil renders as tiny dots, not patches** (low priority, partly by-design):
       crude-oil is genuinely sparse in-game (`random_probability = 1/48`,
       `spot_size 1..1`), so it is individual wells, not a contiguous field - the
@@ -269,7 +271,26 @@ Done = ore patches overlaid on land, responding to the frequency/size/richness s
 
 ## Milestone 4 - the long tail
 
-- [ ] Cliffs (`cliffiness` / cliff elevation bands).
+- [x] Cliffs (`cliffiness` / cliff elevation bands) - DONE (2026-07-20, branch
+      `feat/m4-cliffs`). Done = a Nauvis-gated `view: "cliffs"` footprint overlay
+      painting `CLIFF_MAP_COLOR = [144,119,87]`, driven by the two oracle-validated
+      noise fields (`cliff_elevation_nauvis`, `cliffiness_nauvis`) plus a
+      disasm-derived geometric placement rule (`crossesCliff` + the 4-tile grid +
+      `toMaybeCliffOrientation` none/not-none predicate), levers wired
+      (`nauvis_cliff` frequency/continuity + `cliffSettings`). Validated ~94% against
+      real `find_entities_filtered{type="cliff"}` dumps (frac 0.943 seed 123456,
+      0.942 seed 777771) and cross-checked against a real
+      `factorio --generate-map-preview` render of the same seed/region (95.7%
+      spatial agreement at render resolution, using the game's own emitted
+      `[144,119,87]` pixels as ground truth). Full writeup: `cliffs-NOTES.md`.
+      **Still deferred** (do not treat as done): `fixImpossibleCells` (the ~6%
+      residual - border-crossing zeroing + impossible-cell rewriting), the exact
+      `wouldCollide` collision rejection (approximated by the existing
+      water-pixel exclusion), and the ore-on-cliff exclusion this unblocks (see the
+      M3a follow-up above). `VoronoiNoise` (layer-1 primitive table below) is
+      confirmed **unneeded for Nauvis** - it appears nowhere in the cliff tree or
+      any other Nauvis expression traced so far, only on Space-Age planets - so it
+      remains un-ported with no open TODO against it.
 - [x] Enemy bases (enemy autoplace - `enemy-autoplace-utils.lua`), starting-area
       clearing. Done = footprint overlay (`view: "enemies"`) from the
       oracle-validated `enemy_base_probability` field, threshold
@@ -305,7 +326,7 @@ The binary defines exactly **14** `NoiseOperations::*::run` types. Status:
 | `Ridge` | terrain | small - NOT used by any elevation tree; every "ridge" in noise-programs.lua is the `b`ridge`` substring (2026-07-19) |
 | `RandomPenalty` | jitter | small |
 | `Multisampling` | AA/quality | small |
-| `VoronoiNoise` | some terrains | medium (new primitive; not yet probed) |
+| `VoronoiNoise` | some terrains | **confirmed unneeded for Nauvis** (2026-07-20, M4 cliffs RE) - present in the binary but not referenced by the cliff tree or any other Nauvis expression traced so far; only appears on Space-Age planets. Un-ported, no open TODO. |
 
 Method for each: disassemble `NoiseOperations::<Op>::run` (the capstone
 disassembler `scratchpad/re/fdis.py` seeks by symbol address from

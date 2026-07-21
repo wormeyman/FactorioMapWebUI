@@ -72,6 +72,15 @@ crc32("nauvis_offset_y") = 1415852290  (0x5460AAC2)
 The port computes these via the existing `crc32` (or hardcodes the two constants
 with this note as the source).
 
+**Confirmed (Task 11, 2026-07-20):** `NAUVIS_OFFSET_X_SEED1 = 593691028` /
+`NAUVIS_OFFSET_Y_SEED1 = 1415852290` are exactly `crc32("nauvis_offset_x")` /
+`crc32("nauvis_offset_y")` as above, and remain oracle-validated end-to-end - the
+whole cliff placement pipeline that depends on them (via `nauvis_hills_offset_raw_x/y`
+-> `nauvis_hills_offset_normalized_x/y` -> `nauvis_hills_offset` ->
+`nauvis_cliff_ringbreak` -> `base_cliffiness`) reproduces the real game's
+`find_entities` cliff positions to the frac given below, so no separate standalone
+regression on the two constants was needed.
+
 Already ported (reuse `src/noise/expressions/nauvisShared.ts`): `nauvis_hills`,
 `nauvis_hills_cliff_level`, `forest_path_billows`, `nauvis_bridge_billows`. New:
 `elevation_nauvis_no_cliff` (= `elevation_nauvis_function(0)`, i.e. the elevation
@@ -156,14 +165,20 @@ the table.
 
 Reimplementing the rule (sample `cliff_elevation_nauvis` + `cliffiness_nauvis` at the
 corner lattice via the oracle, apply the crossing rule + lattice) reproduced the real
-`find_entities` cliffs:
+`find_entities` cliffs. Final numbers, from the committed drift-guard test
+(`test/cliffPlacement.spec.ts`, fixture `oracle-cliff-entities.seed123456.json`,
+region `[512,1024)^2`):
 
-| seed   | region        | actual | matched | interior-only |
-| ------ | ------------- | ------ | ------- | ------------- |
-| 123456 | [512,768)^2   | 57     | 51 (89%)| 27/31 (87%)   |
-| 777771 | [1024,1408)^2 | 77     | 69 (90%)| 39/43 (91%)   |
+| seed   | region      | actual | predicted | matched | frac  |
+| ------ | ----------- | ------ | --------- | ------- | ----- |
+| 123456 | [512,1024)^2| 282    | 282       | 266     | 0.943 |
+| 777771 | [512,1024)^2| 52     | 52        | 49      | 0.942 |
 
-Lattice was 100% exact; the ~10% residual is **not** a phase error or f32 noise - it
+(An earlier spike over smaller sub-regions measured ~89-90%; the final full-region
+numbers above, re-measured 2026-07-20 for Task 11, are the ones the test asserts
+against with a `>= 0.85` drift guard.)
+
+Lattice was 100% exact; the ~6% residual is **not** a phase error or f32 noise - it
 is `fixImpossibleCells` (`0x101606944`, called at the tail of `crossingsForChunk`):
 (a) zeroes crossings on each chunk's outer-border edges, then (b) rewrites
 "impossible" cell configurations to keep cliff faces continuous / punch passages (the
@@ -171,11 +186,22 @@ game's own comment). Plus `tryToAddCliff` (`0x10161f42c`) drops cliffs whose
 collision box `wouldCollide` (`0x10161f85c`) - the water/existing-entity rejection.
 
 **Decision (Eric, 2026-07-20): ship the exact geometric rule and DEFER
-`fixImpossibleCells`.** Positions are lattice-exact and ~90% of cliffs match; the
+`fixImpossibleCells`.** Positions are lattice-exact and ~94% of cliffs match; the
 residual is a continuity tweak that is visually negligible at downsampled preview
 scale. Water rejection is approximated by the existing `WATER_TILE_COLORS`
 pixel-exclusion (cliffs are not painted on water pixels). Porting `fixImpossibleCells`
 + the exact `wouldCollide` to reach true tile-for-tile 100% is a separate follow-up.
+
+**Task 11 cross-check (2026-07-20):** a real headless
+`factorio --generate-map-preview` render of seed 123456 for the matching world
+region emits the exact `CLIFF_MAP_COLOR = [144,119,87]` pixels (3990 raw pixels at
+1 meter/pixel) - confirming the color extraction independently of this port. Using
+those pixels as ground truth, downsampled 2x to the app's `tilesPerPixel=2` render
+resolution, the app's own cliffs overlay agrees with the game's real preview output
+at 95.7% (within a +-1 cell tolerance) - a second, independent measurement in the
+same ballpark as the `find_entities` frac above, and visually the two masks (cell
+positions tracing the same plateau-edge curves) are effectively indistinguishable at
+this resolution.
 
 ## Binary symbols (cliff placement)
 
@@ -196,3 +222,9 @@ BIN="$HOME/Library/Application Support/Steam/steamapps/common/Factorio/factorio.
 lldb -b -o "disassemble --name '_ZN13CliffGenerator12crossesCliffEfffff'" "$BIN"
 nm "$BIN" | c++filt | grep -i cliff        # find mangled names
 ```
+
+**RE-recipe note:** on some of the symbols above, `lldb "disassemble --name
+'<mangled>'"` did NOT resolve the symbol on this binary (silently produced no
+output/an empty disassembly) even though `nm | c++filt` clearly listed it. Use
+`disassemble --start-address <VA> --end-address <VA>` against the `nm`-reported
+virtual address instead - that always worked when the by-name form did not.
