@@ -1210,6 +1210,45 @@ async function captureCliffElevation(): Promise<void> {
 }
 
 /**
+ * cliffiness_nauvis ground truth. The core cliff GATE field: `(main_cliffiness >=
+ * cliff_cutoff) * 10`, so every value is exactly 0 or 10. Same corner-lattice grid
+ * as captureCliffElevation ([0,512) stride 16, x on 4s, y on 4s+0.5) so the two
+ * fixtures pair up for placement. Two seeds.
+ */
+async function captureCliffiness(): Promise<void> {
+  const positions: Position[] = [];
+  for (let iy = 0; iy < 32; iy++)
+    for (let ix = 0; ix < 32; ix++) positions.push({ x: ix * 16, y: iy * 16 + 0.5 });
+  const seeds = [123456, 777771];
+  const cases: { seed: number; values: number[] }[] = [];
+  for (const seed of seeds) {
+    const workDir = await mkdtemp(join(tmpdir(), "oracle-capture-"));
+    try {
+      const values = await sampleExpression("cliffiness_nauvis", positions, { workDir, seed });
+      cases.push({ seed, values });
+      console.log(`  captured cliffiness seed=${seed}`);
+    } finally {
+      await rm(workDir, { recursive: true, force: true });
+    }
+  }
+  const out = join(FIXTURES, "oracle-cliffiness.seed123456.json");
+  await writeFile(
+    out,
+    JSON.stringify(
+      {
+        _comment:
+          "Ground truth from Factorio 2.1.11 via test/oracle. cliffiness_nauvis routed onto elevation, default settings. This is the exact 0/10 GATE (main_cliffiness >= cliff_cutoff) * 10. Regenerate: node --experimental-strip-types test/oracle/capture.ts cliffiness",
+        positions,
+        cases,
+      },
+      null,
+      2,
+    ) + "\n",
+  );
+  console.log(`wrote ${out} (${positions.length} points, ${cases.length} seeds)`);
+}
+
+/**
  * The Nauvis cliff-ringbreak offset chain. Samples the four named expressions of
  * the domain-warped offset field at a shared grid, at two seeds:
  *   - `nauvis_hills_offset_raw_x` / `nauvis_hills_offset_raw_y`: the two
@@ -1289,4 +1328,5 @@ if (want("resource-starting")) await captureResourceStarting();
 if (want("tile-names")) await captureTileNames();
 if (want("enemy-base")) await captureEnemyBase();
 if (want("cliff-elevation")) await captureCliffElevation();
+if (want("cliffiness")) await captureCliffiness();
 if (want("cliff-offset-raw")) await captureCliffOffsetRaw();

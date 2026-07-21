@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import elevFixture from "./fixtures/oracle-cliff-elevation.seed123456.json";
-import { makeCliffElevation } from "../src/noise/cliffs/cliffFields";
+import cliffinessFixture from "./fixtures/oracle-cliffiness.seed123456.json";
+import { makeCliffElevation, makeCliffiness } from "../src/noise/cliffs/cliffFields";
 
 const ABS_TOL = 1.0,
   REL_TOL = 1e-2;
@@ -24,6 +25,24 @@ describe("makeCliffElevation vs oracle", () => {
         expect(ok(port, game)).toBe(true);
       }
       expect(worstAbs).toBeLessThan(ABS_TOL * 10); // sanity: not wildly off
+    });
+  }
+});
+
+describe("makeCliffiness vs oracle (exact 0/10 gate)", () => {
+  for (const c of cliffinessFixture.cases) {
+    it(`matches cliffiness_nauvis seed=${c.seed}`, () => {
+      const f = makeCliffiness(ctx(c.seed));
+      const mism: string[] = [];
+      for (let i = 0; i < cliffinessFixture.positions.length; i++) {
+        const p = cliffinessFixture.positions[i];
+        const port = f(p.x, p.y),
+          game = c.values[i];
+        if (port !== game) mism.push(`(${p.x},${p.y}) game=${game} port=${port}`);
+      }
+      if (mism.length)
+        throw new Error(`${mism.length} gate mismatches:\n${mism.slice(0, 12).join("\n")}`);
+      expect(mism.length).toBe(0);
     });
   }
 });
