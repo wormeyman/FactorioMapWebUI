@@ -705,4 +705,22 @@ Not a test - this is how the in-browser baseline for the region-tiling work gets
 - [ ] Click Generate on a Nauvis preset; confirm a full composite map renders (terrain + ore + enemy bases + cliffs).
 - [ ] Tick `Debug`; confirm the six view buttons and the `N ms` readout appear, and that `All` is highlighted.
 - [ ] Reload; confirm dev mode stayed on. Open `/?dev=0`; confirm it turns off.
-- [ ] Record the `ms` figure for the `All` view at 1024x1024 - that is the honest before-number the tiling work is measured against (the `pnpm perf` harness runs ~2.5-3x pessimistic against it, so it is a relative-cost tool only).
+- [ ] Record the `ms` figure for the `All` view at 1024x1024 - that is the honest before-number the tiling work is measured against.
+
+### Measured 2026-07-20 (production build, seed 123456, 1024x1024, tpp 1)
+
+| view | browser | `pnpm perf` (Node) |
+| --- | --- | --- |
+| elevation | 1,651 ms | ~1,400 ms |
+| terrain | 9,087 ms | ~8,000 ms |
+| all | 12,534 / 12,815 ms | ~10,900 ms |
+
+**This refutes the assumption that motivated the readout.** The `pnpm perf` harness was
+believed to run 2.5-3x pessimistic against the browser; it is in fact mildly *optimistic* -
+the browser is consistently ~13-15% slower than the Node bench, not 3x faster. The bench
+was a sound proxy all along, and the composite view really does cost ~12.5s in a real
+browser, not ~4s. The dev server was ruled out as the cause: `pnpm vp dev` measured 12.9s
+for terrain and 12.6s for all, i.e. the same order as the production build.
+
+Region tiling therefore has a bigger job than assumed, and the bench remains usable as the
+fast inner-loop signal (scale its numbers up ~15% to predict browser wall-clock).
