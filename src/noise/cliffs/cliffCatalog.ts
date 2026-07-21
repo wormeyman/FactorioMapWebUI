@@ -17,9 +17,6 @@ export const CLIFF_MAP_COLOR: readonly [number, number, number] = [144, 119, 87]
 /** Cliff placement grid cell size, in tiles. */
 export const CLIFF_GRID_SIZE = 4;
 
-/** Y offset of the cliff placement grid, in tiles. */
-export const CLIFF_GRID_OFFSET_Y = 0.5;
-
 /** X coordinate of a cliff cell's center, in cell-local tiles. */
 export const CLIFF_CELL_CENTER_X = 2;
 
