@@ -17,6 +17,18 @@ export const CLIFF_MAP_COLOR: readonly [number, number, number] = [144, 119, 87]
 /** Cliff placement grid cell size, in tiles. */
 export const CLIFF_GRID_SIZE = 4;
 
+/**
+ * Radius, in pixels, of the square block painted per placed cliff cell. Cliffs
+ * sit on a sparse 4-tile grid, so at preview scale a single pixel per cell reads
+ * as a faint stipple that blends into the terrain; painting a `(2r+1)x(2r+1)`
+ * block thickens the footprint so the cliff lines are legible while keeping the
+ * faithful `CLIFF_MAP_COLOR`. `0` = one pixel per cell (the pre-thickening look).
+ * `2` (a 5x5 block) is the notch where the sparse per-cell stipple joins into
+ * continuous cliff ridgelines at the app's 1024px / 1-tile-per-pixel preview
+ * without over-thickening; verified by eyeball across the full Nauvis view.
+ */
+export const CLIFF_MARK_RADIUS_PX = 2;
+
 /** X coordinate of a cliff cell's center, in cell-local tiles. */
 export const CLIFF_CELL_CENTER_X = 2;
 

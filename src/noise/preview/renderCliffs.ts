@@ -1,9 +1,10 @@
 /**
  * Composite the cliff footprint overlay onto a terrain ImageData: enumerate
  * placed cliff cells over the pixel grid's world box (via `makeCliffPlacement`,
- * T7), map each cell center to a pixel, and paint `CLIFF_MAP_COLOR` opaque;
- * leave the terrain pixel untouched elsewhere. Mutates `base` in place. See M4
- * cliffs plan T9.
+ * T7), map each cell center to a pixel, and paint a small `CLIFF_MAP_COLOR`
+ * block (`CLIFF_MARK_RADIUS_PX`) so the sparse 4-tile-grid footprint reads at
+ * preview scale; leave the terrain pixel untouched elsewhere. Mutates `base` in
+ * place. See M4 cliffs plan T9.
  *
  * Unlike renderResources/renderEnemies (which sweep every pixel and query a
  * field), cliffs are placed on a sparse 4-tile grid - `placedCells` already
@@ -19,6 +20,7 @@ import type { Point } from "../distanceFromNearestPoint";
 import { makeCliffPlacement } from "../cliffs/cliffPlacement";
 import {
   CLIFF_MAP_COLOR,
+  CLIFF_MARK_RADIUS_PX,
   type CliffControls,
   type CliffSettingsInput,
 } from "../cliffs/cliffCatalog";
@@ -68,15 +70,25 @@ export function renderCliffs(base: ImageData, opts: RenderCliffsOptions): void {
   const y1 = originY + height * tpp;
   const cells = placement.placedCells(x0, y0, x1, y1);
 
+  const r = CLIFF_MARK_RADIUS_PX;
   for (const { x: wx, y: wy } of cells) {
-    const px = Math.floor((wx - originX) / tpp);
-    const py = Math.floor((wy - originY) / tpp);
-    if (px < 0 || px >= width || py < 0 || py >= height) continue;
-    const o = (py * width + px) * 4;
-    if (isWater(base.data[o], base.data[o + 1], base.data[o + 2])) continue;
-    base.data[o] = CLIFF_MAP_COLOR[0];
-    base.data[o + 1] = CLIFF_MAP_COLOR[1];
-    base.data[o + 2] = CLIFF_MAP_COLOR[2];
-    base.data[o + 3] = 255;
+    const cx = Math.floor((wx - originX) / tpp);
+    const cy = Math.floor((wy - originY) / tpp);
+    // Paint a (2r+1)x(2r+1) block centered on the cell's pixel, water-checking
+    // each painted pixel so the thickened footprint still never bleeds onto water.
+    for (let dy = -r; dy <= r; dy++) {
+      const py = cy + dy;
+      if (py < 0 || py >= height) continue;
+      for (let dx = -r; dx <= r; dx++) {
+        const px = cx + dx;
+        if (px < 0 || px >= width) continue;
+        const o = (py * width + px) * 4;
+        if (isWater(base.data[o], base.data[o + 1], base.data[o + 2])) continue;
+        base.data[o] = CLIFF_MAP_COLOR[0];
+        base.data[o + 1] = CLIFF_MAP_COLOR[1];
+        base.data[o + 2] = CLIFF_MAP_COLOR[2];
+        base.data[o + 3] = 255;
+      }
+    }
   }
 }

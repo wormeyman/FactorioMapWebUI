@@ -64,5 +64,37 @@ describe("renderCliffs", () => {
     for (let i = 0; i < img.data.length; i += 4)
       expect([img.data[i], img.data[i + 1], img.data[i + 2]]).toEqual([wr, wg, wb]);
   });
+  it("thickens each cell to a block so cliff lines read at preview scale", () => {
+    // Cells sit on a 4-tile grid, so at tpp 1 painted cells are >= 4px apart; if
+    // each cell painted a single pixel, no two cliff pixels could be orthogonally
+    // adjacent. A thicker per-cell mark makes some cliff pixel have a cliff-colored
+    // right or down neighbor.
+    const img = land(64, 64);
+    renderCliffs(img, {
+      seed0: 123456,
+      originX: 960,
+      originY: 512,
+      tilesPerPixel: 1,
+      controls: { frequency: 1, continuity: 1 },
+      settings,
+    });
+    const isCliff = (px: number, py: number): boolean => {
+      const o = (py * 64 + px) * 4;
+      return (
+        img.data[o] === CLIFF_MAP_COLOR[0] &&
+        img.data[o + 1] === CLIFF_MAP_COLOR[1] &&
+        img.data[o + 2] === CLIFF_MAP_COLOR[2]
+      );
+    };
+    let adjacentPair = false;
+    for (let py = 0; py < 64 && !adjacentPair; py++)
+      for (let px = 0; px < 64 && !adjacentPair; px++)
+        if (
+          isCliff(px, py) &&
+          ((px < 63 && isCliff(px + 1, py)) || (py < 63 && isCliff(px, py + 1)))
+        )
+          adjacentPair = true;
+    expect(adjacentPair).toBe(true);
+  });
   it("map color drift guard", () => expect([...CLIFF_MAP_COLOR]).toEqual([144, 119, 87]));
 });
