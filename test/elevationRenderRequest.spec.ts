@@ -374,4 +374,54 @@ describe("runRenderRequest", () => {
       expect(landOrWater).toContain(px);
     }
   });
+
+  it("view 'all' composites all three overlays onto terrain (exactly the union of the single-overlay diffs)", () => {
+    // 32x32 px at 16 tiles/px over world [512, 1024) - a region with resources,
+    // enemy bases, and cliffs all present.
+    const req: ElevationRenderRequest = {
+      id: 21,
+      seed0: 123456,
+      width: 32,
+      height: 32,
+      originX: 512,
+      originY: 512,
+      tilesPerPixel: 16,
+      waterLevel: 0,
+      segmentationMultiplier: 1,
+      startingPositions: [{ x: 0, y: 0 }],
+      view: "terrain",
+    };
+    const terrain = new Uint8ClampedArray(runRenderRequest(req).buffer);
+    const bufFor = (view: ElevationRenderRequest["view"]) =>
+      new Uint8ClampedArray(runRenderRequest({ ...req, view }).buffer);
+    const diffPixels = (buf: Uint8ClampedArray): Set<number> => {
+      const s = new Set<number>();
+      for (let i = 0; i < terrain.length; i += 4)
+        if (
+          buf[i] !== terrain[i] ||
+          buf[i + 1] !== terrain[i + 1] ||
+          buf[i + 2] !== terrain[i + 2] ||
+          buf[i + 3] !== terrain[i + 3]
+        )
+          s.add(i);
+      return s;
+    };
+    const resources = diffPixels(bufFor("resources"));
+    const enemies = diffPixels(bufFor("enemies"));
+    const cliffs = diffPixels(bufFor("cliffs"));
+    const all = diffPixels(bufFor("all"));
+
+    // The chosen region actually exercises all three overlays.
+    expect(resources.size).toBeGreaterThan(0);
+    expect(enemies.size).toBeGreaterThan(0);
+    expect(cliffs.size).toBeGreaterThan(0);
+
+    // "all" is exactly the union of the three: every single-overlay diff is in
+    // "all", and "all" paints nothing the three don't (no phantom pixels).
+    for (const i of resources) expect(all.has(i)).toBe(true);
+    for (const i of enemies) expect(all.has(i)).toBe(true);
+    for (const i of cliffs) expect(all.has(i)).toBe(true);
+    const union = new Set<number>([...resources, ...enemies, ...cliffs]);
+    expect(all.size).toBe(union.size);
+  });
 });

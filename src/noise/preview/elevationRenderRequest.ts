@@ -40,13 +40,14 @@ export interface ElevationRenderRequest {
    * terrain-tile color render ("terrain"), the terrain with the resource-patch
    * overlay composited on top ("resources"), the terrain with the enemy-base
    * footprint overlay composited on top ("enemies"), or the terrain with the
-   * cliff footprint overlay composited on top ("cliffs"). Default "elevation".
-   * renderTerrain (and therefore "resources"/"enemies"/"cliffs") always uses the
+   * cliff footprint overlay composited on top ("cliffs"), or the terrain with
+   * all three overlays composited on top at once ("all"). Default "elevation".
+   * renderTerrain (and therefore "resources"/"enemies"/"cliffs"/"all") always uses the
    * Nauvis climate + tile catalog (see renderTerrain.ts), so it is only faithful
    * when `mapType` is "nauvis" - callers (the preview panel) disable those
    * toggles for lakes/island presets rather than send an unfaithful request here.
    */
-  view?: "elevation" | "terrain" | "resources" | "enemies" | "cliffs";
+  view?: "elevation" | "terrain" | "resources" | "enemies" | "cliffs" | "all";
   /**
    * Per-resource control levers (control:<res>:frequency|size|richness), keyed by
    * controlName - consumed only when `view: "resources"`. Missing entries default
@@ -93,7 +94,8 @@ export function runRenderRequest(req: ElevationRenderRequest): ElevationRenderRe
     req.view === "terrain" ||
     req.view === "resources" ||
     req.view === "enemies" ||
-    req.view === "cliffs"
+    req.view === "cliffs" ||
+    req.view === "all"
   ) {
     image = renderTerrain({
       seed0: req.seed0,
@@ -113,7 +115,7 @@ export function runRenderRequest(req: ElevationRenderRequest): ElevationRenderRe
         startingAreaMoistureFrequency: req.startingAreaMoistureFrequency,
       },
     });
-    if (req.view === "resources") {
+    if (req.view === "resources" || req.view === "all") {
       renderResources(image, {
         seed0: req.seed0,
         originX: req.originX,
@@ -126,7 +128,7 @@ export function runRenderRequest(req: ElevationRenderRequest): ElevationRenderRe
         startingLakePositions: req.startingLakePositions,
       });
     }
-    if (req.view === "enemies") {
+    if (req.view === "enemies" || req.view === "all") {
       renderEnemies(image, {
         seed0: req.seed0,
         originX: req.originX,
@@ -136,7 +138,7 @@ export function runRenderRequest(req: ElevationRenderRequest): ElevationRenderRe
         startingPositions: req.startingPositions,
       });
     }
-    if (req.view === "cliffs") {
+    if (req.view === "cliffs" || req.view === "all") {
       renderCliffs(image, {
         seed0: req.seed0,
         originX: req.originX,

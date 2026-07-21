@@ -36,7 +36,7 @@ const supported = computed(() => preview.value?.supported ?? false);
 // than rendering a Lakes/Island preset with the wrong climate.
 // Terrain and Resources both render through the Nauvis-only renderTerrain, so
 // both toggles gate on `terrainAvailable`.
-const view = ref<"elevation" | "terrain" | "resources" | "enemies" | "cliffs">("elevation");
+const view = ref<"elevation" | "terrain" | "resources" | "enemies" | "cliffs" | "all">("elevation");
 const terrainAvailable = computed(() => preview.value?.mapType === "nauvis");
 watch(terrainAvailable, (available) => {
   if (!available) view.value = "elevation";
@@ -155,6 +155,19 @@ async function generate() {
           @click="view = 'cliffs'"
         >
           Cliffs
+        </FButton>
+        <FButton
+          data-test="view-all"
+          :variant="view === 'all' ? 'tool' : 'default'"
+          :disabled="!terrainAvailable"
+          :title="
+            terrainAvailable
+              ? undefined
+              : 'All-layers view is only available for the Nauvis map type'
+          "
+          @click="view = 'all'"
+        >
+          All
         </FButton>
       </div>
       <span class="spacer" />
