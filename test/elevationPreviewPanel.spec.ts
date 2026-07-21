@@ -3,6 +3,7 @@ import { flushPromises, mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import ElevationPreviewPanel from "../src/components/ElevationPreviewPanel.vue";
 import { usePresetsStore } from "../src/store/presets";
+import { useUiStore } from "../src/store/ui";
 import { writeMapType } from "../src/model/mapType";
 import type { ElevationRenderer } from "../src/components/useElevationPreview";
 
@@ -16,8 +17,13 @@ function stubCanvas() {
   return putImageData;
 }
 
-function setup(mapTypeId: string, renderer: ElevationRenderer) {
+function setup(mapTypeId: string, renderer: ElevationRenderer, opts: { dev?: boolean } = {}) {
+  localStorage.clear();
+  history.replaceState(null, "", "/");
   setActivePinia(createPinia());
+  // Dev mode is set explicitly (not left to whatever persisted) so tests cannot
+  // leak the flag into each other through localStorage.
+  useUiStore().setDevMode(opts.dev ?? true);
   const store = usePresetsStore();
   store.createFromBuiltin("Default", "t");
   store.activePreset!.seed = 123456;
@@ -244,6 +250,34 @@ describe("ElevationPreviewPanel", () => {
     expect(w.find('[data-test="view-terrain"]').attributes("disabled")).toBeDefined();
   });
 
+  it("defaults to the composite All view on a Nauvis preset with no toggle clicked", async () => {
+    stubCanvas();
+    const renderer = okRenderer();
+    const w = setup("nauvis", renderer);
+    await w.find('[data-test="generate"]').trigger("click");
+    await flushPromises();
+    const arg = (renderer.render as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg).toMatchObject({ view: "all", mapType: "nauvis" });
+  });
+
+  it("restores the chosen view when a preset switches away from Nauvis and back", async () => {
+    stubCanvas();
+    const renderer = okRenderer();
+    const w = setup("nauvis", renderer);
+    const store = usePresetsStore();
+
+    await w.find('[data-test="view-terrain"]').trigger("click");
+    writeMapType(store.activePreset!.propertyExpressionNames, "lakes");
+    await w.vm.$nextTick();
+    writeMapType(store.activePreset!.propertyExpressionNames, "nauvis");
+    await w.vm.$nextTick();
+
+    await w.find('[data-test="generate"]').trigger("click");
+    await flushPromises();
+    const arg = (renderer.render as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg).toMatchObject({ view: "terrain" });
+  });
+
   it("falls back to Elevation view when switching to a preset whose map type disables Terrain", async () => {
     const putImageData = stubCanvas();
     const renderer = okRenderer();
@@ -274,5 +308,111 @@ describe("ElevationPreviewPanel", () => {
     await w.find('[data-test="generate"]').trigger("click");
     await flushPromises();
     expect(w.find('[data-test="preview-error"]').exists()).toBe(true);
+  });
+
+  it("hides the view toggles when dev mode is off", () => {
+    const w = setup("nauvis", okRenderer(), { dev: false });
+    for (const t of ["elevation", "terrain", "resources", "enemies", "cliffs", "all"]) {
+      expect(w.find(`[data-test="view-${t}"]`).exists()).toBe(false);
+    }
+    expect(w.find('[data-test="generate"]').exists()).toBe(true);
+    expect(w.find('[data-test="dev-mode"]').exists()).toBe(true);
+  });
+
+  it("still renders the composite view with the toggles hidden (Nauvis)", async () => {
+    stubCanvas();
+    const renderer = okRenderer();
+    const w = setup("nauvis", renderer, { dev: false });
+    await w.find('[data-test="generate"]').trigger("click");
+    await flushPromises();
+    const arg = (renderer.render as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg).toMatchObject({ view: "all", mapType: "nauvis" });
+  });
+
+  it("still renders Elevation with the toggles hidden (Lakes)", async () => {
+    stubCanvas();
+    const renderer = okRenderer();
+    const w = setup("lakes", renderer, { dev: false });
+    await w.find('[data-test="generate"]').trigger("click");
+    await flushPromises();
+    const arg = (renderer.render as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg).toMatchObject({ view: "elevation", mapType: "lakes" });
+  });
+
+  it("reveals the view toggles when the dev-mode checkbox is ticked", async () => {
+    const w = setup("nauvis", okRenderer(), { dev: false });
+    expect(w.find('[data-test="view-all"]').exists()).toBe(false);
+
+    await w.find('[data-test="dev-mode"] input').setValue(true);
+
+    expect(w.find('[data-test="view-all"]').exists()).toBe(true);
+    expect(useUiStore().devMode).toBe(true);
+  });
+
+  it("reports the elapsed render time after a render, and nothing before one", async () => {
+    stubCanvas();
+    const w = setup("nauvis", okRenderer());
+    expect(w.find('[data-test="preview-elapsed"]').exists()).toBe(false);
+
+    await w.find('[data-test="generate"]').trigger("click");
+    await flushPromises();
+
+    // The clock is real, so assert the shape, not a duration.
+    expect(w.find('[data-test="preview-elapsed"]').text()).toMatch(/^\d[\d,]* ms$/);
+  });
+
+  it("hides the elapsed readout when dev mode is off", async () => {
+    stubCanvas();
+    const w = setup("nauvis", okRenderer(), { dev: false });
+    await w.find('[data-test="generate"]').trigger("click");
+    await flushPromises();
+    expect(w.find('[data-test="preview-elapsed"]').exists()).toBe(false);
+  });
+
+  it("reports no elapsed time when the render fails", async () => {
+    stubCanvas();
+    const renderer: ElevationRenderer = {
+      render: vi.fn(async () => {
+        throw new Error("boom");
+      }),
+      dispose: vi.fn(),
+    };
+    const w = setup("nauvis", renderer);
+    await w.find('[data-test="generate"]').trigger("click");
+    await flushPromises();
+    expect(w.find('[data-test="preview-elapsed"]').exists()).toBe(false);
+  });
+
+  it("always renders the composite view once dev mode is turned back off, even after picking a non-composite toggle", async () => {
+    stubCanvas();
+    const renderer = okRenderer();
+    const w = setup("nauvis", renderer); // dev mode on by default
+
+    await w.find('[data-test="view-elevation"]').trigger("click");
+    await w.find('[data-test="dev-mode"] input').setValue(false);
+
+    await w.find('[data-test="generate"]').trigger("click");
+    await flushPromises();
+
+    expect(renderer.render).toHaveBeenCalledOnce();
+    const arg = (renderer.render as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg).toMatchObject({ view: "all", mapType: "nauvis" });
+  });
+
+  it("reveals the view toggles when the URL carries ?dev=1, without an explicit setDevMode call", () => {
+    localStorage.clear();
+    history.replaceState(null, "", "/?dev=1");
+    setActivePinia(createPinia());
+    const store = usePresetsStore();
+    store.createFromBuiltin("Default", "t");
+    store.activePreset!.seed = 123456;
+    writeMapType(store.activePreset!.propertyExpressionNames, "nauvis");
+    const w = mount(ElevationPreviewPanel, { props: { renderer: okRenderer() } });
+
+    try {
+      expect(w.find('[data-test="view-all"]').exists()).toBe(true);
+    } finally {
+      history.replaceState(null, "", "/");
+    }
   });
 });
