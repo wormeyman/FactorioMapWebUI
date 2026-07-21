@@ -305,9 +305,32 @@ Done = ore patches overlaid on land, responding to the frequency/size/richness s
 - [ ] A `previewMap(preset, {width, height, scale}) -> ImageData` entry point.
 - [x] Wire into the app UI next to / instead of the `preview-service` call. Keep
       the server path as a fallback and as a cross-check oracle.
-- [ ] Perf: evaluate off the main thread (Web Worker); tile the viewport; cache
-      per-region spot lists and per-tile noise. Target interactive re-render on
-      slider changes.
+- [x] Perf: evaluate off the main thread (Web Worker); tile the viewport. **Done
+      2026-07-21** - the 1024x1024 preview is split into 64 128px tiles rendered
+      across a pool of `hardwareConcurrency - 1` workers and blitted
+      progressively. Browser-measured on a 12-core machine (8 performance + 4
+      efficiency), seed 123456, median of 3:
+
+      | view      | single worker | tiled (11 workers) | speedup |
+      | --------- | ------------- | ------------------ | ------- |
+      | elevation | ~1,700 ms     | 237 ms             | 7.2x    |
+      | terrain   | ~9,100 ms     | 1,519 ms           | 6.0x    |
+      | all       | ~12,500 ms    | 1,918 ms           | 6.5x    |
+
+      Half the image is on screen about a second before the render finishes, so
+      the perceived latency is lower again. Tiling is byte-identical to the
+      single render - `test/tiledEquality.spec.ts` asserts it across all six
+      views, and the only renderer needing a seam fix was cliffs (marks are
+      painted around a cell centre, so each tile queries a 2-tile halo clamped
+      to the image).
+
+      Caching per-region spot lists across tiles was measured and **rejected**:
+      rebuilding every resolver per tile costs only 1.03-1.07x total CPU, so the
+      scene/geometry split it would have required was not worth it. See
+      `docs/superpowers/plans/2026-07-21-region-tiling-renderer.md`.
+
+- [ ] Perf: target interactive re-render on slider changes (currently still a
+      manual Generate).
 
 ## Remaining primitives to reverse-engineer (layer 1)
 
