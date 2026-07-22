@@ -5,8 +5,8 @@
 **Goal:** Render Nauvis forests in the client-side preview by porting the 15 tree
 species probability fields and compositing them as a density-shaded green overlay.
 
-**Architecture:** All 15 species share one expression shape, so this is a
-15-row catalog plus one builder (mirroring `src/noise/resources/`), producing a
+**Architecture:** All 15 species share one expression shape (with one per-species
+constant - see the correction note below), so this is a 15-row catalog plus one builder (mirroring `src/noise/resources/`), producing a
 single `(x, y) => density` closure. A new `renderTrees` overlay alpha-blends the
 game's own tree chart color over the terrain image, exactly as `renderResources`
 overlays ore. Every field is validated against the real game through the existing
@@ -17,6 +17,23 @@ existing `src/noise/` primitive library (`basisNoise`, `multioctaveNoise`,
 `quickMultioctaveNoise`), the `test/oracle` headless-Factorio harness.
 
 **Spec:** `docs/superpowers/specs/2026-07-21-nauvis-trees-design.md`
+
+## Correction (2026-07-21, discovered during Task 5)
+
+This plan was written asserting that all 15 species share **exactly** one
+expression shape with no per-species exceptions. That was wrong. `tree_05` and
+`tree_07` use `- 0.45 + 0.2 * control:trees:size` where the other 13 use `- 0.5`.
+
+The claim came from a mechanical uniformity check that filtered out every line
+containing `control:trees:size` before comparing - so the single field that varies
+was the one field the check excluded. Tasks 2 through 4 were built on the wrong
+premise and the error was invisible until the oracle ran: `tree_05` and `tree_07`
+disagreed with the real game by a near-constant 5.01e-2, about 65x the ~7.7e-4
+noise floor of the other 13 species.
+
+Fixed in commit d03ab88 by adding a `sizeOffset` field to the catalog. Every other
+term was re-verified per species afterwards and is genuinely uniform. Tasks 6
+onward assume the corrected catalog.
 
 ## Global Constraints
 
@@ -280,7 +297,7 @@ the spec:
  *       min(0, asymmetric_ramps{input=temperature, ...tempRamp},
  *              asymmetric_ramps{input=moisture, ...moistRamp})
  *       + min(0, distance/20 - 3)
- *       - 0.5 + 0.2 * control:trees:size
+ *       - sizeOffset + 0.2 * control:trees:size   (0.5, except tree_05/tree_07 = 0.45)
  *       + tree_small_noise * 0.1
  *       + multioctave_noise{persistence 0.65, octaves 3, seed1 = <seed1Name>,
  *                           input_scale = (1/inputScaleDiv) * control:trees:frequency,

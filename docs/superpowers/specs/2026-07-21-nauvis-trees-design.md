@@ -84,9 +84,19 @@ the render).
 
 ## The expressions
 
-All 15 species share **exactly one shape**. This was verified mechanically: after
-filtering out the common terms from every `tree_0*` noise-expression block in
-`trees.lua`, nothing remained. There are no per-species special cases.
+All 15 species share one shape with **one per-species exception**: the constant in
+the size term is `0.5` for 13 species but `0.45` for `tree_05` and `tree_07`.
+
+**Correction (2026-07-21, after oracle validation).** This section originally
+claimed there were no per-species exceptions, "verified mechanically". That
+verification was wrong in a way worth recording: it filtered out every line
+containing `control:trees:size` as boilerplate before comparing, so the single
+field that does vary was the one field excluded from the check. The error survived
+into the catalog and four implementation tasks, and was caught only by the oracle -
+`tree_05` and `tree_07` disagreed with the real game by a near-constant 5.01e-2,
+roughly 65x the ~7.7e-4 noise floor of the other 13. Every other term was
+subsequently re-checked per species and is genuinely uniform. The lesson: a
+uniformity check that excludes a field cannot vouch for that field.
 
 ```
 min(CAP,
@@ -94,7 +104,7 @@ min(CAP,
     min(0, asymmetric_ramps{input=temperature, ...},
            asymmetric_ramps{input=moisture, ...})
     + min(0, distance/20 - 3)
-    - 0.5 + 0.2 * control:trees:size
+    - SIZE_OFFSET + 0.2 * control:trees:size    // 0.5, except tree_05/tree_07 = 0.45
     + tree_small_noise * 0.1
     + multioctave_noise{x, y, persistence = 0.65, octaves = 3,
                         seed0 = map_seed, seed1 = '<species>',
@@ -105,23 +115,23 @@ min(CAP,
 A species is fully described by a parameter row. Extracted from
 `~/GitHub/factorio-data` @ tag 2.1.11:
 
-| species | cap | temperature ramp (fb,ft,tt,tb) | moisture ramp (fb,ft,tt,tb) | 1/IS | OS | seed1 |
-| --- | --- | --- | --- | --- | --- | --- |
-| `tree_01` | 0.45 | 0, 10, 14, 15 | 0.6, 0.7, 1, 2 | 25 | 0.8 | `tree-01` |
-| `tree_02` | 0.4 | 0, 10, 14, 15 | 0.4, 0.5, 0.7, 0.8 | 25 | 0.75 | `tree-02` |
-| `tree_02_red` | 0.3 | 0, 10, 14, 15 | 0.2, 0.3, 0.5, 0.6 | 25 | 0.7 | `tree-02-red` |
-| `tree_03` | 0.4 | 15, 16, 35, 45 | 0.4, 0.5, 0.7, 0.8 | 35 | 0.75 | `tree-03` |
-| `tree_04` | 0.45 | 13, 14, 16, 17 | 0.7, 0.9, 1, 2 | 30 | 0.8 | `tree-04` |
-| `tree_05` | 0.45 | 15, 16, 35, 45 | 0.6, 0.7, 1, 2 | 40 | 0.8 | `tree-05` |
-| `tree_06` | 0.2 | 0, 10, 14, 15 | 0.1, 0.2, 0.3, 0.4 | 22 | 0.6 | `tree-06` |
-| `tree_06_brown` | 0.1 | 0, 10, 14, 15 | 0, 0.1, 0.2, 0.3 | 22 | 0.5 | `tree-06-brown` |
-| `tree_07` | 0.4 | 13, 14, 16, 17 | 0.5, 0.6, 0.9, 1 | 40 | 0.75 | `tree-07` |
-| `tree_08` | 0.3 | 13, 14, 16, 17 | 0.3, 0.4, 0.6, 0.7 | 30 | 0.7 | `tree-08` |
-| `tree_08_brown` | 0.2 | 13, 14, 16, 17 | 0.2, 0.3, 0.4, 0.5 | 30 | 0.6 | `tree-08-brown` |
-| `tree_08_red` | 0.1 | 13, 14, 16, 17 | 0.1, 0.2, 0.3, 0.4 | 30 | 0.5 | `tree-08-red` |
-| `tree_09` | 0.3 | 15, 16, 35, 45 | 0.2, 0.3, 0.5, 0.6 | 25 | 0.7 | `tree-09` |
-| `tree_09_brown` | 0.2 | 15, 16, 35, 45 | 0.1, 0.2, 0.3, 0.4 | 25 | 0.6 | `tree-09-brown` |
-| `tree_09_red` | 0.1 | 15, 16, 35, 45 | 0, 0.1, 0.2, 0.3 | 25 | 0.5 | `tree-09-red` |
+| species | cap | temperature ramp (fb,ft,tt,tb) | moisture ramp (fb,ft,tt,tb) | 1/IS | OS | size offset | seed1 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `tree_01` | 0.45 | 0, 10, 14, 15 | 0.6, 0.7, 1, 2 | 25 | 0.8 | 0.5 | `tree-01` |
+| `tree_02` | 0.4 | 0, 10, 14, 15 | 0.4, 0.5, 0.7, 0.8 | 25 | 0.75 | 0.5 | `tree-02` |
+| `tree_02_red` | 0.3 | 0, 10, 14, 15 | 0.2, 0.3, 0.5, 0.6 | 25 | 0.7 | 0.5 | `tree-02-red` |
+| `tree_03` | 0.4 | 15, 16, 35, 45 | 0.4, 0.5, 0.7, 0.8 | 35 | 0.75 | 0.5 | `tree-03` |
+| `tree_04` | 0.45 | 13, 14, 16, 17 | 0.7, 0.9, 1, 2 | 30 | 0.8 | 0.5 | `tree-04` |
+| `tree_05` | 0.45 | 15, 16, 35, 45 | 0.6, 0.7, 1, 2 | 40 | 0.8 | **0.45** | `tree-05` |
+| `tree_06` | 0.2 | 0, 10, 14, 15 | 0.1, 0.2, 0.3, 0.4 | 22 | 0.6 | 0.5 | `tree-06` |
+| `tree_06_brown` | 0.1 | 0, 10, 14, 15 | 0, 0.1, 0.2, 0.3 | 22 | 0.5 | 0.5 | `tree-06-brown` |
+| `tree_07` | 0.4 | 13, 14, 16, 17 | 0.5, 0.6, 0.9, 1 | 40 | 0.75 | **0.45** | `tree-07` |
+| `tree_08` | 0.3 | 13, 14, 16, 17 | 0.3, 0.4, 0.6, 0.7 | 30 | 0.7 | 0.5 | `tree-08` |
+| `tree_08_brown` | 0.2 | 13, 14, 16, 17 | 0.2, 0.3, 0.4, 0.5 | 30 | 0.6 | 0.5 | `tree-08-brown` |
+| `tree_08_red` | 0.1 | 13, 14, 16, 17 | 0.1, 0.2, 0.3, 0.4 | 30 | 0.5 | 0.5 | `tree-08-red` |
+| `tree_09` | 0.3 | 15, 16, 35, 45 | 0.2, 0.3, 0.5, 0.6 | 25 | 0.7 | 0.5 | `tree-09` |
+| `tree_09_brown` | 0.2 | 15, 16, 35, 45 | 0.1, 0.2, 0.3, 0.4 | 25 | 0.6 | 0.5 | `tree-09-brown` |
+| `tree_09_red` | 0.1 | 15, 16, 35, 45 | 0, 0.1, 0.2, 0.3 | 25 | 0.5 | 0.5 | `tree-09-red` |
 
 These are the authoritative values; the implementation must not re-derive them by
 hand.
