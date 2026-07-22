@@ -78,6 +78,11 @@ describe("makeTreeSpeciesFields", () => {
         expect(big[i].evalAt(x, y)).toBeGreaterThanOrEqual(base[i].evalAt(x, y) - 1e-12);
       }
     }
+    // Verify that the treesSize parameter is actually live by proving big differs from base somewhere.
+    const differs = base.some((_, i) =>
+      GRID.some(([x, y]) => big[i].evalAt(x, y) !== base[i].evalAt(x, y)),
+    );
+    expect(differs).toBe(true);
   });
 });
 
