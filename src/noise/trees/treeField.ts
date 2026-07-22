@@ -1,12 +1,25 @@
 import { asymmetricRamps } from "./asymmetricRamps";
 import { clamp } from "../eval/math";
 import { distanceFromNearestPoint, type Point } from "../distanceFromNearestPoint";
+import { fastPow } from "../fastApprox";
 import { makeMoisture } from "../expressions/moisture";
 import { makeMultioctaveNoise } from "../multioctaveNoise";
 import { makeNauvisShared } from "../expressions/nauvisShared";
 import { makeTemperature } from "../expressions/temperature";
 import { makeTreeShared } from "./treeShared";
 import { TREE_SPECIES, type TreeSpecies } from "./treeCatalog";
+
+/**
+ * A conservative upper bound on `|basisNoise|`, used to bound each species' noise
+ * term so the density max can skip evaluating octaves that cannot win.
+ *
+ * This is a MEASURED maximum plus a safety margin, not an analytic bound - the
+ * basis range is not a clean +/-sqrt(3) (see docs/noise/basis-noise-NOTES.md).
+ * treeFieldEarlyOut.spec.ts asserts both that the bound holds against hard
+ * sampling AND that the early-out result is bit-identical to full evaluation, so
+ * a wrong value fails loudly instead of silently clipping forests.
+ */
+export const BASIS_ABS_MAX = 1.8;
 
 export interface TreeFieldParams {
   /** Map seed (= map_seed / seed0). */
@@ -29,6 +42,33 @@ export interface TreeFieldParams {
 export interface TreeSpeciesField {
   readonly species: TreeSpecies;
   readonly evalAt: (x: number, y: number) => number;
+  /** The species value minus its own noise term - an upper bound on the sum. */
+  readonly cheapAt: (x: number, y: number) => number;
+  readonly noiseAt: (x: number, y: number) => number;
+  /** The largest magnitude this species' noise term can reach. */
+  readonly maxNoise: number;
+}
+
+/**
+ * `|multioctave_noise|` cannot exceed `outputScale * norm * (sum of octave
+ * amplitudes) * BASIS_ABS_MAX`. With octaves 3 and persistence 0.65 the octave
+ * amplitudes are `norm * (1, 1/P, 1/P^2)`; `norm` is the RMS normalisation
+ * multioctaveNoise applies. Mirrors multioctaveNoise.ts:70-99.
+ */
+function maxNoiseFor(species: TreeSpecies): number {
+  const P = 0.65;
+  const octaves = 3;
+  const invP2 = 1 / (P * P);
+  // fastPow, NOT `**` - multioctaveNoise normalises with the game's fastapprox
+  // pow, and the bound must be computed the same way or it is not a bound.
+  const norm = Math.sqrt((invP2 - 1) / (fastPow(invP2, octaves) - 1));
+  let amps = 0;
+  let amp = norm;
+  for (let k = 0; k < octaves; k++) {
+    amps += amp;
+    amp /= P;
+  }
+  return species.outputScale * amps * BASIS_ABS_MAX;
 }
 
 /**
@@ -79,19 +119,21 @@ export function makeTreeSpeciesFields(params: TreeFieldParams): TreeSpeciesField
     // Hoisted here so it's computed once per species, not once per pixel.
     const sizeTerm = -species.sizeOffset + 0.2 * treesSize;
 
-    const evalAt = (x: number, y: number): number => {
+    /** Everything except this species' own noise term. Bounds `evalAt` from above. */
+    const cheapAt = (x: number, y: number): number => {
       const distance = distanceFromNearestPoint(x, y, startingPositions);
       const climate = Math.min(
         0,
         asymmetricRamps(temperature(x, y), ...species.tempRamp),
         asymmetricRamps(moisture(x, y), ...species.moistRamp),
       );
-      const sum =
-        climate + Math.min(0, distance / 20 - 3) + sizeTerm + smallNoise(x, y) * 0.1 + noise(x, y);
-      return Math.min(species.cap, forestPathCutoutFaded(x, y), sum);
+      return climate + Math.min(0, distance / 20 - 3) + sizeTerm + smallNoise(x, y) * 0.1;
     };
 
-    return { species, evalAt };
+    const evalAt = (x: number, y: number): number =>
+      Math.min(species.cap, forestPathCutoutFaded(x, y), cheapAt(x, y) + noise(x, y));
+
+    return { species, evalAt, cheapAt, noiseAt: noise, maxNoise: maxNoiseFor(species) };
   });
 }
 
@@ -110,6 +152,13 @@ export function makeTreeDensity(params: TreeFieldParams): (x: number, y: number)
   return (x: number, y: number): number => {
     let best = 0;
     for (const f of fields) {
+      // `cap` and the cutout both bound the species from above, as does
+      // `cheap + maxNoise`. If none can beat `best`, the 3-octave noise cannot
+      // change the answer - skip it. Catalog order (descending cap) raises `best`
+      // early, which maximises how often this fires.
+      if (f.species.cap <= best) continue;
+      const cheap = f.cheapAt(x, y);
+      if (cheap + f.maxNoise <= best) continue;
       const v = f.evalAt(x, y);
       if (v > best) best = v;
     }
