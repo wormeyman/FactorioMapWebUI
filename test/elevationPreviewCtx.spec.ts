@@ -108,9 +108,29 @@ describe("elevationCtxFromPreset", () => {
     expect(elevationCtxFromPreset(p).cliffControls).toEqual({ frequency: 2, continuity: 0.5 });
   });
 
+  it("reads trees frequency/size, defaulting to 1/1 when absent", () => {
+    const p = lakesPreset();
+    delete p.autoplaceControls.trees;
+    expect(elevationCtxFromPreset(p).treeControls).toEqual({ frequency: 1, size: 1 });
+
+    p.autoplaceControls.trees = { frequency: 3, size: 2, richness: 1 };
+    expect(elevationCtxFromPreset(p).treeControls).toEqual({ frequency: 3, size: 2 });
+  });
+
   it("exposes cliffSettings from preset.cliffSettings", () => {
     const p = lakesPreset();
-    p.cliffSettings = { cliffElevation0: 12, cliffElevationInterval: 30, richness: 2 };
+    // A COMPLETE CliffSettings - name/control/cliffSmoothing carry the Default
+    // preset's real wire values. The assertion below then also proves the ctx
+    // narrows to the three render-relevant fields and drops these three, which
+    // a partial object could not express (it did not satisfy the type at all).
+    p.cliffSettings = {
+      name: "cliff",
+      control: "",
+      cliffSmoothing: 0,
+      cliffElevation0: 12,
+      cliffElevationInterval: 30,
+      richness: 2,
+    };
     expect(elevationCtxFromPreset(p).cliffSettings).toEqual({
       cliffElevation0: 12,
       cliffElevationInterval: 30,
@@ -134,5 +154,24 @@ describe("elevationCtxFromPreset", () => {
     expect(r.ctx.moistureBias).toBeCloseTo(0.45, 6);
     expect(r.ctx.startingAreaMoistureSize).toBe(2);
     expect(r.ctx.startingAreaMoistureFrequency).toBe(3);
+  });
+
+  // The app has no UI for control:temperature:*, so the only way it ever gets a
+  // non-default value is an imported exchange string. Nothing consumed
+  // `temperature` before the trees overlay, so these were parsed and dropped.
+  it("reads control:temperature:* off the preset's property_expression_names", () => {
+    const p = lakesPreset();
+    p.propertyExpressionNames["control:temperature:frequency"] = "2.000000";
+    p.propertyExpressionNames["control:temperature:bias"] = "-0.250000";
+
+    const r = elevationCtxFromPreset(p);
+    expect(r.ctx.temperatureFrequency).toBe(2);
+    expect(r.ctx.temperatureBias).toBeCloseTo(-0.25, 6);
+  });
+
+  it("defaults control:temperature:* to the game's 1 / 0 when absent", () => {
+    const r = elevationCtxFromPreset(lakesPreset());
+    expect(r.ctx.temperatureFrequency).toBe(1);
+    expect(r.ctx.temperatureBias).toBe(0);
   });
 });

@@ -9,6 +9,7 @@ import { renderTerrain } from "../src/noise/preview/renderTerrain";
 import { RESOURCE_CATALOG } from "../src/noise/resources/resourceCatalog";
 import { ENEMY_MAP_COLOR } from "../src/noise/enemies/enemyCatalog";
 import { CLIFF_MAP_COLOR } from "../src/noise/cliffs/cliffCatalog";
+import { makeTreeDensity } from "../src/noise/trees/treeField";
 
 const REQ: ElevationRenderRequest = {
   id: 7,
@@ -376,9 +377,9 @@ describe("runRenderRequest", () => {
     }
   });
 
-  it("view 'all' composites all three overlays onto terrain (exactly the union of the single-overlay diffs)", () => {
+  it("view 'all' composites all four overlays onto terrain (exactly the union of the single-overlay diffs)", () => {
     // 32x32 px at 16 tiles/px over world [512, 1024) - a region with resources,
-    // enemy bases, and cliffs all present.
+    // enemy bases, cliffs, and trees all present.
     const req: ElevationRenderRequest = {
       id: 21,
       seed0: 123456,
@@ -407,23 +408,157 @@ describe("runRenderRequest", () => {
           s.add(i);
       return s;
     };
-    const resources = diffPixels(bufFor("resources"));
+    const resourcesBuf = bufFor("resources");
+    const allBuf = bufFor("all");
+    const resources = diffPixels(resourcesBuf);
     const enemies = diffPixels(bufFor("enemies"));
     const cliffs = diffPixels(bufFor("cliffs"));
-    const all = diffPixels(bufFor("all"));
+    const trees = diffPixels(bufFor("trees"));
+    const all = diffPixels(allBuf);
 
-    // The chosen region actually exercises all three overlays.
+    // The chosen region actually exercises all four overlays.
     expect(resources.size).toBeGreaterThan(0);
     expect(enemies.size).toBeGreaterThan(0);
     expect(cliffs.size).toBeGreaterThan(0);
+    expect(trees.size).toBeGreaterThan(0);
 
-    // "all" is exactly the union of the three: every single-overlay diff is in
-    // "all", and "all" paints nothing the three don't (no phantom pixels).
+    // "all" is exactly the union of the four: every single-overlay diff is in
+    // "all", and "all" paints nothing the four don't (no phantom pixels).
     for (const i of resources) expect(all.has(i)).toBe(true);
     for (const i of enemies) expect(all.has(i)).toBe(true);
     for (const i of cliffs) expect(all.has(i)).toBe(true);
-    const union = new Set<number>([...resources, ...enemies, ...cliffs]);
+    for (const i of trees) expect(all.has(i)).toBe(true);
+    const union = new Set<number>([...resources, ...enemies, ...cliffs, ...trees]);
     expect(all.size).toBe(union.size);
+
+    // The union assertion above is ORDER-INVARIANT - it holds just as well if
+    // trees were composited LAST, washing the ore/base/cliff colors green. The
+    // overlapping pixels stay in the diff set either way, they are just the
+    // wrong color. So pin the order too.
+    //
+    // Compositing runs terrain -> trees -> resources -> enemies -> cliffs, and
+    // resources paint opaquely. On a pixel resources paint, where the two later
+    // overlays do not, "all" must therefore equal the resources render exactly -
+    // trees underneath must not show through.
+    let overlapping = 0;
+    for (const i of resources) {
+      if (enemies.has(i) || cliffs.has(i)) continue;
+      if (trees.has(i)) overlapping++;
+      expect(
+        [allBuf[i], allBuf[i + 1], allBuf[i + 2], allBuf[i + 3]],
+        `pixel ${i}: trees must composite UNDER resources`,
+      ).toEqual([resourcesBuf[i], resourcesBuf[i + 1], resourcesBuf[i + 2], resourcesBuf[i + 3]]);
+    }
+    // ...and the assertion is only meaningful where trees actually contend for
+    // the same pixel, so prove this window has such pixels rather than passing
+    // because trees and resources never meet.
+    expect(overlapping, "window must have pixels both trees and resources paint").toBeGreaterThan(
+      0,
+    );
+  });
+});
+
+describe("view: trees", () => {
+  // World window (420, -280) at 4 tiles/px over a 12x12 image, seed 123456.
+  // NOTE: the origin (0, 0) that a naive test would reach for sits inside the
+  // game's starting-area clearing (tree density is genuinely 0 within 60 tiles
+  // of a spawn point - see treeField.ts's `distance / 20 - 3` term), so a
+  // "renders differ" assertion there would pass for the wrong reason (nothing
+  // painted at all). This window was chosen because sampling it directly with
+  // makeTreeDensity shows real, non-zero cover; the assertion below proves that
+  // in-line so the test cannot silently pass while exercising an empty forest.
+  const base = {
+    id: 1,
+    seed0: 123456,
+    width: 12,
+    height: 12,
+    originX: 420,
+    originY: -280,
+    tilesPerPixel: 4,
+    waterLevel: 0,
+    segmentationMultiplier: 1,
+    startingPositions: [{ x: 0, y: 0 }],
+    mapType: "nauvis" as const,
+  };
+
+  it("samples a window with genuine, non-zero tree density", () => {
+    const density = makeTreeDensity({ seed0: base.seed0 });
+    let nonZero = 0;
+    for (let py = 0; py < base.height; py++) {
+      for (let px = 0; px < base.width; px++) {
+        const wx = base.originX + px * base.tilesPerPixel;
+        const wy = base.originY + py * base.tilesPerPixel;
+        if (density(wx, wy) > 0) nonZero++;
+      }
+    }
+    expect(nonZero).toBeGreaterThan(0);
+  });
+
+  it("renders terrain with the tree overlay composited on top", () => {
+    const terrain = runRenderRequest({ ...base, view: "terrain" });
+    const trees = runRenderRequest({ ...base, view: "trees" });
+    expect(Array.from(new Uint8ClampedArray(trees.buffer))).not.toEqual(
+      Array.from(new Uint8ClampedArray(terrain.buffer)),
+    );
+  });
+
+  // Trees are the only consumer of `temperature`, and there is no UI for
+  // control:temperature:* - it reaches the render only from an imported exchange
+  // string. So this is the one assertion standing between a dropped field and a
+  // silently wrong forest layout. A bias this large pushes temperature out of
+  // every species' ramp, so the overlay must vanish back to bare terrain.
+  it("forwards temperatureBias through to the tree overlay", () => {
+    const terrain = runRenderRequest({ ...base, view: "terrain" });
+    const trees = runRenderRequest({ ...base, view: "trees" });
+    const frozen = runRenderRequest({ ...base, view: "trees", temperatureBias: -1000 });
+    // The overlay is doing something to begin with...
+    expect(Array.from(new Uint8ClampedArray(trees.buffer))).not.toEqual(
+      Array.from(new Uint8ClampedArray(terrain.buffer)),
+    );
+    // ...and the lever turns it off, which it cannot do if the field is dropped.
+    expect(Array.from(new Uint8ClampedArray(frozen.buffer))).toEqual(
+      Array.from(new Uint8ClampedArray(terrain.buffer)),
+    );
+  });
+
+  it("forwards temperatureFrequency through to the tree overlay", () => {
+    const trees = runRenderRequest({ ...base, view: "trees" });
+    const warped = runRenderRequest({ ...base, view: "trees", temperatureFrequency: 4 });
+    expect(Array.from(new Uint8ClampedArray(warped.buffer))).not.toEqual(
+      Array.from(new Uint8ClampedArray(trees.buffer)),
+    );
+  });
+
+  it("includes trees in the all-composite", () => {
+    const withoutTrees = runRenderRequest({ ...base, view: "cliffs" });
+    const all = runRenderRequest({ ...base, view: "all" });
+    expect(Array.from(new Uint8ClampedArray(all.buffer))).not.toEqual(
+      Array.from(new Uint8ClampedArray(withoutTrees.buffer)),
+    );
+  });
+
+  it("honors treeControls", () => {
+    const a = runRenderRequest({ ...base, view: "trees" });
+    const b = runRenderRequest({
+      ...base,
+      view: "trees",
+      treeControls: { frequency: 3, size: 2 },
+    });
+    expect(Array.from(new Uint8ClampedArray(a.buffer))).not.toEqual(
+      Array.from(new Uint8ClampedArray(b.buffer)),
+    );
+  });
+
+  it("defaults treeControls to 1/1 when omitted", () => {
+    const implicit = runRenderRequest({ ...base, view: "trees" });
+    const explicit = runRenderRequest({
+      ...base,
+      view: "trees",
+      treeControls: { frequency: 1, size: 1 },
+    });
+    expect(Array.from(new Uint8ClampedArray(implicit.buffer))).toEqual(
+      Array.from(new Uint8ClampedArray(explicit.buffer)),
+    );
   });
 });
 

@@ -297,7 +297,32 @@ Done = ore patches overlaid on land, responding to the frequency/size/richness s
       oracle-validated `enemy_base_probability` field, threshold
       `ENEMY_FOOTPRINT_THRESHOLD = 0.05`, spawners only (worms and per-nest
       placement deferred, see `docs/noise/enemy-bases-NOTES.md`).
-- [ ] Trees / decoratives (optional for a preview).
+- [x] Trees (tree autoplace - `base/prototypes/entity/trees.lua`), decoratives
+      ruled out. Done = a density-shaded `view: "trees"` overlay, all 15 Nauvis
+      species (`tree_01` ... `tree_09_red`), oracle-validated to the ~1e-3 noise
+      floor, composited into `view: "all"` between terrain and the resource/
+      enemy/cliff overlays, with `control:trees` frequency/size wired. The
+      preview's own binary was disassembled first: it places real entities and
+      charts them (`chartEntities` -> `Chart::drawEntity` ->
+      `ChartingInterface::drawRectangle`), so this port renders the exact
+      expected value of what the game's per-tile placement roll would produce
+      rather than a guessed shading. The charted footprint (1.0x1.0 tiles,
+      kernel `[0.5,1,0.5]`, compounding per-tree alpha) was determined
+      empirically against a real game render and validated on two seeds
+      (game ink / our ink: 5.70/4.67 = 1.22x @ seed 123456, 7.89/6.89 = 1.14x
+      @ seed 777771) - the residual is the expected-value-vs-discrete gap and
+      needs the deferred Phase 2 stipple to close, not further tuning.
+      **Decoratives are ruled out by binary evidence**: no
+      `DecorativeMapGenerationTask` symbol exists anywhere in the shipped
+      binary, and the preview worker calls only `chartCliffs` + `chartEntities`
+      - the game's own preview shows no decoratives either. Full writeup,
+      including the oracle-caught per-species `sizeOffset` bug and its
+      methodology lesson, the `BASIS_ABS_MAX` early-out measurement, and the
+      measured render cost: `docs/noise/trees-NOTES.md`. Design record:
+      `docs/superpowers/specs/2026-07-21-nauvis-trees-design.md`. **Still
+      deferred** (do not treat as done): the per-tile placement roll (Phase 2,
+      `docs/noise/placement-roll-NOTES.md`), worms/fish autoplacers, and
+      cliff exclusion (consistent with the existing ore-on-cliffs gap).
 - [ ] Non-Nauvis planets (Space Age) if in scope - each is another expression set.
 
 ## Milestone 5 - integration

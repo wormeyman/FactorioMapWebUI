@@ -13,6 +13,7 @@ import { renderTerrain } from "../src/noise/preview/renderTerrain";
 import { renderResources } from "../src/noise/preview/renderResources";
 import { renderEnemies } from "../src/noise/preview/renderEnemies";
 import { renderCliffs } from "../src/noise/preview/renderCliffs";
+import { renderTrees } from "../src/noise/preview/renderTrees";
 
 // In the default suite FMW_PERF is unset -> this becomes it.skip (instant).
 const perfIt = process.env.FMW_PERF ? it : it.skip;
@@ -60,6 +61,7 @@ perfIt(
     time("terrain + resources", () => runRenderRequest({ ...base, view: "resources" }));
     time("terrain + enemies", () => runRenderRequest({ ...base, view: "enemies" }));
     time("terrain + cliffs", () => runRenderRequest({ ...base, view: "cliffs" }));
+    time("terrain + trees", () => runRenderRequest({ ...base, view: "trees" }));
 
     const terrainCtx = {
       seed0: SEED,
@@ -79,8 +81,13 @@ perfIt(
       waterLevel: 0,
       startingPositions: base.startingPositions,
     };
-    const all = time("ALL (terrain + 3 overlays)", () => {
+    // Hand-assembled rather than `view: "all"` so the per-overlay ctx is explicit.
+    // It must therefore mirror runRenderRequest's composite ORDER and membership -
+    // trees first, then resources/enemies/cliffs. Omitting an overlay here makes
+    // the headline row silently measure a composite the app no longer renders.
+    const all = time("ALL (terrain + 4 overlays)", () => {
       const img = renderTerrain(terrainCtx);
+      renderTrees(img, { ...oc, treesFrequency: 1, treesSize: 1 });
       renderResources(img, { ...oc, controls: {} });
       renderEnemies(img, {
         seed0: SEED,
@@ -101,7 +108,7 @@ perfIt(
     const summary = [
       "",
       `climate+tiles portion of terrain: ~${(terrain - elev).toFixed(0)} ms (the tiling target)`,
-      `all 3 overlays add over terrain:  ~${(all - terrain).toFixed(0)} ms`,
+      `all 4 overlays add over terrain:  ~${(all - terrain).toFixed(0)} ms`,
     ].join("\n");
     writeFileSync(
       "perf-result.txt",

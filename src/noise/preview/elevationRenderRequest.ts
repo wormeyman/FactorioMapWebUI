@@ -8,6 +8,7 @@ import { renderElevation } from "./renderElevation";
 import { renderEnemies } from "./renderEnemies";
 import { renderResources } from "./renderResources";
 import { renderTerrain } from "./renderTerrain";
+import { renderTrees } from "./renderTrees";
 
 /** A render job posted to the worker. `id` tags the response for staleness. */
 export interface ElevationRenderRequest {
@@ -30,6 +31,9 @@ export interface ElevationRenderRequest {
    */
   moistureFrequency?: number;
   moistureBias?: number;
+  /** Only `trees` consumes temperature; tile selection is aux + moisture. */
+  temperatureFrequency?: number;
+  temperatureBias?: number;
   auxFrequency?: number;
   auxBias?: number;
   startingAreaMoistureSize?: number;
@@ -40,15 +44,16 @@ export interface ElevationRenderRequest {
    * Which render to run: the water/land elevation mask ("elevation"), the full
    * terrain-tile color render ("terrain"), the terrain with the resource-patch
    * overlay composited on top ("resources"), the terrain with the enemy-base
-   * footprint overlay composited on top ("enemies"), or the terrain with the
-   * cliff footprint overlay composited on top ("cliffs"), or the terrain with
-   * all three overlays composited on top at once ("all"). Default "elevation".
-   * renderTerrain (and therefore "resources"/"enemies"/"cliffs"/"all") always uses the
+   * footprint overlay composited on top ("enemies"), the terrain with the
+   * cliff footprint overlay composited on top ("cliffs"), the terrain with the
+   * tree-density blend composited on top ("trees"), or the terrain with all
+   * four overlays composited on top at once ("all"). Default "elevation".
+   * renderTerrain (and therefore "resources"/"enemies"/"cliffs"/"trees"/"all") always uses the
    * Nauvis climate + tile catalog (see renderTerrain.ts), so it is only faithful
    * when `mapType` is "nauvis" - callers (the preview panel) disable those
    * toggles for lakes/island presets rather than send an unfaithful request here.
    */
-  view?: "elevation" | "terrain" | "resources" | "enemies" | "cliffs" | "all";
+  view?: "elevation" | "terrain" | "resources" | "enemies" | "cliffs" | "trees" | "all";
   /**
    * Per-resource control levers (control:<res>:frequency|size|richness), keyed by
    * controlName - consumed only when `view: "resources"`. Missing entries default
@@ -74,6 +79,11 @@ export interface ElevationRenderRequest {
    * 40, richness: 1 }` (the game's defaults) when omitted.
    */
   cliffSettings?: CliffSettingsInput;
+  /**
+   * The `trees` autoplace control's frequency/size (control:trees:*) - consumed
+   * only when `view: "trees"` or `"all"`. Defaults to `{ frequency: 1, size: 1 }`.
+   */
+  treeControls?: { readonly frequency: number; readonly size: number };
   /**
    * The full image this request is one tile of, when the renderer is tiling.
    * Absent means the request *is* the whole image (the single-render path).
@@ -152,6 +162,7 @@ export function runRenderRequest(req: ElevationRenderRequest): ElevationRenderRe
     req.view === "resources" ||
     req.view === "enemies" ||
     req.view === "cliffs" ||
+    req.view === "trees" ||
     req.view === "all"
   ) {
     image = renderTerrain({
@@ -172,6 +183,24 @@ export function runRenderRequest(req: ElevationRenderRequest): ElevationRenderRe
         startingAreaMoistureFrequency: req.startingAreaMoistureFrequency,
       },
     });
+    if (req.view === "trees" || req.view === "all") {
+      renderTrees(image, {
+        seed0: req.seed0,
+        originX: req.originX,
+        originY: req.originY,
+        tilesPerPixel: req.tilesPerPixel,
+        treesFrequency: req.treeControls?.frequency ?? 1,
+        treesSize: req.treeControls?.size ?? 1,
+        segmentationMultiplier: req.segmentationMultiplier,
+        moistureFrequency: req.moistureFrequency,
+        moistureBias: req.moistureBias,
+        temperatureFrequency: req.temperatureFrequency,
+        temperatureBias: req.temperatureBias,
+        startingAreaMoistureSize: req.startingAreaMoistureSize,
+        startingAreaMoistureFrequency: req.startingAreaMoistureFrequency,
+        startingPositions: req.startingPositions,
+      });
+    }
     if (req.view === "resources" || req.view === "all") {
       renderResources(image, {
         seed0: req.seed0,
