@@ -4,14 +4,69 @@ Written 2026-07-21 end of session. Live until the branch merges, then delete it.
 
 ## State in one line
 
-All 13 planned tasks plus two follow-up fidelity fixes are **implemented,
-reviewed, committed, and green** (883 passing / 2 skipped) on `feat/nauvis-trees`.
-**Not merged, not pushed, not deployed.** The only thing left is the final
-whole-branch review, then the merge decision.
+All 13 planned tasks, two fidelity fixes, **and the whole-branch review with all
+seven of its findings fixed** are implemented, committed and green (906 passing /
+2 skipped) on `feat/nauvis-trees`. **Not merged, not pushed, not deployed.** The
+only thing left is the merge decision, then deploy.
 
-The last **code** commit is `26bf853`; everything after it is documentation, so
-`git log --oneline` will show a tip at or beyond that. Run `pnpm vp test` on
-arrival to confirm the suite is still green before trusting any of this.
+Run `pnpm vp test` on arrival to confirm the suite is still green before trusting
+any of this.
+
+## Session 2 (2026-07-22): review + the perf fix
+
+Two reviewers covered the branch (noise core / render + UI). **Neither found a
+Critical.** The noise core got the strongest available validation: all 15 species
+expressions were reconstructed from the catalog and matched character-for-character
+against real 2.1.11 game data, and `BASIS_ABS_MAX = 1.8` was shown to be a genuine
+*analytic* bound (1.771875), not merely measured.
+
+**The one real defect was performance, and it was a spec deviation.** The design
+doc said the shared per-pixel terms "are computed once per pixel"; they were
+computed once per *species*, 15x over, and `evalAt` recomputed `cheapAt` a second
+time. The climate stack costs more than the species noise the early-out was
+saving, so this dominated the whole render.
+
+Browser-measured, seed 123456, 1024^2, median of 5 (`all` composite):
+
+| | before | after | main, no trees |
+| --- | --- | --- | --- |
+| `all` | 6,965 ms | **2,214 ms** | 1,844 ms |
+
+Trees' marginal cost over the no-trees baseline went **5,121 ms -> 370 ms**. The
+density field alone is 9.5-10.4x faster, with **identical checksums** in three
+regions - the fix had to be bit-identical, so term order is preserved deliberately
+(float addition is not associative; see the comment in `treeField.ts`).
+
+The seven findings, all fixed:
+
+1. `0adf590` - the perf hoist above.
+2. `b1f8762` - the composite-ordering assertion was order-INVARIANT (it held even
+   if trees composited last and washed the ore green). Now pinned; mutation-checked.
+3. `b1f8762` - `pnpm perf`'s headline `ALL` row never imported `renderTrees`, so it
+   measured a composite the app does not render. Fixed, plus a `terrain + trees` row.
+4. `b1f8762` - `control:temperature:*` was parsed by `climateReads` and silently
+   dropped. Nothing consumed `temperature` before trees, so an imported exchange
+   string carrying an override rendered the wrong forests with no signal. Threaded
+   through; there is no UI for it, so the new tests are the only thing holding the
+   wiring, and both were mutation-checked.
+5. `29d9a56` - the per-species `cap` was validated by nothing (it binds at 0 of 390
+   oracle points). Closed by checking in the game's expression strings and
+   reconstructing them from the catalog character-for-character, which pins `cap`
+   plus every ramp/scale/seed/offset without needing a Factorio install.
+6. `b1f8762` - two docs claimed the five excluded dead/dry trees "feed decorative
+   prototypes". Verified false against 2.1.11: they are real `type = "tree"`
+   entities on `control = "trees"` that the game's preview charts. They are excluded
+   on **measured** contribution (max gain 0.038). Both docs corrected.
+7. `b1f8762` - stale "all five toggles" comment (six now), duplicated roadmap bullet.
+
+Deferred minors from `.superpowers/sdd/progress.md` were triaged by both reviewers;
+the remainder are explicitly "ship as-is", including the pre-existing
+`CliffSettings` looseness in `test/elevationPreviewCtx.spec.ts`.
+
+**Still open, not blocking:** the kernel in `renderTrees.ts` is only physically
+correct at `tilesPerPixel = 1` (the app is hard-pinned there, but a future zoom
+feature would inherit a wrong model silently). Phase 2 (placement stipple) remains
+deferred.
 
 ## What shipped
 
@@ -89,18 +144,19 @@ Commits, oldest first:
 
 ## Next steps, in order
 
-1. **Final whole-branch review.** Not yet run. Use
-   `superpowers:requesting-code-review` against `git merge-base main HEAD`..`HEAD`,
-   and point it at the deferred-minors list at the bottom of
-   `.superpowers/sdd/progress.md` so it can triage which must be fixed before merge.
-2. **Look at it in a browser.** No human has seen this render in the app yet.
-   `pnpm vp dev` (localhost only - see the constraint below), enable Debug, click
-   Trees and All. Take the median of 3 elapsed-ms readings at 1024x1024 for `all`
-   with and without trees. The Node bench is ~15% optimistic vs the browser, so the
-   browser number is the one that counts and it has **not** been taken for trees.
-3. **Merge decision** via `superpowers:finishing-a-development-branch`.
+1. ~~Final whole-branch review~~ - done 2026-07-22, all seven findings fixed.
+2. ~~Look at it in a browser~~ - done; rendered and measured (numbers above).
+   Eric has not personally eyeballed it yet, so that is worth doing before deploy.
+3. **Merge decision** via `superpowers:finishing-a-development-branch`. This is the
+   next action.
 4. Only then deploy (`pnpm run deploy`) - device testing was deliberately deferred
    to the deployed site.
+
+To re-measure the composite against a no-trees baseline, do NOT symlink
+`node_modules` into a `main` worktree - `vp` resolves the project root through it
+and silently serves the *branch* code from the main repo's cwd (this produced a
+bogus baseline once, caught only because `main` showed a Trees toggle it could not
+have). Run a real `pnpm install` in the worktree; it takes ~1.3 s off the store.
 
 ## Conventions and gotchas
 
