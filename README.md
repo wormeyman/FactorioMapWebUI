@@ -106,7 +106,8 @@ to develop or test the feature:
 - `pnpm preview:worker` - just the Worker + container (`wrangler dev`)
 - `pnpm preview:app` - just the app, pointed at the local Worker
 - `pnpm preview:test` - Worker + container unit tests
-- `pnpm preview:deploy` - `wrangler deploy` the Worker
+- `pnpm preview:deploy` - `wrangler deploy` the Worker (gated on its tests +
+  `wrangler types --check`)
 
 The container image build and render are also covered by a Docker integration
 test: `pnpm --filter @fmw/preview-container test:integration`.
@@ -114,8 +115,10 @@ test: `pnpm --filter @fmw/preview-container test:integration`.
 ### Deploy
 
 The app and preview service are already deployed (Cloudflare Pages +
-Workers/Containers on the `wormeyman` account; `pnpm run deploy` builds and
-publishes the app). The one-time setup, for reference, needs a Cloudflare account
+Workers/Containers on the `wormeyman` account; `pnpm run deploy` verifies,
+builds, and publishes the app). Both deploy paths are gated: `pnpm run deploy`
+runs `pnpm run verify` (`vp check` + `vp test` + `preview:test`) first and
+aborts before `wrangler` if anything fails. The one-time setup, for reference, needs a Cloudflare account
 and Workers Paid ($5/mo, required for Containers):
 
 ```

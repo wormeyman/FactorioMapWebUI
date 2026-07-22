@@ -80,7 +80,29 @@ note below for why `pnpm up`'s transitive re-resolution can break `vp check`.
   step (see the type-checking note below; there is still **no** `vue-tsc` check
   of `.vue` bodies)
 - `pnpm vp build` - production build
-- `pnpm run deploy` - build + `wrangler pages deploy` to Cloudflare Pages
+- `pnpm run verify` - `vp check` + `vp test` + `preview:test` in one gate (~9.5s)
+- `pnpm run deploy` - **verify** + build + `wrangler pages deploy` to Cloudflare Pages
+
+### Deploys are gated on `verify`
+
+Both deploy paths refuse to ship a broken tree. `deploy:app` runs
+`pnpm run verify` first, and the Worker's own `deploy` runs its `test` script
+(which itself chains `wrangler types --check`). Verified by planting failures:
+a type error and a failing test each stop the chain before `wrangler` is
+reached, and a clean tree passes through.
+
+Note `verify` uses plain `vp check`, **not** the `check` script - that one is
+`vp check --fix`, and a deploy must never silently rewrite files on its way out.
+
+The app deploy is gated on the whole monorepo, `preview-service` included, so a
+Worker test failure will block an app deploy. That coupling is deliberate: it
+means "the repo is inconsistent, don't ship." To deploy anyway in an emergency,
+run the two steps by hand rather than adding a bypass script:
+
+```bash
+pnpm build && pnpm --filter @fmw/preview-worker exec wrangler pages deploy dist \
+  --cwd ../.. --project-name factoriomapwebui --branch main --commit-dirty=true
+```
 
 The app is live at **`map.factorygamefan.com`**. The apex `factorygamefan.com`
 is a separate landing page, not this app; the worker's `ALLOWED_ORIGIN` is the
