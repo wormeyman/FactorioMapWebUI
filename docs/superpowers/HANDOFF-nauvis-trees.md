@@ -5,9 +5,13 @@ Written 2026-07-21 end of session. Live until the branch merges, then delete it.
 ## State in one line
 
 All 13 planned tasks plus two follow-up fidelity fixes are **implemented,
-reviewed, committed, and green** (883 passing / 2 skipped) on `feat/nauvis-trees`,
-tip `fcd04f2`. **Not merged, not pushed, not deployed.** The only thing left is
-the final whole-branch review, then the merge decision.
+reviewed, committed, and green** (883 passing / 2 skipped) on `feat/nauvis-trees`.
+**Not merged, not pushed, not deployed.** The only thing left is the final
+whole-branch review, then the merge decision.
+
+The last **code** commit is `26bf853`; everything after it is documentation, so
+`git log --oneline` will show a tip at or beyond that. Run `pnpm vp test` on
+arrival to confirm the suite is still green before trusting any of this.
 
 ## What shipped
 
