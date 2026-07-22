@@ -58,8 +58,19 @@ Prefer the game as an oracle over byte-diffing when settling a codec question.
 ## Commands
 
 Run `vp` (Vite+) **through pnpm** - the project pins pnpm via `devEngines`, so a
-bare `vp` or `npx vp` from the project root fails with `EBADDEVENGINES`. Node
-24.18.0 (`.node-version`).
+bare `vp` or `npx vp` from the project root fails with `EBADDEVENGINES`.
+
+Node **26.5.0** (`.node-version`) is what the repo is developed and verified on.
+`engines.node` stays a permissive floor (`>=24.18.0`) rather than matching the
+pin - older versions are simply untested, not known-broken. Nothing local
+consumes `.node-version` (node comes from Homebrew, no version manager is
+installed) and Cloudflare Pages never builds this repo - `deploy:app` uploads an
+already-built `dist` - so the file is documentation, not machinery.
+
+Adding a root dependency needs `pnpm add -w` (or `--workspace-root`); a bare
+`pnpm add <pkg>` at the root fails with `ERR_PNPM_ADDING_TO_ROOT`. Prefer
+targeted `pnpm add` over `pnpm up` for dependency bumps - see the type-checking
+note below for why `pnpm up`'s transitive re-resolution can break `vp check`.
 
 - `pnpm install` - install deps
 - `pnpm vp dev` - dev server
@@ -222,6 +233,17 @@ when reporting errors`) - a TypeScript 6.0.3 compiler bug, not a type error,
 - **`.vue` bodies are still unchecked.** Neither `vp check` nor `tsc` reports
   type errors inside `<script setup lang="ts">` (measured, not assumed). So
   `vp check` is a partial net over `.ts` only, not a full gate.
+- **`vite.config.ts` sits near TypeScript's comparison-depth limit.** A shift in
+  the transitive dependency graph can tip it over, making `vp check` fail with
+  `TS2321: Excessive stack depth comparing types ... and 'UserConfig'` - the
+  same pathology behind the `tsc` crash, and nothing to do with the file being
+  wrong. This is why dependency bumps use targeted `pnpm add` rather than
+  `pnpm up`: `pnpm up` re-resolves ~22 surrounding packages and triggered
+  exactly this, while installing the same target versions directly did not. If
+  it reappears, suspect the transitive graph, not the named package. Annotating
+  the config with an explicit type does **not** help - the augmented
+  `UserConfig` lives in `@voidzero-dev/vite-plus-core`, which is not resolvable,
+  and vitest's exported `ViteUserConfig` lacks the `staged`/`lint`/`fmt` fields.
 - The project stays on `typescript` 6.0.3 as the _editor/LSP_ compiler; the TS7
   upgrade is deferred because `vue-tsc`/Volar can't yet type-check `.vue`
   against it. Note the type-_check_ already effectively runs on TS7 via
