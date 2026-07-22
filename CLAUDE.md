@@ -306,7 +306,29 @@ adopted later, pick a release old enough to clear the policy (3.3.7 shipped
 users aliasing `typescript` to `@typescript/typescript6` under the official TS7
 migration, which does not apply while the project is on 6.0.3 directly.
 
-Two deliberate suppressions live in `vite.config.ts`, both narrow on purpose:
+### Remaining build/test log noise (investigated, left alone)
+
+`pnpm preview:test` prints four lines like
+
+```
+Sourcemap for ".../@cloudflare/containers/dist/index.js" points to missing source files
+```
+
+This is an **upstream packaging bug**, not a local problem: `@cloudflare/containers`
+(0.3.7, the latest) ships `dist/` with maps whose `sources` point at `../src/*.ts`,
+but no `src/` is published and the maps carry no `sourcesContent`. Vite emits it
+via an unconditional `logger.warnOnce`, so it is not reachable from
+`build.rollupOptions.onLog` - that hook only sees the _build_, and this happens in
+vite-node during tests. Two workarounds were tried and rejected:
+
+- `test.server.deps.external` for the package - **does not help**, pool-workers
+  bundles it regardless (measured; the warnings persist).
+- A Vite `customLogger` - would mean adding `vite` as a worker devDependency
+  (it is not resolvable there under pnpm isolation, and `vitest/config` does not
+  re-export `createLogger`) purely to mute a cosmetic upstream warning. Not worth
+  a dependency. Revisit if `@cloudflare/containers` fixes its packaging.
+
+Three deliberate suppressions live in `vite.config.ts`, all narrow on purpose:
 
 - `typescript/unbound-method` is off for `test/**/*.spec.ts` -
   `expect(mock.fn).toHaveBeenCalled()` passes an unbound reference by design.
@@ -315,3 +337,11 @@ Two deliberate suppressions live in `vite.config.ts`, both narrow on purpose:
   direct `eval` introduced anywhere else still warns. `zlib-asm`'s `eval` is
   load-bearing (it is the only deflate that matches the game's stream
   byte-for-byte), which is also why the app's CSP needs `unsafe-eval`.
+- The `Module "fs"/"path" has been externalized for browser compatibility`
+  warnings are filtered in the same `onLog`, matched on the
+  `rolldown:vite-resolve` plugin **plus `/zlib-asm/` in the importer path** -
+  those are zlib-asm's Node fallback imports, never reached in the browser.
+  Verified narrow: an `fs` import added to `src/` still warns.
+
+With all three in place `pnpm vp build` prints no warnings at all, so anything
+that does appear is new and worth reading.

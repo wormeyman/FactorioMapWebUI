@@ -16,6 +16,19 @@ export default defineConfig({
       // still surfaces.
       onLog(level, log, handler) {
         if (log.code === "EVAL" && log.id?.includes("/zlib-asm/")) return;
+        // Same module, second symptom: zlib-asm's Node fallback path imports
+        // `fs`/`path`, which the browser build externalizes and warns about.
+        // Those imports are never reached in the browser (the asm.js module is
+        // self-contained), so the warning is noise. Matched on the importer
+        // path as well as the message, so an externalized builtin imported by
+        // any *other* module still warns.
+        if (
+          log.plugin === "rolldown:vite-resolve" &&
+          log.message?.includes("has been externalized for browser compatibility") &&
+          log.message.includes("/zlib-asm/")
+        ) {
+          return;
+        }
         handler(level, log);
       },
     },
