@@ -689,6 +689,55 @@ async function captureTrees(): Promise<void> {
 }
 
 /**
+ * The same species at NON-default control:trees levers, so the frequency ->
+ * input_scale and size -> `0.2 * control:trees:size` wiring is pinned rather than
+ * assumed. Three representative species (one per cap tier) keep this capture short.
+ */
+async function captureTreesControls(): Promise<void> {
+  const seed = 123456;
+  const treesFrequency = 3;
+  const treesSize = 2;
+  const positions: Position[] = [];
+  for (let gy = 0; gy < 3; gy++) {
+    for (let gx = 0; gx < 3; gx++) {
+      positions.push({ x: gx * 23 - 23 + 0.5, y: gy * 29 - 29 + 0.25 });
+    }
+  }
+  for (let k = 0; k < 8; k++) {
+    const a = (k * Math.PI) / 4;
+    positions.push({ x: 1200 * Math.cos(a) + 0.5, y: 1200 * Math.sin(a) + 0.25 });
+  }
+
+  const workDir = await mkdtemp(join(tmpdir(), "oracle-capture-"));
+  try {
+    const values: Record<string, number[]> = {};
+    for (const name of ["tree_01", "tree_08", "tree_09_red"]) {
+      values[name] = await sampleExpression(name, positions, {
+        workDir,
+        seed,
+        mapGenOverrides: {
+          autoplace_controls: { trees: { frequency: treesFrequency, size: treesSize } },
+        },
+      });
+    }
+    const fixture = {
+      _comment:
+        "Ground truth from Factorio 2.1.11 via the test/oracle harness. Three tree species at control:trees frequency=3 size=2. Regenerate: node --experimental-strip-types test/oracle/capture.ts trees-controls",
+      seed0: seed,
+      treesFrequency,
+      treesSize,
+      positions,
+      values,
+    };
+    const out = join(FIXTURES, "oracle-trees-controls.seed123456.json");
+    await writeFile(out, `${JSON.stringify(fixture, null, 2)}\n`);
+    console.log(`wrote ${out}`);
+  } finally {
+    await rm(workDir, { recursive: true, force: true });
+  }
+}
+
+/**
  * The `moisture` (= `moisture_nauvis`) climate expression - the most complex
  * climate tree (a base quick_multioctave_noise term, a starting-area bias
  * blend keyed on `distance_from_nearest_point{points = starting_positions}`,
@@ -1419,6 +1468,7 @@ if (want("resource-starting")) await captureResourceStarting();
 if (want("tile-names")) await captureTileNames();
 if (want("enemy-base")) await captureEnemyBase();
 if (want("trees")) await captureTrees();
+if (want("trees-controls")) await captureTreesControls();
 if (want("cliff-elevation")) await captureCliffElevation();
 if (want("cliffiness")) await captureCliffiness();
 if (want("cliff-offset-raw")) await captureCliffOffsetRaw();

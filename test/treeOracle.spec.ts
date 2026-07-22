@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import fixture from "./fixtures/oracle-trees.seed123456.json";
+import controlFixture from "./fixtures/oracle-trees-controls.seed123456.json";
 import { makeTreeShared } from "../src/noise/trees/treeShared";
 import { makeTreeSpeciesFields } from "../src/noise/trees/treeField";
 
@@ -83,5 +84,48 @@ describe("every tree species matches the game", () => {
       // absolute bound above 2e-4 without a new observed-worst measurement.
       expect(agrees(actual, expected, 2e-4, 1e-2), `@(${p.x},${p.y})`).toBe(true);
     });
+  });
+});
+
+describe("control:trees levers match the game", () => {
+  const f = controlFixture as {
+    seed0: number;
+    treesFrequency: number;
+    treesSize: number;
+    positions: Array<{ x: number; y: number }>;
+    values: Record<string, number[]>;
+  };
+  const fields = makeTreeSpeciesFields({
+    seed0: f.seed0,
+    treesFrequency: f.treesFrequency,
+    treesSize: f.treesSize,
+  });
+
+  it.each(Object.keys(f.values))("reproduces %s at frequency 3 / size 2", (name) => {
+    const field = fields.find((x) => x.species.name === name)!;
+    let worst = 0;
+    let label = "";
+    f.positions.forEach((p, i) => {
+      const err = Math.abs(field.evalAt(p.x, p.y) - f.values[name][i]);
+      if (err > worst) {
+        worst = err;
+        label = `@(${p.x},${p.y})`;
+      }
+    });
+    // Observed worst (2026-07-21, Factorio 2.1.11, seed 123456, control:trees
+    // frequency=3 size=2): tree_01 8.82e-4 (@(0.5,-1199.75)), tree_08 6.12e-4,
+    // tree_09_red 1.01e-4 - the same basisNoise f32-floor order of magnitude as
+    // the default-lever fixture. Calibrated just above the observed worst
+    // (tree_01); do not loosen above 1e-3.
+    expect(worst, `${name} worst ${label}`).toBeLessThan(1e-3);
+  });
+
+  it("differs from the default-lever field, so the levers are actually live", () => {
+    const base = makeTreeSpeciesFields({ seed0: f.seed0 });
+    const name = "tree_01";
+    const a = base.find((x) => x.species.name === name)!;
+    const b = fields.find((x) => x.species.name === name)!;
+    const differs = f.positions.some((p) => a.evalAt(p.x, p.y) !== b.evalAt(p.x, p.y));
+    expect(differs).toBe(true);
   });
 });
