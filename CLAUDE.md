@@ -178,6 +178,29 @@ A separate pnpm workspace (`worker/` Cloudflare Worker + `container/`
 digest-pinned Factorio headless image). Opt-in and the app's only outbound call;
 the editor is fully functional offline without it.
 
+`wrangler` is not global - drive it through the workspace:
+`pnpm --filter @fmw/preview-worker exec wrangler <cmd>`.
+
+**`worker-configuration.d.ts` is generated and must stay in sync with
+`wrangler.jsonc`.** It once drifted silently (the types declared the apex origin
+while the config said the `map.` subdomain). Nothing caught that: it is not a
+type error, so both `vp check` and the worker tests pass with a wrong value in
+it. `wrangler types --check` now gates the worker's `test` and `deploy` scripts,
+so `pnpm preview:test` fails loudly on drift.
+
+- Regenerate with
+  `pnpm --filter @fmw/preview-worker exec wrangler types && pnpm vp check --fix`.
+  The formatter pass is **not optional** - wrangler emits tabs/unwrapped types
+  and the repo formats to 2-space/wrapped, so a raw regen shows a whole-file
+  whitespace diff that hides the real change.
+- Limitation: `--check` compares the **config** against the hash recorded in the
+  generated file's header. It catches a changed `wrangler.jsonc`, but it does
+  **not** notice hand-edits to the generated file itself. Don't hand-edit it.
+- The worker deliberately has **no** `typescript` and **no**
+  `@cloudflare/workers-types` devDependency, and ignores wrangler's
+  "Install @types/node" advice. See the comment in
+  `preview-service/worker/tsconfig.json` before adding any of them back.
+
 ## Conventions
 
 - `docs/superpowers/specs/` and `docs/superpowers/plans/` are point-in-time
