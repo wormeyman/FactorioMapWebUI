@@ -43,10 +43,32 @@ port instead renders the exact expected value of what the roll would produce
 `DecorativeMapGenerationTask` symbol exists anywhere in the binary, and the
 preview worker's three calls above are the entirety of what it does before
 compositing - `chartCliffs` and `chartEntities`, nothing decorative. The game's
-own preview shows no decoratives, so this port does not add any; the dead/dry
-tree expressions in `trees.lua` (`tree_dry_hairy`, `tree_dead_dry_hairy`,
-`tree_dead_grey_trunk`, `tree_dry`, `tree_dead_desert`) feed decorative
-prototypes and were excluded from the 15-species catalog for this reason.
+own preview shows no decoratives, so this port does not add any.
+
+**The five dead/dry trees are excluded on measured contribution, NOT because
+they are decorative** (corrected 2026-07-22 - the earlier claim here was wrong).
+`tree_dry_hairy`, `tree_dead_dry_hairy`, `tree_dead_grey_trunk`, `tree_dry` and
+`tree_dead_desert` are the `probability_expression`s of five real `type = "tree"`
+**entity** prototypes with `autoplace` blocks, all on `control = "trees"`
+(`dry-tree`, `dead-tree-desert`, `dead-grey-trunk`, `dead-dry-hairy-tree`,
+`dry-hairy-tree` in `2.1.11:base/prototypes/entity/trees.lua`). `trees.lua` sets
+no `map_color` anywhere, so they chart at the same `default_color_by_type["tree"]`
+green the 15 ported species do - the game's preview *does* draw them, and
+`chartEntities` treats them identically.
+
+Excluding them is still the right call, but on the numbers rather than on a
+category error. Porting all five (including the `tree_08_extended` and `desert`
+local_expressions inside `tree_dead_desert`, which cover a moisture band no
+ported species reaches) and diffing against `makeTreeDensity`:
+
+| region | sample points | points raised | of those, from 0 | max gain | total density change |
+| --- | --- | --- | --- | --- | --- |
+| 1024^2 @ seed 123456 | 65,536 | 16 (0.02%) | 12 | 0.026 | +0.004% |
+| 8192^2 @ seed 777771 | 262,144 | 3,566 (1.4%) | 3,501 | 0.038 | +0.43% |
+
+Max alpha contribution is ~`0.4 * 0.038` = 1.5%, i.e. invisible. Note this is
+also a small, previously unattributed part of the 1.14-1.22x ink residual below,
+which that section attributes wholly to the expected-value-vs-discrete gap.
 
 ## The footprint RE - the most valuable part
 

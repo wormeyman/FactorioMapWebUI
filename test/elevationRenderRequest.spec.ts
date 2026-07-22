@@ -408,11 +408,13 @@ describe("runRenderRequest", () => {
           s.add(i);
       return s;
     };
-    const resources = diffPixels(bufFor("resources"));
+    const resourcesBuf = bufFor("resources");
+    const allBuf = bufFor("all");
+    const resources = diffPixels(resourcesBuf);
     const enemies = diffPixels(bufFor("enemies"));
     const cliffs = diffPixels(bufFor("cliffs"));
     const trees = diffPixels(bufFor("trees"));
-    const all = diffPixels(bufFor("all"));
+    const all = diffPixels(allBuf);
 
     // The chosen region actually exercises all four overlays.
     expect(resources.size).toBeGreaterThan(0);
@@ -428,6 +430,31 @@ describe("runRenderRequest", () => {
     for (const i of trees) expect(all.has(i)).toBe(true);
     const union = new Set<number>([...resources, ...enemies, ...cliffs, ...trees]);
     expect(all.size).toBe(union.size);
+
+    // The union assertion above is ORDER-INVARIANT - it holds just as well if
+    // trees were composited LAST, washing the ore/base/cliff colors green. The
+    // overlapping pixels stay in the diff set either way, they are just the
+    // wrong color. So pin the order too.
+    //
+    // Compositing runs terrain -> trees -> resources -> enemies -> cliffs, and
+    // resources paint opaquely. On a pixel resources paint, where the two later
+    // overlays do not, "all" must therefore equal the resources render exactly -
+    // trees underneath must not show through.
+    let overlapping = 0;
+    for (const i of resources) {
+      if (enemies.has(i) || cliffs.has(i)) continue;
+      if (trees.has(i)) overlapping++;
+      expect(
+        [allBuf[i], allBuf[i + 1], allBuf[i + 2], allBuf[i + 3]],
+        `pixel ${i}: trees must composite UNDER resources`,
+      ).toEqual([resourcesBuf[i], resourcesBuf[i + 1], resourcesBuf[i + 2], resourcesBuf[i + 3]]);
+    }
+    // ...and the assertion is only meaningful where trees actually contend for
+    // the same pixel, so prove this window has such pixels rather than passing
+    // because trees and resources never meet.
+    expect(overlapping, "window must have pixels both trees and resources paint").toBeGreaterThan(
+      0,
+    );
   });
 });
 
@@ -472,6 +499,33 @@ describe("view: trees", () => {
     const trees = runRenderRequest({ ...base, view: "trees" });
     expect(Array.from(new Uint8ClampedArray(trees.buffer))).not.toEqual(
       Array.from(new Uint8ClampedArray(terrain.buffer)),
+    );
+  });
+
+  // Trees are the only consumer of `temperature`, and there is no UI for
+  // control:temperature:* - it reaches the render only from an imported exchange
+  // string. So this is the one assertion standing between a dropped field and a
+  // silently wrong forest layout. A bias this large pushes temperature out of
+  // every species' ramp, so the overlay must vanish back to bare terrain.
+  it("forwards temperatureBias through to the tree overlay", () => {
+    const terrain = runRenderRequest({ ...base, view: "terrain" });
+    const trees = runRenderRequest({ ...base, view: "trees" });
+    const frozen = runRenderRequest({ ...base, view: "trees", temperatureBias: -1000 });
+    // The overlay is doing something to begin with...
+    expect(Array.from(new Uint8ClampedArray(trees.buffer))).not.toEqual(
+      Array.from(new Uint8ClampedArray(terrain.buffer)),
+    );
+    // ...and the lever turns it off, which it cannot do if the field is dropped.
+    expect(Array.from(new Uint8ClampedArray(frozen.buffer))).toEqual(
+      Array.from(new Uint8ClampedArray(terrain.buffer)),
+    );
+  });
+
+  it("forwards temperatureFrequency through to the tree overlay", () => {
+    const trees = runRenderRequest({ ...base, view: "trees" });
+    const warped = runRenderRequest({ ...base, view: "trees", temperatureFrequency: 4 });
+    expect(Array.from(new Uint8ClampedArray(warped.buffer))).not.toEqual(
+      Array.from(new Uint8ClampedArray(trees.buffer)),
     );
   });
 

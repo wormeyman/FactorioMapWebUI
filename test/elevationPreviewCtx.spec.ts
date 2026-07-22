@@ -144,4 +144,23 @@ describe("elevationCtxFromPreset", () => {
     expect(r.ctx.startingAreaMoistureSize).toBe(2);
     expect(r.ctx.startingAreaMoistureFrequency).toBe(3);
   });
+
+  // The app has no UI for control:temperature:*, so the only way it ever gets a
+  // non-default value is an imported exchange string. Nothing consumed
+  // `temperature` before the trees overlay, so these were parsed and dropped.
+  it("reads control:temperature:* off the preset's property_expression_names", () => {
+    const p = lakesPreset();
+    p.propertyExpressionNames["control:temperature:frequency"] = "2.000000";
+    p.propertyExpressionNames["control:temperature:bias"] = "-0.250000";
+
+    const r = elevationCtxFromPreset(p);
+    expect(r.ctx.temperatureFrequency).toBe(2);
+    expect(r.ctx.temperatureBias).toBeCloseTo(-0.25, 6);
+  });
+
+  it("defaults control:temperature:* to the game's 1 / 0 when absent", () => {
+    const r = elevationCtxFromPreset(lakesPreset());
+    expect(r.ctx.temperatureFrequency).toBe(1);
+    expect(r.ctx.temperatureBias).toBe(0);
+  });
 });

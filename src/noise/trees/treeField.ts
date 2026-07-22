@@ -40,6 +40,14 @@ export interface TreeFieldParams {
   /** Climate levers, forwarded to makeMoisture. */
   readonly moistureFrequency?: number;
   readonly moistureBias?: number;
+  /**
+   * `control:temperature:frequency` / `:bias`. The app has no UI for these, but
+   * `climateReads` parses them out of an imported exchange string's
+   * property_expression_names, and trees are the only consumer of `temperature`
+   * - so dropping them here silently renders the wrong forest layout.
+   */
+  readonly temperatureFrequency?: number;
+  readonly temperatureBias?: number;
   readonly startingAreaMoistureSize?: number;
   readonly startingAreaMoistureFrequency?: number;
   /** Spawn points for `distance`. Default single origin spawn. */
@@ -113,8 +121,9 @@ function maxNoiseFor(species: TreeSpecies): number {
  *
  * `temperature` has been ported and oracle-validated since M2 but was never
  * evaluated by anything - tile selection turned out to be aux + moisture only.
- * This is its first consumer. There is no user-facing temperature control, so it
- * runs at the game's defaults (frequency 1, bias 0).
+ * This is its first consumer, which is why `control:temperature:*` only started
+ * mattering here: the app has no UI for it, but an imported exchange string can
+ * carry one, so the levers are threaded through rather than defaulted.
  */
 export function makeTreeSpeciesFields(params: TreeFieldParams): TreeSpeciesField[] {
   return makeTreeFields(params).fields;
@@ -135,7 +144,11 @@ function makeTreeFields(params: TreeFieldParams): TreeFields {
     { seed0, segmentationMultiplier: params.segmentationMultiplier },
     nz,
   );
-  const temperature = makeTemperature({ seed0 });
+  const temperature = makeTemperature({
+    seed0,
+    frequency: params.temperatureFrequency,
+    bias: params.temperatureBias,
+  });
   const moisture = makeMoisture({
     seed0,
     segmentationMultiplier: params.segmentationMultiplier,

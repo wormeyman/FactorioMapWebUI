@@ -31,6 +31,9 @@ export interface ElevationRenderRequest {
    */
   moistureFrequency?: number;
   moistureBias?: number;
+  /** Only `trees` consumes temperature; tile selection is aux + moisture. */
+  temperatureFrequency?: number;
+  temperatureBias?: number;
   auxFrequency?: number;
   auxBias?: number;
   startingAreaMoistureSize?: number;
@@ -191,6 +194,8 @@ export function runRenderRequest(req: ElevationRenderRequest): ElevationRenderRe
         segmentationMultiplier: req.segmentationMultiplier,
         moistureFrequency: req.moistureFrequency,
         moistureBias: req.moistureBias,
+        temperatureFrequency: req.temperatureFrequency,
+        temperatureBias: req.temperatureBias,
         startingAreaMoistureSize: req.startingAreaMoistureSize,
         startingAreaMoistureFrequency: req.startingAreaMoistureFrequency,
         startingPositions: req.startingPositions,

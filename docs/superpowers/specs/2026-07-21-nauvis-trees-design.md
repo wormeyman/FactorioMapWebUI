@@ -54,9 +54,16 @@ Two consequences:
 2. **Decoratives are out of scope for free.** No `DecorativeMapGenerationTask`
    symbol exists in the binary, and the preview worker calls only `chartCliffs` +
    `chartEntities`. The game's own preview shows no decoratives, so neither should
-   ours. The dead/dry-tree expressions in `trees.lua` (`tree_dry_hairy`,
-   `tree_dead_dry_hairy`, `tree_dead_grey_trunk`, `tree_dry`, `tree_dead_desert`)
-   feed decorative prototypes and are explicitly **not** ported here.
+   ours.
+
+   **Correction (2026-07-22):** this section originally went on to say the
+   dead/dry-tree expressions (`tree_dry_hairy`, `tree_dead_dry_hairy`,
+   `tree_dead_grey_trunk`, `tree_dry`, `tree_dead_desert`) "feed decorative
+   prototypes". That was wrong - they are five real `type = "tree"` entity
+   prototypes on `control = "trees"`, and the game's preview charts them like any
+   other tree. They are excluded on **measured negligible contribution** (max
+   density gain 0.038, ~1.5% of max alpha), not on classification. See
+   `docs/noise/trees-NOTES.md` for the per-region measurements.
 
 ### Sequencing decision (Eric, 2026-07-21)
 

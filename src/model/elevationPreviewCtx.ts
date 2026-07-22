@@ -72,6 +72,9 @@ export interface ElevationPreviewCtx {
     moistureBias: number;
     auxFrequency: number;
     auxBias: number;
+    /** Consumed only by the trees overlay - tile selection is aux + moisture. */
+    temperatureFrequency: number;
+    temperatureBias: number;
     startingAreaMoistureSize: number;
     startingAreaMoistureFrequency: number;
   };
@@ -123,6 +126,8 @@ export function elevationCtxFromPreset(preset: Preset): ElevationPreviewCtx {
       startingPositions,
       moistureFrequency: climate.moisture.frequency,
       moistureBias: climate.moisture.bias,
+      temperatureFrequency: climate.temperature.frequency,
+      temperatureBias: climate.temperature.bias,
       auxFrequency: climate.aux.frequency,
       auxBias: climate.aux.bias,
       startingAreaMoistureSize: climate.startingAreaMoisture.size,

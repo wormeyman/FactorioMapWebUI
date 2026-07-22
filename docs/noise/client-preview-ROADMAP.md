@@ -324,7 +324,6 @@ Done = ore patches overlaid on land, responding to the frequency/size/richness s
       `docs/noise/placement-roll-NOTES.md`), worms/fish autoplacers, and
       cliff exclusion (consistent with the existing ore-on-cliffs gap).
 - [ ] Non-Nauvis planets (Space Age) if in scope - each is another expression set.
-- [ ] Non-Nauvis planets (Space Age) if in scope - each is another expression set.
 
 ## Milestone 5 - integration
 

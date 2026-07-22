@@ -84,6 +84,25 @@ describe("makeTreeSpeciesFields", () => {
     );
     expect(differs).toBe(true);
   });
+
+  // Trees are the ONLY consumer of `temperature` (tile selection is aux +
+  // moisture), so if these levers are not threaded through, an imported exchange
+  // string carrying a temperature override renders the wrong forests silently.
+  // There is no UI for them, so this test is the only thing holding the wiring.
+  it("threads control:temperature:frequency through to the species climate ramp", () => {
+    const base = makeTreeDensity({ seed0: 123456 });
+    const warped = makeTreeDensity({ seed0: 123456, temperatureFrequency: 4 });
+    expect(GRID.some(([x, y]) => base(x, y) !== warped(x, y))).toBe(true);
+  });
+
+  it("threads control:temperature:bias through to the species climate ramp", () => {
+    const base = makeTreeDensity({ seed0: 123456 });
+    // Large enough to push temperature out of every species' tempRamp window,
+    // which drives the climate term - and so the density - to 0 everywhere.
+    const frozen = makeTreeDensity({ seed0: 123456, temperatureBias: -1000 });
+    expect(GRID.some(([x, y]) => base(x, y) > 0)).toBe(true);
+    expect(GRID.every(([x, y]) => frozen(x, y) === 0)).toBe(true);
+  });
 });
 
 describe("makeTreeDensity", () => {

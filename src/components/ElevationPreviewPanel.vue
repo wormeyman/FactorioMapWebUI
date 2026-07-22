@@ -38,8 +38,8 @@ const supported = computed(() => preview.value?.supported ?? false);
 // The terrain render (renderTerrain, Task 11) always evaluates the Nauvis
 // climate + tile catalog, regardless of the active preset's actual map type -
 // it is only faithful for mapType "nauvis". Terrain, Resources, Enemies,
-// Cliffs, and All each render through the Nauvis-only renderTerrain, so all
-// five toggles gate on `terrainAvailable`.
+// Cliffs, Trees and All each render through the Nauvis-only renderTerrain, so
+// all six toggles gate on `terrainAvailable`.
 // The user's desired view. Defaults to the full composite, which is the closest
 // thing to the game's own map preview - and with dev mode off (the default) it
 // is the only view a user ever gets, since the toggles are hidden.
@@ -102,6 +102,8 @@ async function generate() {
         startingPositions: info.ctx.startingPositions,
         moistureFrequency: info.ctx.moistureFrequency,
         moistureBias: info.ctx.moistureBias,
+        temperatureFrequency: info.ctx.temperatureFrequency,
+        temperatureBias: info.ctx.temperatureBias,
         auxFrequency: info.ctx.auxFrequency,
         auxBias: info.ctx.auxBias,
         startingAreaMoistureSize: info.ctx.startingAreaMoistureSize,
