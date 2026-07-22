@@ -28,6 +28,16 @@
  * Trees do not place on water, so water pixels are skipped, reusing renderTerrain's
  * exact water decision via WATER_TILE_COLORS the same way renderResources does.
  * Cliff exclusion is not wired, matching the existing deferred ore-on-cliffs item.
+ *
+ * The blend itself compounds per drawn tree, not per coverage probability:
+ * `drawRectangle` blends the tree color into the chart once for every tree
+ * that touches a pixel, so two overlapping trees reach
+ * `1 - (1 - TREE_MAX_ALPHA)^2`, not a single capped blend at `TREE_MAX_ALPHA`.
+ * Blending once against a coverage probability structurally capped alpha at
+ * `TREE_MAX_ALPHA` (0.398) and left the overlay under-inked (3.85 vs. the
+ * game's 5.70 total ink units at seed 123456, whose implied alpha reaches a
+ * measured max of 0.952). Moving the per-tree alpha inside the product lets
+ * independent blends compound instead.
  */
 import { WATER_TILE_COLORS } from "./renderResources";
 import { makeTreeDensity, type TreeFieldParams } from "../trees/treeField";
@@ -85,10 +95,16 @@ export function renderTrees(base: ImageData, opts: RenderTreesOptions): void {
       const o = (py * width + px) * 4;
       if (isWater(base.data[o], base.data[o + 1], base.data[o + 2])) continue;
 
-      // Coverage = 1 - product over the 3x3 neighbourhood of (1 - p * w),
-      // where w is the separable [0.5, 1, 0.5] kernel weight. Neighbouring
-      // tiles' placements are independent, so this is the probability at
-      // least one of them paints this pixel.
+      // The game blends once PER DRAWN TREE, not once against a coverage
+      // probability - so overlapping trees compound rather than cap out at a
+      // single tree's TREE_MAX_ALPHA. Each neighbouring tile independently
+      // draws at alpha `TREE_MAX_ALPHA * p * w` (w = the separable
+      // [0.5, 1, 0.5] kernel weight), and the combined alpha of independent
+      // blends is 1 minus the product of their misses - which self-limits
+      // toward 1, not TREE_MAX_ALPHA. Measured against a real
+      // --generate-map-preview render at seed 123456, the game's implied
+      // alpha has median 0.381, p90 0.65, max 0.952 - all well above the old
+      // formula's structural ceiling of TREE_MAX_ALPHA (0.398).
       let miss = 1;
       for (let dy = -1; dy <= 1; dy++) {
         const wy = KERNEL_WEIGHT[dy + 1];
@@ -97,15 +113,15 @@ export function renderTrees(base: ImageData, opts: RenderTreesOptions): void {
           const wx = KERNEL_WEIGHT[dx + 1];
           const bx = px + 1 + dx;
           const p = densityBuf[by * bufW + bx] * wx * wy;
-          miss *= 1 - p;
+          miss *= 1 - TREE_MAX_ALPHA * p;
         }
       }
-      const coverage = 1 - miss;
-      if (coverage <= 0) continue;
+      const alpha = 1 - miss;
+      if (alpha <= 0) continue;
 
       // Match the game's integer blend arithmetic exactly rather than
       // float-rounding: alpha is an 8-bit byte, then fixed up 255 -> 256.
-      const A = Math.round(TREE_MAX_ALPHA * coverage * 255);
+      const A = Math.round(alpha * 255);
       const a = A + (A >> 7);
       base.data[o] = ((256 - a) * base.data[o] + a * TREE_MAP_COLOR[0]) >> 8;
       base.data[o + 1] = ((256 - a) * base.data[o + 1] + a * TREE_MAP_COLOR[1]) >> 8;

@@ -19,17 +19,23 @@ const GRASS: readonly [number, number, number] = [99, 122, 44];
 // Independent re-implementation of the footprint model, so these expectations
 // are derived from the spec (drawRectangle rasterizes a 1.0-tile box floor to
 // ceil, blending every touched pixel at full alpha; a uniform sub-tile offset
-// gives the separable [0.5, 1, 0.5] kernel; neighbouring placements are
-// independent events so coverage = 1 - product of misses), never by echoing
+// gives the separable [0.5, 1, 0.5] kernel; the game blends once per drawn
+// tree, so independent neighbouring blends compound as
+// alpha = 1 - product of (1 - TREE_MAX_ALPHA * p * w)), never by echoing
 // whatever renderTrees.ts happens to compute.
 const KERNEL = [0.5, 1.0, 0.5];
 
 /**
- * Coverage at world coordinate (wx, wy), where the 3x3 neighbourhood is spaced
- * by `tpp` world tiles - matching how the pixel grid maps to world coordinates
- * at a given tilesPerPixel.
+ * Combined alpha at world coordinate (wx, wy), where the 3x3 neighbourhood is
+ * spaced by `tpp` world tiles - matching how the pixel grid maps to world
+ * coordinates at a given tilesPerPixel.
+ *
+ * The game blends once PER DRAWN TREE, so each neighbouring tile
+ * independently draws at alpha `TREE_MAX_ALPHA * p * w`, and the combined
+ * alpha of these independent blends is 1 minus the product of their misses -
+ * compounding toward 1 rather than capping at a single tree's TREE_MAX_ALPHA.
  */
-function coverageAt(
+function alphaAt(
   density: (x: number, y: number) => number,
   wx: number,
   wy: number,
@@ -39,15 +45,15 @@ function coverageAt(
   for (let dy = -1; dy <= 1; dy++) {
     for (let dx = -1; dx <= 1; dx++) {
       const p = density(wx + dx * tpp, wy + dy * tpp) * KERNEL[dx + 1] * KERNEL[dy + 1];
-      miss *= 1 - p;
+      miss *= 1 - TREE_MAX_ALPHA * p;
     }
   }
   return 1 - miss;
 }
 
 /** The game's integer blend: 255->256 alpha fixup, then `((256-a)*dst + a*src) >> 8`. */
-function blendChannel(dst: number, src: number, coverage: number): number {
-  const A = Math.round(TREE_MAX_ALPHA * coverage * 255);
+function blendChannel(dst: number, src: number, alpha: number): number {
+  const A = Math.round(alpha * 255);
   const a = A + (A >> 7);
   return ((256 - a) * dst + a * src) >> 8;
 }
@@ -67,9 +73,9 @@ describe("renderTrees", () => {
     for (let py = 0; py < 16; py++) {
       for (let px = 0; px < 16; px++) {
         const o = (py * 16 + px) * 4;
-        const coverage = coverageAt(density, px, py);
+        const alpha = alphaAt(density, px, py);
         for (let c = 0; c < 3; c++) {
-          const expected = blendChannel(GRASS[c], TREE_MAP_COLOR[c], coverage);
+          const expected = blendChannel(GRASS[c], TREE_MAP_COLOR[c], alpha);
           expect(img.data[o + c], `px(${px},${py}) ch${c}`).toBe(expected);
         }
         expect(img.data[o + 3]).toBe(255);
@@ -117,14 +123,14 @@ describe("renderTrees", () => {
     expect(d).toBeGreaterThan(0);
 
     // The kernel neighbours here are 2 world tiles apart (tilesPerPixel 2), not 1.
-    const coverage = coverageAt(density, worldX, worldY, 2);
+    const alpha = alphaAt(density, worldX, worldY, 2);
     const o = (1 * 4 + 3) * 4;
-    expect(a.data[o]).toBe(blendChannel(GRASS[0], TREE_MAP_COLOR[0], coverage));
+    expect(a.data[o]).toBe(blendChannel(GRASS[0], TREE_MAP_COLOR[0], alpha));
   });
 
   it("is a no-op where coverage is zero", () => {
     // A pixel whose 3x3 neighbourhood is all zero density must be byte-identical
-    // afterwards (coverage collapses to exactly 0, no blend applied at all).
+    // afterwards (alpha collapses to exactly 0, no blend applied at all).
     const img = solid(64, 64, GRASS);
     const before = Array.from(img.data);
     renderTrees(img, { seed0: 123456 });
@@ -132,7 +138,7 @@ describe("renderTrees", () => {
     let checked = 0;
     for (let py = 0; py < 64; py++) {
       for (let px = 0; px < 64; px++) {
-        if (coverageAt(density, px, py) !== 0) continue;
+        if (alphaAt(density, px, py) !== 0) continue;
         checked++;
         const o = (py * 64 + px) * 4;
         for (let c = 0; c < 4; c++) expect(img.data[o + c]).toBe(before[o + c]);
