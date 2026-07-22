@@ -108,9 +108,10 @@ The app is live at **`map.factorygamefan.com`**. The apex `factorygamefan.com`
 is a separate landing page, not this app; the worker's `ALLOWED_ORIGIN` is the
 `map.` subdomain.
 
-Preview-service stack (optional feature, needs Docker): `pnpm preview:dev` runs
-the Worker (`:8787`) + app (`:5173`) together; `pnpm preview:test` runs its unit
-tests. See README for the full list.
+Preview-service stack (optional feature, needs Docker): **`pnpm localpreview`**
+(memorable alias for `pnpm preview:dev`) runs the Worker (`:8787`) + app
+(`:5173`) together; `pnpm preview:test` runs its unit tests. Both bind localhost
+only - never add `--host`. See README for the full list.
 
 ## Architecture
 

@@ -10,6 +10,7 @@
     "perf": "FMW_PERF=1 vp test test/render-cost.perf.spec.ts && cat perf-result.txt",
     "check": "vp check --fix",
     "verify": "vp check && vp test && pnpm run preview:test",
+    "localpreview": "pnpm run preview:dev",
     "preview:dev": "concurrently -k -n worker,app -c blue,green \"pnpm run preview:worker\" \"pnpm run preview:app\"",
     "preview:worker": "pnpm --filter @fmw/preview-worker exec wrangler dev --var ALLOWED_ORIGIN:http://localhost:5173",
     "preview:app": "VITE_PREVIEW_SERVICE_URL=http://localhost:8787 vp dev --port 5173 --strictPort",

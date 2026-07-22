@@ -100,6 +100,8 @@ project pins pnpm via `devEngines`, so run `vp` through pnpm (a bare `vp` or
 simulates the R2 and Durable Object bindings, so no Cloudflare deploy is needed
 to develop or test the feature:
 
+- `pnpm localpreview` - alias for `pnpm preview:dev`, below. Use whichever you
+  remember.
 - `pnpm preview:dev` - runs the Worker (on `:8787`) and the app (on `:5173`)
   together; Ctrl-C tears down both. Wires `ALLOWED_ORIGIN` and
   `VITE_PREVIEW_SERVICE_URL` so the local CORS and service URL match.
