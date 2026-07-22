@@ -232,7 +232,8 @@ when reporting errors`) - a TypeScript 6.0.3 compiler bug, not a type error,
   ignores `tsconfig.json` and reports a misleading "ok".
 - **`.vue` bodies are still unchecked.** Neither `vp check` nor `tsc` reports
   type errors inside `<script setup lang="ts">` (measured, not assumed). So
-  `vp check` is a partial net over `.ts` only, not a full gate.
+  `vp check` is a partial net over `.ts` only, not a full gate. This gap is
+  **not** caused by the TS7 deferral - see below.
 - **`vite.config.ts` sits near TypeScript's comparison-depth limit.** A shift in
   the transitive dependency graph can tip it over, making `vp check` fail with
   `TS2321: Excessive stack depth comparing types ... and 'UserConfig'` - the
@@ -248,6 +249,39 @@ when reporting errors`) - a TypeScript 6.0.3 compiler bug, not a type error,
   upgrade is deferred because `vue-tsc`/Volar can't yet type-check `.vue`
   against it. Note the type-_check_ already effectively runs on TS7 via
   tsgolint, so the deferral only ever applied to `vue-tsc`.
+
+### Closing the `.vue` gap with `vue-tsc` (evaluated 2026-07-22, NOT adopted)
+
+The `.vue` gap is **not** blocked by the TS7 deferral, and a past framing that
+implied otherwise was wrong. `vue-tsc`'s peer range is `typescript: ">=5.0.0"`,
+so it runs on the project's existing 6.0.3. Spiked and measured:
+
+- It **does** catch errors inside `<script setup lang="ts">` (planted `TS2322`
+  and `TS2345` were both reported).
+- Against the real codebase: **22 `.vue` files, 0 errors, 1.56s**. There is no
+  latent breakage hiding behind the gap - adding it would be a guard against
+  future regressions, not a bug hunt.
+- Bare `vue-tsc --noEmit` **crashes** with the same `Debug Failure` assertion as
+  `tsc`, because it wraps `tsc` 6.0.3 and hits `vite.config.ts`. It needs its
+  own tsconfig that excludes that file.
+
+**Not adopted, for a supply-chain reason worth remembering.** `vue-tsc@3.3.8`
+was published the same day it was evaluated (< 1 hour old). This workspace
+enforces a pnpm minimum-release-age policy, and installing that fresh release
+made pnpm silently write a bypass into `pnpm-workspace.yaml`:
+
+```yaml
+minimumReleaseAgeExclude:
+  - "@vue/language-core@3.3.8"
+  - vue-tsc@3.3.8
+```
+
+**Watch for that block appearing in a diff - it means a freshness guard was
+waived.** Don't commit one without a deliberate decision. If `vue-tsc` is
+adopted later, pick a release old enough to clear the policy (3.3.7 shipped
+2026-07-08 and needs no exclusion); the only thing 3.3.8 adds here is a fix for
+users aliasing `typescript` to `@typescript/typescript6` under the official TS7
+migration, which does not apply while the project is on 6.0.3 directly.
 
 Two deliberate suppressions live in `vite.config.ts`, both narrow on purpose:
 
