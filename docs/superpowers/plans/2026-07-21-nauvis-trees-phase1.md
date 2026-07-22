@@ -699,7 +699,7 @@ describe("makeTreeDensity", () => {
     }
   });
 
-  it("is zero far from spawn, where the distance term collapses the field", () => {
+  it("stays a probability far from spawn, never saturating to a mask", () => {
     // min(0, distance/20 - 3) saturates at 0 past distance 60, so distance does
     // NOT suppress far-field trees - but the caps are all <= 0.45, so density can
     // never reach 1. This pins that the field stays a probability, not a mask.
@@ -1367,7 +1367,9 @@ function maxNoiseFor(species: TreeSpecies): number {
   const P = 0.65;
   const octaves = 3;
   const invP2 = 1 / (P * P);
-  const norm = Math.sqrt((invP2 - 1) / (invP2 ** octaves - 1));
+  // fastPow, NOT `**` - multioctaveNoise normalises with the game's fastapprox
+  // pow, and the bound must be computed the same way or it is not a bound.
+  const norm = Math.sqrt((invP2 - 1) / (fastPow(invP2, octaves) - 1));
   let amps = 0;
   let amp = norm;
   for (let k = 0; k < octaves; k++) {
@@ -1402,10 +1404,16 @@ export function makeTreeDensity(params: TreeFieldParams): (x: number, y: number)
 }
 ```
 
+`maxNoiseFor` needs `fastPow` - add it to the imports:
+
+```ts
+import { fastPow } from "../fastApprox";
+```
+
 Note `evalAt` recomputes `cheapAt`; that is deliberate for clarity and costs only
 cheap arithmetic (the climate closures memoize nothing, but they are the same
 shared closures every species calls, so the expensive noise is what matters). If
-profiling in Task 11 shows the double `cheapAt` mattering, hoist it - the equality
+profiling in Task 13 shows the double `cheapAt` mattering, hoist it - the equality
 test protects the refactor.
 
 - [ ] **Step 5: Run both test files to verify**
