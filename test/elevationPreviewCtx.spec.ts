@@ -119,7 +119,18 @@ describe("elevationCtxFromPreset", () => {
 
   it("exposes cliffSettings from preset.cliffSettings", () => {
     const p = lakesPreset();
-    p.cliffSettings = { cliffElevation0: 12, cliffElevationInterval: 30, richness: 2 };
+    // A COMPLETE CliffSettings - name/control/cliffSmoothing carry the Default
+    // preset's real wire values. The assertion below then also proves the ctx
+    // narrows to the three render-relevant fields and drops these three, which
+    // a partial object could not express (it did not satisfy the type at all).
+    p.cliffSettings = {
+      name: "cliff",
+      control: "",
+      cliffSmoothing: 0,
+      cliffElevation0: 12,
+      cliffElevationInterval: 30,
+      richness: 2,
+    };
     expect(elevationCtxFromPreset(p).cliffSettings).toEqual({
       cliffElevation0: 12,
       cliffElevationInterval: 30,
