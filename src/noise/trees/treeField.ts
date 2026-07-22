@@ -64,9 +64,6 @@ export function makeTreeSpeciesFields(params: TreeFieldParams): TreeSpeciesField
     startingPositions: [...startingPositions],
   });
 
-  // The size lever is a flat additive term shared by every species.
-  const sizeTerm = -0.5 + 0.2 * treesSize;
-
   return TREE_SPECIES.map((species) => {
     const noise = makeMultioctaveNoise({
       seed0,
@@ -76,6 +73,11 @@ export function makeTreeSpeciesFields(params: TreeFieldParams): TreeSpeciesField
       inputScale: (1 / species.inputScaleDiv) * treesFrequency,
       outputScale: species.outputScale,
     });
+
+    // The size lever is a flat additive term, per-species (tree_05/tree_07 use
+    // -0.45 where the other 13 species use -0.5 - see TreeSpecies.sizeOffset).
+    // Hoisted here so it's computed once per species, not once per pixel.
+    const sizeTerm = -species.sizeOffset + 0.2 * treesSize;
 
     const evalAt = (x: number, y: number): number => {
       const distance = distanceFromNearestPoint(x, y, startingPositions);

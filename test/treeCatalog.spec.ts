@@ -56,4 +56,21 @@ describe("TREE_SPECIES catalog", () => {
     const caps = TREE_SPECIES.map((s) => s.cap);
     expect(caps).toEqual([...caps].sort((a, b) => b - a));
   });
+
+  // Regression guard for a bug that was invisible for four tasks: tree_05 and
+  // tree_07 use `- 0.45 + 0.2 * control:trees:size` where the other 13 species
+  // use `- 0.5 + 0.2 * control:trees:size` (trees.lua @ 2.1.11, caught by the
+  // oracle - see test/treeOracle.spec.ts). Do not "simplify" this back to a
+  // single shared constant.
+  it("sets sizeOffset to 0.45 for exactly tree_05 and tree_07, and 0.5 for the rest", () => {
+    const exceptions = new Set(["tree_05", "tree_07"]);
+    for (const s of TREE_SPECIES) {
+      expect(s.sizeOffset, s.name).toBe(exceptions.has(s.name) ? 0.45 : 0.5);
+    }
+    expect(
+      TREE_SPECIES.filter((s) => s.sizeOffset === 0.45)
+        .map((s) => s.name)
+        .sort(),
+    ).toEqual(["tree_05", "tree_07"]);
+  });
 });

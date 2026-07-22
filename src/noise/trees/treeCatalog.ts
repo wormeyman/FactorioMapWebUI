@@ -3,19 +3,22 @@
  *
  * Every species in base/prototypes/entity/trees.lua @ 2.1.11 shares exactly one
  * expression shape (verified mechanically - filtering the common terms out of
- * every `tree_0*` block leaves nothing), so a species is fully described by a
- * parameter row:
+ * every `tree_0*` block leaves nothing but the size offset below), so a species
+ * is fully described by a parameter row:
  *
  *   min(cap,
  *       trees_forest_path_cutout_faded,
  *       min(0, asymmetric_ramps{input=temperature, ...tempRamp},
  *              asymmetric_ramps{input=moisture, ...moistRamp})
  *       + min(0, distance/20 - 3)
- *       - 0.5 + 0.2 * control:trees:size
+ *       - sizeOffset + 0.2 * control:trees:size
  *       + tree_small_noise * 0.1
  *       + multioctave_noise{persistence 0.65, octaves 3, seed1 = <seed1Name>,
  *                           input_scale = (1/inputScaleDiv) * control:trees:frequency,
  *                           output_scale = outputScale})
+ *
+ * `sizeOffset` is 0.5 for 13 of the 15 species and 0.45 for `tree_05`/`tree_07`
+ * (see the field doc below) - the one genuinely per-species term.
  *
  * `seed1` is a STRING in the Lua; Factorio hashes it with crc32 (see
  * nauvisShared.ts:9). The numbers here are those hashes, precomputed so this
@@ -42,6 +45,20 @@ export interface TreeSpecies {
   readonly inputScaleDiv: number;
   /** The species noise term's `output_scale`. */
   readonly outputScale: number;
+  /**
+   * The constant additive term in `- sizeOffset + 0.2 * control:trees:size`.
+   *
+   * Verified against `~/GitHub/factorio-data` @ tag 2.1.11,
+   * `base/prototypes/entity/trees.lua`: `tree_05` and `tree_07` use `0.45`; the
+   * other 13 species use `0.5`. This was the one genuinely per-species term
+   * hiding in an otherwise-uniform expression shape - every other term (the
+   * distance term, `tree_small_noise * 0.1`, persistence 0.65, octaves 3, and
+   * the `trees_forest_path_cutout_faded` bound) is uniform across all 15
+   * species. Caught by the oracle: modeling this as a shared constant made
+   * tree_05 and tree_07 disagree with the real game by a near-constant 5.01e-2
+   * everywhere (see test/treeOracle.spec.ts).
+   */
+  readonly sizeOffset: number;
 }
 
 /** `tree_small_noise`'s seed1: `crc32(utf8("tree-small"))`. */
@@ -57,6 +74,7 @@ export const TREE_SPECIES: readonly TreeSpecies[] = [
     moistRamp: [0.6, 0.7, 1, 2],
     inputScaleDiv: 25,
     outputScale: 0.8,
+    sizeOffset: 0.5,
   },
   {
     name: "tree_04",
@@ -67,6 +85,7 @@ export const TREE_SPECIES: readonly TreeSpecies[] = [
     moistRamp: [0.7, 0.9, 1, 2],
     inputScaleDiv: 30,
     outputScale: 0.8,
+    sizeOffset: 0.5,
   },
   {
     name: "tree_05",
@@ -77,6 +96,7 @@ export const TREE_SPECIES: readonly TreeSpecies[] = [
     moistRamp: [0.6, 0.7, 1, 2],
     inputScaleDiv: 40,
     outputScale: 0.8,
+    sizeOffset: 0.45,
   },
   {
     name: "tree_02",
@@ -87,6 +107,7 @@ export const TREE_SPECIES: readonly TreeSpecies[] = [
     moistRamp: [0.4, 0.5, 0.7, 0.8],
     inputScaleDiv: 25,
     outputScale: 0.75,
+    sizeOffset: 0.5,
   },
   {
     name: "tree_03",
@@ -97,6 +118,7 @@ export const TREE_SPECIES: readonly TreeSpecies[] = [
     moistRamp: [0.4, 0.5, 0.7, 0.8],
     inputScaleDiv: 35,
     outputScale: 0.75,
+    sizeOffset: 0.5,
   },
   {
     name: "tree_07",
@@ -107,6 +129,7 @@ export const TREE_SPECIES: readonly TreeSpecies[] = [
     moistRamp: [0.5, 0.6, 0.9, 1],
     inputScaleDiv: 40,
     outputScale: 0.75,
+    sizeOffset: 0.45,
   },
   {
     name: "tree_02_red",
@@ -117,6 +140,7 @@ export const TREE_SPECIES: readonly TreeSpecies[] = [
     moistRamp: [0.2, 0.3, 0.5, 0.6],
     inputScaleDiv: 25,
     outputScale: 0.7,
+    sizeOffset: 0.5,
   },
   {
     name: "tree_08",
@@ -127,6 +151,7 @@ export const TREE_SPECIES: readonly TreeSpecies[] = [
     moistRamp: [0.3, 0.4, 0.6, 0.7],
     inputScaleDiv: 30,
     outputScale: 0.7,
+    sizeOffset: 0.5,
   },
   {
     name: "tree_09",
@@ -137,6 +162,7 @@ export const TREE_SPECIES: readonly TreeSpecies[] = [
     moistRamp: [0.2, 0.3, 0.5, 0.6],
     inputScaleDiv: 25,
     outputScale: 0.7,
+    sizeOffset: 0.5,
   },
   {
     name: "tree_06",
@@ -147,6 +173,7 @@ export const TREE_SPECIES: readonly TreeSpecies[] = [
     moistRamp: [0.1, 0.2, 0.3, 0.4],
     inputScaleDiv: 22,
     outputScale: 0.6,
+    sizeOffset: 0.5,
   },
   {
     name: "tree_08_brown",
@@ -157,6 +184,7 @@ export const TREE_SPECIES: readonly TreeSpecies[] = [
     moistRamp: [0.2, 0.3, 0.4, 0.5],
     inputScaleDiv: 30,
     outputScale: 0.6,
+    sizeOffset: 0.5,
   },
   {
     name: "tree_09_brown",
@@ -167,6 +195,7 @@ export const TREE_SPECIES: readonly TreeSpecies[] = [
     moistRamp: [0.1, 0.2, 0.3, 0.4],
     inputScaleDiv: 25,
     outputScale: 0.6,
+    sizeOffset: 0.5,
   },
   {
     name: "tree_06_brown",
@@ -177,6 +206,7 @@ export const TREE_SPECIES: readonly TreeSpecies[] = [
     moistRamp: [0, 0.1, 0.2, 0.3],
     inputScaleDiv: 22,
     outputScale: 0.5,
+    sizeOffset: 0.5,
   },
   {
     name: "tree_08_red",
@@ -187,6 +217,7 @@ export const TREE_SPECIES: readonly TreeSpecies[] = [
     moistRamp: [0.1, 0.2, 0.3, 0.4],
     inputScaleDiv: 30,
     outputScale: 0.5,
+    sizeOffset: 0.5,
   },
   {
     name: "tree_09_red",
@@ -197,5 +228,6 @@ export const TREE_SPECIES: readonly TreeSpecies[] = [
     moistRamp: [0, 0.1, 0.2, 0.3],
     inputScaleDiv: 25,
     outputScale: 0.5,
+    sizeOffset: 0.5,
   },
 ];
