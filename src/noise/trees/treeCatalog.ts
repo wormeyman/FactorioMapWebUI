@@ -2,9 +2,7 @@
  * The 15 Nauvis tree species autoplace probability expressions, as data.
  *
  * Every species in base/prototypes/entity/trees.lua @ 2.1.11 shares exactly one
- * expression shape (verified mechanically - filtering the common terms out of
- * every `tree_0*` block leaves nothing but the size offset below), so a species
- * is fully described by a parameter row:
+ * expression shape, so a species is fully described by a parameter row:
  *
  *   min(cap,
  *       trees_forest_path_cutout_faded,
@@ -19,6 +17,13 @@
  *
  * `sizeOffset` is 0.5 for 13 of the 15 species and 0.45 for `tree_05`/`tree_07`
  * (see the field doc below) - the one genuinely per-species term.
+ *
+ * That shape claim is checked by `treeCatalogExpressions.spec.ts`, which rebuilds
+ * each row's Lua string and diffs it against the checked-in game data character
+ * for character. Do NOT re-verify this by filtering common terms out of the Lua
+ * and eyeballing the remainder: that is what was done originally, the filter
+ * dropped every line containing `control:trees:size`, and `sizeOffset` - the one
+ * term that varies - was the one term excluded from the check.
  *
  * `seed1` is a STRING in the Lua; Factorio hashes it with crc32 (see
  * nauvisShared.ts:9). The numbers here are those hashes, precomputed so this
