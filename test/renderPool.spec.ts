@@ -122,7 +122,7 @@ describe("createRenderPool", () => {
     const pool = createRenderPool({ size: 2, tileSize: 2, execute });
     const done = pool.render(REQ, () => {});
     await Promise.resolve();
-    expect(calls.map((c) => c.slot).sort()).toEqual([0, 1]);
+    expect(calls.map((c) => c.slot).sort((a, b) => a - b)).toEqual([0, 1]);
     for (let i = 0; i < 4; i++) {
       settle(i);
       await Promise.resolve();
