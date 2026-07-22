@@ -9,6 +9,7 @@ import { renderTerrain } from "../src/noise/preview/renderTerrain";
 import { RESOURCE_CATALOG } from "../src/noise/resources/resourceCatalog";
 import { ENEMY_MAP_COLOR } from "../src/noise/enemies/enemyCatalog";
 import { CLIFF_MAP_COLOR } from "../src/noise/cliffs/cliffCatalog";
+import { makeTreeDensity } from "../src/noise/trees/treeField";
 
 const REQ: ElevationRenderRequest = {
   id: 7,
@@ -376,9 +377,9 @@ describe("runRenderRequest", () => {
     }
   });
 
-  it("view 'all' composites all three overlays onto terrain (exactly the union of the single-overlay diffs)", () => {
+  it("view 'all' composites all four overlays onto terrain (exactly the union of the single-overlay diffs)", () => {
     // 32x32 px at 16 tiles/px over world [512, 1024) - a region with resources,
-    // enemy bases, and cliffs all present.
+    // enemy bases, cliffs, and trees all present.
     const req: ElevationRenderRequest = {
       id: 21,
       seed0: 123456,
@@ -410,20 +411,100 @@ describe("runRenderRequest", () => {
     const resources = diffPixels(bufFor("resources"));
     const enemies = diffPixels(bufFor("enemies"));
     const cliffs = diffPixels(bufFor("cliffs"));
+    const trees = diffPixels(bufFor("trees"));
     const all = diffPixels(bufFor("all"));
 
-    // The chosen region actually exercises all three overlays.
+    // The chosen region actually exercises all four overlays.
     expect(resources.size).toBeGreaterThan(0);
     expect(enemies.size).toBeGreaterThan(0);
     expect(cliffs.size).toBeGreaterThan(0);
+    expect(trees.size).toBeGreaterThan(0);
 
-    // "all" is exactly the union of the three: every single-overlay diff is in
-    // "all", and "all" paints nothing the three don't (no phantom pixels).
+    // "all" is exactly the union of the four: every single-overlay diff is in
+    // "all", and "all" paints nothing the four don't (no phantom pixels).
     for (const i of resources) expect(all.has(i)).toBe(true);
     for (const i of enemies) expect(all.has(i)).toBe(true);
     for (const i of cliffs) expect(all.has(i)).toBe(true);
-    const union = new Set<number>([...resources, ...enemies, ...cliffs]);
+    for (const i of trees) expect(all.has(i)).toBe(true);
+    const union = new Set<number>([...resources, ...enemies, ...cliffs, ...trees]);
     expect(all.size).toBe(union.size);
+  });
+});
+
+describe("view: trees", () => {
+  // World window (420, -280) at 4 tiles/px over a 12x12 image, seed 123456.
+  // NOTE: the origin (0, 0) that a naive test would reach for sits inside the
+  // game's starting-area clearing (tree density is genuinely 0 within 60 tiles
+  // of a spawn point - see treeField.ts's `distance / 20 - 3` term), so a
+  // "renders differ" assertion there would pass for the wrong reason (nothing
+  // painted at all). This window was chosen because sampling it directly with
+  // makeTreeDensity shows real, non-zero cover; the assertion below proves that
+  // in-line so the test cannot silently pass while exercising an empty forest.
+  const base = {
+    id: 1,
+    seed0: 123456,
+    width: 12,
+    height: 12,
+    originX: 420,
+    originY: -280,
+    tilesPerPixel: 4,
+    waterLevel: 0,
+    segmentationMultiplier: 1,
+    startingPositions: [{ x: 0, y: 0 }],
+    mapType: "nauvis" as const,
+  };
+
+  it("samples a window with genuine, non-zero tree density", () => {
+    const density = makeTreeDensity({ seed0: base.seed0 });
+    let nonZero = 0;
+    for (let py = 0; py < base.height; py++) {
+      for (let px = 0; px < base.width; px++) {
+        const wx = base.originX + px * base.tilesPerPixel;
+        const wy = base.originY + py * base.tilesPerPixel;
+        if (density(wx, wy) > 0) nonZero++;
+      }
+    }
+    expect(nonZero).toBeGreaterThan(0);
+  });
+
+  it("renders terrain with the tree overlay composited on top", () => {
+    const terrain = runRenderRequest({ ...base, view: "terrain" });
+    const trees = runRenderRequest({ ...base, view: "trees" });
+    expect(Array.from(new Uint8ClampedArray(trees.buffer))).not.toEqual(
+      Array.from(new Uint8ClampedArray(terrain.buffer)),
+    );
+  });
+
+  it("includes trees in the all-composite", () => {
+    const withoutTrees = runRenderRequest({ ...base, view: "cliffs" });
+    const all = runRenderRequest({ ...base, view: "all" });
+    expect(Array.from(new Uint8ClampedArray(all.buffer))).not.toEqual(
+      Array.from(new Uint8ClampedArray(withoutTrees.buffer)),
+    );
+  });
+
+  it("honors treeControls", () => {
+    const a = runRenderRequest({ ...base, view: "trees" });
+    const b = runRenderRequest({
+      ...base,
+      view: "trees",
+      treeControls: { frequency: 3, size: 2 },
+    });
+    expect(Array.from(new Uint8ClampedArray(a.buffer))).not.toEqual(
+      Array.from(new Uint8ClampedArray(b.buffer)),
+    );
+  });
+
+  it("defaults treeControls to 1/1 when omitted", () => {
+    const implicit = runRenderRequest({ ...base, view: "trees" });
+    const explicit = runRenderRequest({
+      ...base,
+      view: "trees",
+      treeControls: { frequency: 1, size: 1 },
+    });
+    expect(Array.from(new Uint8ClampedArray(implicit.buffer))).toEqual(
+      Array.from(new Uint8ClampedArray(explicit.buffer)),
+    );
   });
 });
 

@@ -8,6 +8,7 @@ import { renderElevation } from "./renderElevation";
 import { renderEnemies } from "./renderEnemies";
 import { renderResources } from "./renderResources";
 import { renderTerrain } from "./renderTerrain";
+import { renderTrees } from "./renderTrees";
 
 /** A render job posted to the worker. `id` tags the response for staleness. */
 export interface ElevationRenderRequest {
@@ -48,7 +49,7 @@ export interface ElevationRenderRequest {
    * when `mapType` is "nauvis" - callers (the preview panel) disable those
    * toggles for lakes/island presets rather than send an unfaithful request here.
    */
-  view?: "elevation" | "terrain" | "resources" | "enemies" | "cliffs" | "all";
+  view?: "elevation" | "terrain" | "resources" | "enemies" | "cliffs" | "trees" | "all";
   /**
    * Per-resource control levers (control:<res>:frequency|size|richness), keyed by
    * controlName - consumed only when `view: "resources"`. Missing entries default
@@ -74,6 +75,11 @@ export interface ElevationRenderRequest {
    * 40, richness: 1 }` (the game's defaults) when omitted.
    */
   cliffSettings?: CliffSettingsInput;
+  /**
+   * The `trees` autoplace control's frequency/size (control:trees:*) - consumed
+   * only when `view: "trees"` or `"all"`. Defaults to `{ frequency: 1, size: 1 }`.
+   */
+  treeControls?: { readonly frequency: number; readonly size: number };
   /**
    * The full image this request is one tile of, when the renderer is tiling.
    * Absent means the request *is* the whole image (the single-render path).
@@ -152,6 +158,7 @@ export function runRenderRequest(req: ElevationRenderRequest): ElevationRenderRe
     req.view === "resources" ||
     req.view === "enemies" ||
     req.view === "cliffs" ||
+    req.view === "trees" ||
     req.view === "all"
   ) {
     image = renderTerrain({
@@ -172,6 +179,22 @@ export function runRenderRequest(req: ElevationRenderRequest): ElevationRenderRe
         startingAreaMoistureFrequency: req.startingAreaMoistureFrequency,
       },
     });
+    if (req.view === "trees" || req.view === "all") {
+      renderTrees(image, {
+        seed0: req.seed0,
+        originX: req.originX,
+        originY: req.originY,
+        tilesPerPixel: req.tilesPerPixel,
+        treesFrequency: req.treeControls?.frequency ?? 1,
+        treesSize: req.treeControls?.size ?? 1,
+        segmentationMultiplier: req.segmentationMultiplier,
+        moistureFrequency: req.moistureFrequency,
+        moistureBias: req.moistureBias,
+        startingAreaMoistureSize: req.startingAreaMoistureSize,
+        startingAreaMoistureFrequency: req.startingAreaMoistureFrequency,
+        startingPositions: req.startingPositions,
+      });
+    }
     if (req.view === "resources" || req.view === "all") {
       renderResources(image, {
         seed0: req.seed0,
