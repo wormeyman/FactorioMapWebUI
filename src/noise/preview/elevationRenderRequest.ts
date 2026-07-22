@@ -41,10 +41,11 @@ export interface ElevationRenderRequest {
    * Which render to run: the water/land elevation mask ("elevation"), the full
    * terrain-tile color render ("terrain"), the terrain with the resource-patch
    * overlay composited on top ("resources"), the terrain with the enemy-base
-   * footprint overlay composited on top ("enemies"), or the terrain with the
-   * cliff footprint overlay composited on top ("cliffs"), or the terrain with
-   * all three overlays composited on top at once ("all"). Default "elevation".
-   * renderTerrain (and therefore "resources"/"enemies"/"cliffs"/"all") always uses the
+   * footprint overlay composited on top ("enemies"), the terrain with the
+   * cliff footprint overlay composited on top ("cliffs"), the terrain with the
+   * tree-density blend composited on top ("trees"), or the terrain with all
+   * four overlays composited on top at once ("all"). Default "elevation".
+   * renderTerrain (and therefore "resources"/"enemies"/"cliffs"/"trees"/"all") always uses the
    * Nauvis climate + tile catalog (see renderTerrain.ts), so it is only faithful
    * when `mapType` is "nauvis" - callers (the preview panel) disable those
    * toggles for lakes/island presets rather than send an unfaithful request here.
