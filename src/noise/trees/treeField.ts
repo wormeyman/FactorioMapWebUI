@@ -21,6 +21,13 @@ import { TREE_SPECIES, type TreeSpecies } from "./treeCatalog";
  */
 export const BASIS_ABS_MAX = 1.8;
 
+/**
+ * Every species' own noise term uses these. Shared with {@link maxNoiseFor} so the
+ * early-out bound cannot silently desync from the noise it is meant to bound.
+ */
+const TREE_OCTAVES = 3;
+const TREE_PERSISTENCE = 0.65;
+
 export interface TreeFieldParams {
   /** Map seed (= map_seed / seed0). */
   readonly seed0: number;
@@ -42,11 +49,41 @@ export interface TreeFieldParams {
 export interface TreeSpeciesField {
   readonly species: TreeSpecies;
   readonly evalAt: (x: number, y: number) => number;
-  /** The species value minus its own noise term - an upper bound on the sum. */
+  /**
+   * The species value minus its own noise term. Adding {@link maxNoise} to it
+   * bounds {@link evalAt} from above; on its own it is simply that sum without
+   * the noise, so it sits *below* `evalAt` wherever the noise is positive.
+   */
   readonly cheapAt: (x: number, y: number) => number;
+  /**
+   * {@link cheapAt} with the per-pixel terms supplied by the caller, so a loop
+   * over all 15 species evaluates the shared climate stack once instead of once
+   * each. Positional rather than an object to keep the hot path allocation-free;
+   * `makeTreeDensity` is the intended caller.
+   */
+  readonly cheapFrom: (
+    temperature: number,
+    moisture: number,
+    distanceTerm: number,
+    smallTerm: number,
+  ) => number;
   readonly noiseAt: (x: number, y: number) => number;
   /** The largest magnitude this species' noise term can reach. */
   readonly maxNoise: number;
+}
+
+/**
+ * The species-independent half of a tree evaluation, plus the fields needed to
+ * compute it. `makeTreeDensity` evaluates these once per pixel; every species
+ * then reuses the results.
+ */
+interface TreeFields {
+  readonly fields: TreeSpeciesField[];
+  readonly temperature: (x: number, y: number) => number;
+  readonly moisture: (x: number, y: number) => number;
+  readonly smallNoise: (x: number, y: number) => number;
+  readonly forestPathCutout: (x: number, y: number) => number;
+  readonly startingPositions: readonly Point[];
 }
 
 /**
@@ -56,8 +93,8 @@ export interface TreeSpeciesField {
  * multioctaveNoise applies. Mirrors multioctaveNoise.ts:70-99.
  */
 function maxNoiseFor(species: TreeSpecies): number {
-  const P = 0.65;
-  const octaves = 3;
+  const P = TREE_PERSISTENCE;
+  const octaves = TREE_OCTAVES;
   const invP2 = 1 / (P * P);
   // fastPow, NOT `**` - multioctaveNoise normalises with the game's fastapprox
   // pow, and the bound must be computed the same way or it is not a bound.
@@ -80,6 +117,11 @@ function maxNoiseFor(species: TreeSpecies): number {
  * runs at the game's defaults (frequency 1, bias 0).
  */
 export function makeTreeSpeciesFields(params: TreeFieldParams): TreeSpeciesField[] {
+  return makeTreeFields(params).fields;
+}
+
+/** {@link makeTreeSpeciesFields}, also handing back the shared per-pixel fields. */
+function makeTreeFields(params: TreeFieldParams): TreeFields {
   const seed0 = params.seed0;
   const treesFrequency = params.treesFrequency ?? 1;
   const treesSize = params.treesSize ?? 1;
@@ -89,7 +131,7 @@ export function makeTreeSpeciesFields(params: TreeFieldParams): TreeSpeciesField
     seed0,
     segmentationMultiplier: params.segmentationMultiplier,
   });
-  const { smallNoise, forestPathCutoutFaded } = makeTreeShared(
+  const { smallNoise, forestPathCutout, forestPathCutoutFaded } = makeTreeShared(
     { seed0, segmentationMultiplier: params.segmentationMultiplier },
     nz,
   );
@@ -104,12 +146,12 @@ export function makeTreeSpeciesFields(params: TreeFieldParams): TreeSpeciesField
     startingPositions: [...startingPositions],
   });
 
-  return TREE_SPECIES.map((species) => {
+  const fields = TREE_SPECIES.map((species): TreeSpeciesField => {
     const noise = makeMultioctaveNoise({
       seed0,
       seed1: species.seed1,
-      octaves: 3,
-      persistence: 0.65,
+      octaves: TREE_OCTAVES,
+      persistence: TREE_PERSISTENCE,
       inputScale: (1 / species.inputScaleDiv) * treesFrequency,
       outputScale: species.outputScale,
     });
@@ -119,22 +161,33 @@ export function makeTreeSpeciesFields(params: TreeFieldParams): TreeSpeciesField
     // Hoisted here so it's computed once per species, not once per pixel.
     const sizeTerm = -species.sizeOffset + 0.2 * treesSize;
 
-    /** Everything except this species' own noise term. Bounds `evalAt` from above. */
-    const cheapAt = (x: number, y: number): number => {
-      const distance = distanceFromNearestPoint(x, y, startingPositions);
+    // The term ORDER here is load-bearing: `treeFieldEarlyOut.spec.ts` asserts
+    // makeTreeDensity is bit-identical to full evaluation, and float addition is
+    // not associative. Keep the four addends in this sequence.
+    const cheapFrom = (t: number, m: number, distanceTerm: number, smallTerm: number): number => {
       const climate = Math.min(
         0,
-        asymmetricRamps(temperature(x, y), ...species.tempRamp),
-        asymmetricRamps(moisture(x, y), ...species.moistRamp),
+        asymmetricRamps(t, ...species.tempRamp),
+        asymmetricRamps(m, ...species.moistRamp),
       );
-      return climate + Math.min(0, distance / 20 - 3) + sizeTerm + smallNoise(x, y) * 0.1;
+      return climate + distanceTerm + sizeTerm + smallTerm;
     };
+
+    const cheapAt = (x: number, y: number): number =>
+      cheapFrom(
+        temperature(x, y),
+        moisture(x, y),
+        Math.min(0, distanceFromNearestPoint(x, y, startingPositions) / 20 - 3),
+        smallNoise(x, y) * 0.1,
+      );
 
     const evalAt = (x: number, y: number): number =>
       Math.min(species.cap, forestPathCutoutFaded(x, y), cheapAt(x, y) + noise(x, y));
 
-    return { species, evalAt, cheapAt, noiseAt: noise, maxNoise: maxNoiseFor(species) };
+    return { species, evalAt, cheapAt, cheapFrom, noiseAt: noise, maxNoise: maxNoiseFor(species) };
   });
+
+  return { fields, temperature, moisture, smallNoise, forestPathCutout, startingPositions };
 }
 
 /**
@@ -148,8 +201,25 @@ export function makeTreeSpeciesFields(params: TreeFieldParams): TreeSpeciesField
  * placement-stipple project (Phase 2) consumes this identical field.
  */
 export function makeTreeDensity(params: TreeFieldParams): (x: number, y: number) => number {
-  const fields = makeTreeSpeciesFields(params);
+  const { fields, temperature, moisture, smallNoise, forestPathCutout, startingPositions } =
+    makeTreeFields(params);
+
   return (x: number, y: number): number => {
+    // The species-independent terms, evaluated ONCE per pixel. The climate stack
+    // (a 4-octave temperature and moisture's quick-multioctave plus billow cutout)
+    // costs more than the 3-octave species noise the early-out saves, so computing
+    // it per species - as this did originally - dominated the whole render.
+    const t = temperature(x, y);
+    const m = moisture(x, y);
+    const distanceTerm = Math.min(0, distanceFromNearestPoint(x, y, startingPositions) / 20 - 3);
+    const smallTerm = smallNoise(x, y) * 0.1;
+
+    // `trees_forest_path_cutout_faded`, inlined so it reuses smallTerm rather than
+    // re-evaluating tree_small_noise, and deferred until a species actually needs
+    // it (pixels where every species is skipped never pay for the billows).
+    let cutoutFaded = 0;
+    let haveCutout = false;
+
     let best = 0;
     for (const f of fields) {
       // `cap` and the cutout both bound the species from above, as does
@@ -157,9 +227,13 @@ export function makeTreeDensity(params: TreeFieldParams): (x: number, y: number)
       // change the answer - skip it. Catalog order (descending cap) raises `best`
       // early, which maximises how often this fires.
       if (f.species.cap <= best) continue;
-      const cheap = f.cheapAt(x, y);
+      const cheap = f.cheapFrom(t, m, distanceTerm, smallTerm);
       if (cheap + f.maxNoise <= best) continue;
-      const v = f.evalAt(x, y);
+      if (!haveCutout) {
+        cutoutFaded = forestPathCutout(x, y) * 0.3 + smallTerm;
+        haveCutout = true;
+      }
+      const v = Math.min(f.species.cap, cutoutFaded, cheap + f.noiseAt(x, y));
       if (v > best) best = v;
     }
     return clamp(best, 0, 1);
