@@ -235,6 +235,28 @@ describe("ElevationPreviewPanel", () => {
     ).toBeDefined();
   });
 
+  it("passes view:'trees' + treeControls after selecting the Trees toggle (Nauvis)", async () => {
+    stubCanvas();
+    const renderer = okRenderer();
+    const w = setup("nauvis", renderer);
+    expect(w.find('[data-test="view-trees"]').attributes("disabled")).toBeUndefined();
+
+    await w.find('[data-test="view-trees"]').trigger("click");
+    await w.find('[data-test="generate"]').trigger("click");
+    await flushPromises();
+
+    expect(renderer.render).toHaveBeenCalledOnce();
+    const arg = (renderer.render as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg).toMatchObject({ view: "trees", mapType: "nauvis" });
+    expect(arg.treeControls).toEqual({ frequency: 1, size: 1 });
+  });
+
+  it("disables the Trees toggle on a non-Nauvis map type", async () => {
+    stubCanvas();
+    const w = setup("lakes", okRenderer());
+    expect(w.find('[data-test="view-trees"]').attributes("disabled")).toBeDefined();
+  });
+
   it("passes view:'all' + all overlay controls after selecting the All toggle (Nauvis)", async () => {
     const putImageData = stubCanvas();
     const renderer = okRenderer();
