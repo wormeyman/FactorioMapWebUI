@@ -26,6 +26,7 @@ import {
   sampleTileNames,
   type TileSample,
 } from "./oracle.ts";
+import { TREE_SPECIES } from "../../src/noise/trees/treeCatalog.ts";
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), "..", "fixtures");
 
@@ -630,6 +631,58 @@ async function captureAux(): Promise<void> {
     const out = join(FIXTURES, "oracle-aux.seed123456.json");
     await writeFile(out, JSON.stringify(fixture, null, 2) + "\n");
     console.log(`wrote ${out} (${positions.length} points)`);
+  } finally {
+    await rm(workDir, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Ground truth for all 15 Nauvis tree species probability expressions, plus the
+ * two shared fields they build on. Sampled at defaults (control:trees 1/1), so
+ * this pins the catalog rows, the crc32 string-seed1 assumption, and the
+ * asymmetric_ramps port in one shot.
+ *
+ * 17 expressions x ~1.7 s per run - this capture is the slow one (~30 s).
+ */
+async function captureTrees(): Promise<void> {
+  const seed = 123456;
+  const positions: Position[] = [];
+  // Near-spawn grid (where the distance term is live) ...
+  for (let gy = 0; gy < 3; gy++) {
+    for (let gx = 0; gx < 3; gx++) {
+      positions.push({ x: gx * 17 - 17 + 0.5, y: gy * 19 - 19 + 0.25 });
+    }
+  }
+  // ... plus two far rings, to span several climate biomes.
+  for (const r of [800, 2400]) {
+    for (let k = 0; k < 8; k++) {
+      const a = (k * Math.PI) / 4;
+      positions.push({ x: r * Math.cos(a) + 0.5, y: r * Math.sin(a) + 0.25 });
+    }
+  }
+  positions.push({ x: 12345.75, y: 6789.125 });
+
+  const workDir = await mkdtemp(join(tmpdir(), "oracle-capture-"));
+  try {
+    const values: Record<string, number[]> = {};
+    for (const name of [
+      "tree_small_noise",
+      "trees_forest_path_cutout_faded",
+      ...TREE_SPECIES.map((s) => s.name),
+    ]) {
+      values[name] = await sampleExpression(name, positions, { workDir, seed });
+      console.log(`  captured ${name}`);
+    }
+    const fixture = {
+      _comment:
+        "Ground truth from Factorio 2.1.11 via the test/oracle harness. The 15 tree species probability expressions plus tree_small_noise and trees_forest_path_cutout_faded, each routed onto elevation, at default control:trees. Regenerate: node --experimental-strip-types test/oracle/capture.ts trees",
+      seed0: seed,
+      positions,
+      values,
+    };
+    const out = join(FIXTURES, "oracle-trees.seed123456.json");
+    await writeFile(out, `${JSON.stringify(fixture, null, 2)}\n`);
+    console.log(`wrote ${out}`);
   } finally {
     await rm(workDir, { recursive: true, force: true });
   }
@@ -1365,6 +1418,7 @@ if (want("resource-regular")) await captureResourceRegular();
 if (want("resource-starting")) await captureResourceStarting();
 if (want("tile-names")) await captureTileNames();
 if (want("enemy-base")) await captureEnemyBase();
+if (want("trees")) await captureTrees();
 if (want("cliff-elevation")) await captureCliffElevation();
 if (want("cliffiness")) await captureCliffiness();
 if (want("cliff-offset-raw")) await captureCliffOffsetRaw();
