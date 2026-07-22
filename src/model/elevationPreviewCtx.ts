@@ -47,6 +47,13 @@ export interface ElevationPreviewCtx {
    */
   cliffSettings: CliffSettingsInput;
   /**
+   * The `trees` autoplace control's frequency/size (control:trees:*) - consumed
+   * only by the `view: "trees"` overlay (renderTrees). Absent defaults to
+   * `{ frequency: 1, size: 1 }`. Faithful only on the Nauvis map type, same as
+   * the terrain/resources/enemies/cliffs views.
+   */
+  treeControls: { readonly frequency: number; readonly size: number };
+  /**
    * Non-seed free variables for renderElevation/renderTerrain
    * (Omit<..., "seed0">-compatible). The climate fields (aux/moisture
    * frequency+bias, starting-area moisture) are consumed only by
@@ -94,6 +101,7 @@ export function elevationCtxFromPreset(preset: Preset): ElevationPreviewCtx {
   const mapType = mt.id === "nauvis" ? "nauvis" : mt.id === "island" ? "island" : "lakes";
   const eb = preset.autoplaceControls[ENEMY_CONTROL_NAME];
   const cc = preset.autoplaceControls[CLIFF_CONTROL_NAME];
+  const tc = preset.autoplaceControls.trees;
   return {
     supported,
     mapType,
@@ -108,6 +116,7 @@ export function elevationCtxFromPreset(preset: Preset): ElevationPreviewCtx {
       cliffElevationInterval: preset.cliffSettings.cliffElevationInterval,
       richness: preset.cliffSettings.richness,
     },
+    treeControls: tc ? { frequency: tc.frequency, size: tc.size } : { frequency: 1, size: 1 },
     ctx: {
       waterLevel: 10 * Math.log2(size),
       segmentationMultiplier: water?.frequency ?? 1,

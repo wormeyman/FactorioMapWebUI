@@ -108,6 +108,15 @@ describe("elevationCtxFromPreset", () => {
     expect(elevationCtxFromPreset(p).cliffControls).toEqual({ frequency: 2, continuity: 0.5 });
   });
 
+  it("reads trees frequency/size, defaulting to 1/1 when absent", () => {
+    const p = lakesPreset();
+    delete p.autoplaceControls.trees;
+    expect(elevationCtxFromPreset(p).treeControls).toEqual({ frequency: 1, size: 1 });
+
+    p.autoplaceControls.trees = { frequency: 3, size: 2, richness: 1 };
+    expect(elevationCtxFromPreset(p).treeControls).toEqual({ frequency: 3, size: 2 });
+  });
+
   it("exposes cliffSettings from preset.cliffSettings", () => {
     const p = lakesPreset();
     p.cliffSettings = { cliffElevation0: 12, cliffElevationInterval: 30, richness: 2 };
