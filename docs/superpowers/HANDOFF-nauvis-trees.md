@@ -123,6 +123,11 @@ Commits, oldest first:
 ## Open, deferred, not blocking
 
 - Browser render timing for trees (see step 2 above).
+- The committed `pnpm perf` bench (`test/render-cost.perf.spec.ts`) hand-assembles
+  its `all` row and so does **not** cover the trees-inclusive composite. A scratch
+  spec measuring it was written during task 13 and deleted as intended; if the
+  trees cost turns out to matter, adding a real trees row to that bench is the
+  clean fix rather than re-creating a scratch file.
 - Deferred minors are listed at the bottom of `.superpowers/sdd/progress.md` -
   including a pre-existing `CliffSettings` type looseness in
   `test/elevationPreviewCtx.spec.ts` that predates this branch.
