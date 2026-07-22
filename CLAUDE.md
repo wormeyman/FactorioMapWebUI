@@ -65,10 +65,15 @@ bare `vp` or `npx vp` from the project root fails with `EBADDEVENGINES`. Node
 - `pnpm vp dev` - dev server
 - `pnpm vp test` - full test suite (Vitest-compatible; tests import from `"vite-plus/test"`)
 - `pnpm vp test test/controlScale.spec.ts` - a single test file
-- `pnpm vp check --fix` - lint + format (this is the only "lint" step; there is
-  **no** `vue-tsc` type-check of `.vue` files - see TS7 note below)
+- `pnpm vp check --fix` - format + lint + **type-check**, the single static-check
+  step (see the type-checking note below; there is still **no** `vue-tsc` check
+  of `.vue` bodies)
 - `pnpm vp build` - production build
 - `pnpm run deploy` - build + `wrangler pages deploy` to Cloudflare Pages
+
+The app is live at **`map.factorygamefan.com`**. The apex `factorygamefan.com`
+is a separate landing page, not this app; the worker's `ALLOWED_ORIGIN` is the
+`map.` subdomain.
 
 Preview-service stack (optional feature, needs Docker): `pnpm preview:dev` runs
 the Worker (`:8787`) + app (`:5173`) together; `pnpm preview:test` runs its unit
@@ -177,6 +182,34 @@ the editor is fully functional offline without it.
 
 - `docs/superpowers/specs/` and `docs/superpowers/plans/` are point-in-time
   design/plan records, **not** living docs - don't treat them as current state.
-- The project stays on `typescript` 6.0.3; the TS7 (Go) upgrade is deferred
-  because `vue-tsc`/Volar can't yet type-check `.vue` files against it, so there
-  is no full `.vue` type-check step - rely on `vp check` and tests.
+
+### Type-checking runs through `vp check`, not `tsc`
+
+`vp check` runs format, lint, **and** type checks. The type-check step is gated
+behind `lint.options.typeAware` + `lint.options.typeCheck` in `vite.config.ts` -
+both are on. Do not add a `tsc`-based `typecheck` script:
+
+- **`tsc` is not the type-check path.** Bare `./node_modules/.bin/tsc --noEmit`
+  **crashes** (`Debug Failure. False expression: parameter should have errors
+when reporting errors`) - a TypeScript 6.0.3 compiler bug, not a type error,
+  triggered by `vite.config.ts` alone. `vp check` type-checks that same file
+  fine because it uses **tsgolint** (the TypeScript Go toolchain), a different
+  implementation. Beware: passing globs (`tsc --noEmit 'src/**/*.ts'`) silently
+  ignores `tsconfig.json` and reports a misleading "ok".
+- **`.vue` bodies are still unchecked.** Neither `vp check` nor `tsc` reports
+  type errors inside `<script setup lang="ts">` (measured, not assumed). So
+  `vp check` is a partial net over `.ts` only, not a full gate.
+- The project stays on `typescript` 6.0.3 as the _editor/LSP_ compiler; the TS7
+  upgrade is deferred because `vue-tsc`/Volar can't yet type-check `.vue`
+  against it. Note the type-_check_ already effectively runs on TS7 via
+  tsgolint, so the deferral only ever applied to `vue-tsc`.
+
+Two deliberate suppressions live in `vite.config.ts`, both narrow on purpose:
+
+- `typescript/unbound-method` is off for `test/**/*.spec.ts` -
+  `expect(mock.fn).toHaveBeenCalled()` passes an unbound reference by design.
+- The `[EVAL]` build warning is filtered in `build.rollupOptions.onLog` **by
+  module id** for `zlib-asm` only, rather than via `checks.eval = false`, so a
+  direct `eval` introduced anywhere else still warns. `zlib-asm`'s `eval` is
+  load-bearing (it is the only deflate that matches the game's stream
+  byte-for-byte), which is also why the app's CSP needs `unsafe-eval`.

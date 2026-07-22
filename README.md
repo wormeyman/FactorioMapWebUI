@@ -34,9 +34,10 @@ shown scaled up from the tiny wire floats, cooldowns in minutes), linked min/max
 expansion distance, and in-game tooltip text on every field.
 
 The app is **deployed and live** on Cloudflare Pages at
-[`factorygamefan.com`](https://factorygamefan.com) /
 [`map.factorygamefan.com`](https://map.factorygamefan.com), with the map preview
-service deployed alongside it.
+service deployed alongside it. The apex
+[`factorygamefan.com`](https://factorygamefan.com) is a separate landing page,
+**not** the app - the worker's `ALLOWED_ORIGIN` is the `map.` subdomain.
 
 ### Client-side map preview
 
