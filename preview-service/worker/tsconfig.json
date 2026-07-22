@@ -5,7 +5,16 @@
     "moduleResolution": "bundler",
     "lib": ["esnext"],
     // Runtime + binding types come from the generated worker-configuration.d.ts
-    // (via `wrangler types`), which supersedes @cloudflare/workers-types.
+    // (via `wrangler types`), a self-contained ~16k-line dump that declares
+    // R2Bucket, DurableObjectNamespace, etc. itself. It supersedes
+    // @cloudflare/workers-types, which was removed as dead weight - `types: []`
+    // means no @types package is auto-loaded anyway, so adding one back does
+    // nothing unless it is also listed here.
+    //
+    // `wrangler types` prints "Action required: Install @types/node" whenever
+    // `nodejs_compat` is set. Ignore it: this worker imports no node builtins
+    // (no `node:*`, no `process`, no `Buffer`) - only `cloudflare:workers` and
+    // `@cloudflare/containers`. Installing @types/node would be inert.
     "types": [],
     "strict": true,
     "skipLibCheck": true,
