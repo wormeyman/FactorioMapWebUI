@@ -1854,6 +1854,146 @@ async function captureVulcanusSpawn(): Promise<void> {
   console.log(`wrote ${out} (${positions.length} points)`);
 }
 
+/**
+ * Task 8's crack/flood helpers - `vulcanus_hairline_cracks`, `vulcanus_flood_cracks_a`,
+ * `vulcanus_flood_cracks_b`, `vulcanus_flood_paths`, `vulcanus_flood_basalts_func` -
+ * each routed onto elevation over a scattered near+far grid, against a real Vulcanus
+ * surface ({ spaceAge: true, planet: "vulcanus" }). These are pure noise (no spawn
+ * dependency), so a scattered grid spanning near-origin and deep-field suffices.
+ * Regenerate: node --experimental-strip-types test/oracle/capture.ts vulcanus-cracks
+ */
+async function captureVulcanusCracks(): Promise<void> {
+  const seed = 123456;
+  const planet = "vulcanus";
+  const positions: Position[] = [];
+  for (let gy = 0; gy < 6; gy++) {
+    for (let gx = 0; gx < 6; gx++) {
+      positions.push({ x: gx * 13 - 30 + 0.5, y: gy * 17 - 40 + 0.25 });
+    }
+  }
+  for (const r of [500, 1500, 3300]) {
+    for (let k = 0; k < 8; k++) {
+      const a = (k * Math.PI) / 4;
+      positions.push({ x: r * Math.cos(a) + 0.5, y: r * Math.sin(a) + 0.25 });
+    }
+  }
+  positions.push({ x: 12345.75, y: 6789.125 });
+
+  const sample = async (expression: string): Promise<number[]> => {
+    const workDir = await mkdtemp(join(tmpdir(), "oracle-capture-"));
+    try {
+      return await sampleExpression(expression, positions, {
+        workDir,
+        seed,
+        spaceAge: true,
+        planet,
+      });
+    } finally {
+      await rm(workDir, { recursive: true, force: true });
+    }
+  };
+
+  const hairlineCracks = await sample("vulcanus_hairline_cracks");
+  console.log("  captured vulcanus_hairline_cracks");
+  const floodCracksA = await sample("vulcanus_flood_cracks_a");
+  console.log("  captured vulcanus_flood_cracks_a");
+  const floodCracksB = await sample("vulcanus_flood_cracks_b");
+  console.log("  captured vulcanus_flood_cracks_b");
+  const floodPaths = await sample("vulcanus_flood_paths");
+  console.log("  captured vulcanus_flood_paths");
+  const floodBasaltsFunc = await sample("vulcanus_flood_basalts_func");
+  console.log("  captured vulcanus_flood_basalts_func");
+
+  const fixture = {
+    _comment:
+      "Ground truth from Factorio 2.1.12 (Space Age enabled) via the test/oracle harness. Task 8's crack/flood helpers (vulcanus_hairline_cracks, vulcanus_flood_cracks_a, vulcanus_flood_cracks_b, vulcanus_flood_paths, vulcanus_flood_basalts_func), each routed onto elevation over a scattered near+far grid, against a real Vulcanus surface (game.planets['vulcanus'].create_surface()). Regenerate: node --experimental-strip-types test/oracle/capture.ts vulcanus-cracks",
+    seed0: seed,
+    planet,
+    positions,
+    hairlineCracks,
+    floodCracksA,
+    floodCracksB,
+    floodPaths,
+    floodBasaltsFunc,
+  };
+  const out = join(FIXTURES, "oracle-vulcanus-cracks.seed123456.json");
+  await writeFile(out, JSON.stringify(fixture, null, 2) + "\n");
+  console.log(`wrote ${out} (${positions.length} points)`);
+}
+
+/**
+ * Task 8's biome system + volcano spots: the three clamped biomes
+ * (vulcanus_mountains_biome, vulcanus_ashlands_biome, vulcanus_basalts_biome), their
+ * unclamped _full variants, mountain_volcano_spots, and vulcanus_mountains_raw_volcano,
+ * each routed onto elevation, against a real Vulcanus surface. The grid spans spawn
+ * (fine -256..256/32 plus a coarser -800..800/160 span, where starting_area /
+ * starting_protector / the starting volcano spot are live) AND far rings at
+ * r=1500/3000 (where the biome-noise multiscale and the whole-map volcano spot field
+ * dominate). Regenerate: node --experimental-strip-types test/oracle/capture.ts vulcanus-biomes
+ */
+async function captureVulcanusBiomes(): Promise<void> {
+  const seed = 123456;
+  const planet = "vulcanus";
+  const positions: Position[] = [];
+  for (let gy = -256; gy <= 256; gy += 32) {
+    for (let gx = -256; gx <= 256; gx += 32) {
+      positions.push({ x: gx + 0.5, y: gy + 0.25 });
+    }
+  }
+  for (let gy = -800; gy <= 800; gy += 160) {
+    for (let gx = -800; gx <= 800; gx += 160) {
+      positions.push({ x: gx + 0.125, y: gy + 0.375 });
+    }
+  }
+  for (const r of [1500, 3000]) {
+    for (let k = 0; k < 12; k++) {
+      const a = (k * Math.PI) / 6;
+      positions.push({ x: r * Math.cos(a) + 0.5, y: r * Math.sin(a) + 0.25 });
+    }
+  }
+
+  const sample = async (expression: string): Promise<number[]> => {
+    const workDir = await mkdtemp(join(tmpdir(), "oracle-capture-"));
+    try {
+      return await sampleExpression(expression, positions, {
+        workDir,
+        seed,
+        spaceAge: true,
+        planet,
+      });
+    } finally {
+      await rm(workDir, { recursive: true, force: true });
+    }
+  };
+
+  const values: Record<string, number[]> = {};
+  for (const name of [
+    "mountain_volcano_spots",
+    "vulcanus_mountains_raw_volcano",
+    "vulcanus_mountains_biome_full",
+    "vulcanus_ashlands_biome_full",
+    "vulcanus_basalts_biome_full",
+    "vulcanus_mountains_biome",
+    "vulcanus_ashlands_biome",
+    "vulcanus_basalts_biome",
+  ]) {
+    values[name] = await sample(name);
+    console.log(`  captured ${name}`);
+  }
+
+  const fixture = {
+    _comment:
+      "Ground truth from Factorio 2.1.12 (Space Age enabled) via the test/oracle harness. Task 8's biome system + volcano spots (mountain_volcano_spots, vulcanus_mountains_raw_volcano, the three _full variants, the three clamped biomes), each routed onto elevation over a grid spanning spawn (fine -256..256/32 plus a coarser -800..800/160 span) and far rings at r=1500/3000, against a real Vulcanus surface (game.planets['vulcanus'].create_surface()). Regenerate: node --experimental-strip-types test/oracle/capture.ts vulcanus-biomes",
+    seed0: seed,
+    planet,
+    positions,
+    values,
+  };
+  const out = join(FIXTURES, "oracle-vulcanus-biomes.seed123456.json");
+  await writeFile(out, JSON.stringify(fixture, null, 2) + "\n");
+  console.log(`wrote ${out} (${positions.length} points)`);
+}
+
 if (!oracleAvailable()) {
   console.error("No Factorio binary found (set FACTORIO_BIN). Cannot capture fixtures.");
   process.exit(1);
@@ -1895,3 +2035,5 @@ if (want("seed-vars")) await captureSeedVars();
 if (want("starting-spot")) await captureStartingSpotAtAngle();
 if (want("vulcanus-helpers")) await captureVulcanusHelpers();
 if (want("vulcanus-spawn")) await captureVulcanusSpawn();
+if (want("vulcanus-cracks")) await captureVulcanusCracks();
+if (want("vulcanus-biomes")) await captureVulcanusBiomes();
