@@ -33,21 +33,12 @@ describe("makeVulcanusTileResolver vs get_tile oracle", () => {
 
   it("agrees with the placed tile at a high fraction of positions", () => {
     let agree = 0;
-    const mismatches: { x: number; y: number; got: string; want: string }[] = [];
     for (let i = 0; i < positions.length; i++) {
       const p = positions[i];
       const got = resolve(p.x, p.y).name;
       if (got === want[i]) agree++;
-      else mismatches.push({ x: p.x, y: p.y, got, want: want[i] });
     }
     const agreement = agree / positions.length;
-    if (mismatches.length > 0) {
-      // Surface the mismatch profile for the report / any future regression.
-      console.log(
-        `vulcanus tile agreement ${(agreement * 100).toFixed(1)}% (${agree}/${positions.length}); mismatches:`,
-        JSON.stringify(mismatches),
-      );
-    }
     // Floor 0.95 (measured 0.9685): high enough that a genuinely wrong range
     // transcription fails it, with modest headroom for the boundary-flip count.
     expect(agreement).toBeGreaterThan(0.95);
