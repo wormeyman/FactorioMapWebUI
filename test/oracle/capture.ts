@@ -1439,6 +1439,50 @@ async function captureCliffEntities(): Promise<void> {
   console.log(`wrote ${out} (${cases.length} seeds)`);
 }
 
+/**
+ * Ground truth for `rock_density` (= `rock_noise - max(0, 1.1 - distance/32)`, a
+ * base-game named noise expression). Validating it point-by-point pins the rocks-
+ * specific noise (`multioctave_noise{seed1=137, octaves=4, persistence=0.9,
+ * input_scale=0.15*control:rocks:frequency}` plus the size/distance terms); the
+ * `range_select_base` bands and the multiplier/penalty composition are unit-tested
+ * in test/rockField.spec.ts, and moisture/aux are already oracle-validated. Same
+ * standard grid as captureAux/captureTemperature (near-spawn band exercises the
+ * distance term, far rings span the noise) for comparability.
+ */
+async function captureRocks(): Promise<void> {
+  const seed = 123456;
+  const positions: Position[] = [];
+  for (let gy = 0; gy < 3; gy++) {
+    for (let gx = 0; gx < 3; gx++) {
+      positions.push({ x: gx * 11 - 11 + 0.5, y: gy * 13 - 13 + 0.25 });
+    }
+  }
+  for (const r of [2200, 3300]) {
+    for (let k = 0; k < 8; k++) {
+      const a = (k * Math.PI) / 4;
+      positions.push({ x: r * Math.cos(a) + 0.5, y: r * Math.sin(a) + 0.25 });
+    }
+  }
+  positions.push({ x: 12345.75, y: 6789.125 });
+
+  const workDir = await mkdtemp(join(tmpdir(), "oracle-capture-"));
+  try {
+    const values = await sampleExpression("rock_density", positions, { workDir, seed });
+    const fixture = {
+      _comment:
+        "Ground truth from Factorio 2.1.11 via the test/oracle harness. rock_density (= rock_noise - max(0, 1.1 - distance/32)) routed onto elevation. Regenerate: node --experimental-strip-types test/oracle/capture.ts rocks",
+      seed0: seed,
+      positions,
+      values,
+    };
+    const out = join(FIXTURES, "oracle-rock-density.seed123456.json");
+    await writeFile(out, JSON.stringify(fixture, null, 2) + "\n");
+    console.log(`wrote ${out} (${positions.length} points)`);
+  } finally {
+    await rm(workDir, { recursive: true, force: true });
+  }
+}
+
 if (!oracleAvailable()) {
   console.error("No Factorio binary found (set FACTORIO_BIN). Cannot capture fixtures.");
   process.exit(1);
@@ -1473,3 +1517,4 @@ if (want("cliff-elevation")) await captureCliffElevation();
 if (want("cliffiness")) await captureCliffiness();
 if (want("cliff-offset-raw")) await captureCliffOffsetRaw();
 if (want("cliff-entities")) await captureCliffEntities();
+if (want("rocks")) await captureRocks();

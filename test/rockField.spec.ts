@@ -5,6 +5,7 @@ import { makeMoisture } from "../src/noise/expressions/moisture";
 import { makeAux } from "../src/noise/expressions/aux";
 import { distanceFromNearestPoint } from "../src/noise/distanceFromNearestPoint";
 import { rangeSelectBase, sliderRescale, ROCK_SEED1 } from "../src/noise/rocks/rockCatalog";
+import rockDensityFixture from "./fixtures/oracle-rock-density.seed123456.json";
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi);
 
@@ -56,5 +57,38 @@ describe("makeRockDensity", () => {
     const v = field(5000, 5000);
     expect(v).toBeGreaterThanOrEqual(0);
     expect(v).toBeLessThanOrEqual(1);
+  });
+});
+
+// Reconstruct rock_density = rock_noise - max(0, 1.1 - distance/32) from the ported
+// primitives and compare to the game. abs<0.001 OR rel<1e-2 accommodates the known
+// far-field basisNoise f32 floor without masking near-field errors (same combined
+// tolerance the enemy/resource oracle specs use).
+describe("rock_density vs oracle", () => {
+  it("matches the game's rock_density named expression at seed 123456", () => {
+    const seed0 = rockDensityFixture.seed0;
+    const noise = makeMultioctaveNoise({
+      seed0,
+      seed1: ROCK_SEED1,
+      octaves: 4,
+      persistence: 0.9,
+      inputScale: 0.15,
+      outputScale: 1,
+    });
+    const spawn = [{ x: 0, y: 0 }];
+    let worstAbs = 0;
+    let worstRel = 0;
+    for (let i = 0; i < rockDensityFixture.positions.length; i++) {
+      const p = rockDensityFixture.positions[i];
+      const game = rockDensityFixture.values[i];
+      const rockNoise = noise(p.x, p.y) + 0.25; // slider_rescale(1,1.5)=1 at default size
+      const distance = distanceFromNearestPoint(p.x, p.y, spawn);
+      const port = rockNoise - Math.max(0, 1.1 - distance / 32);
+      const abs = Math.abs(port - game);
+      const rel = abs / Math.max(1, Math.abs(game));
+      if (abs > worstAbs) worstAbs = abs;
+      if (rel > worstRel) worstRel = rel;
+    }
+    expect(worstAbs < 1e-3 || worstRel < 1e-2).toBe(true);
   });
 });
