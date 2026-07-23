@@ -1538,6 +1538,78 @@ async function captureVulcanusSmoke(): Promise<void> {
   console.log(`wrote ${out}`);
 }
 
+/**
+ * The four engine-builtin "seed vars" that drive Vulcanus's biome rotation:
+ * `map_seed_normalized`, `map_seed_small` (both pure functions of `seed0`, the
+ * `--map-gen-seed`/`mgs.seed` value - documented in the game's own
+ * noise-expressions reference as "0-1 normalized value of map_seed" and "16
+ * least significant bits from map_seed" respectively, but sampled here across
+ * seeds anyway so the exact formula is confirmed against real output, not just
+ * taken on faith), and `x_from_start`/`y_from_start` (per-point, `=
+ * distance_from_nearest_point_x/_y(x, y, starting_positions)` per
+ * `core/prototypes/noise-programs.lua` - a native primitive with no further
+ * Lua source, unlike the other two which merely lack a *documented* formula).
+ * All four are sampled at ONE fixed point per seed (map_seed_normalized/small
+ * do not depend on x/y at all; x_from_start/y_from_start do, but a single
+ * point is enough to confirm the `== x, y` finding or its offset), through the
+ * Space-Age Vulcanus surface (`{ spaceAge: true, planet: "vulcanus" }`) so the
+ * per-call `seed` option drives `mgs.seed` on that freshly-created surface -
+ * see {@link buildSpaceAgeControlLua}. 12 seeds, including the brief's
+ * required 123456/0/1/2/0xFFFFFFFF, spread across the full 32-bit range so the
+ * derived formula is over-determined.
+ */
+async function captureSeedVars(): Promise<void> {
+  const planet = "vulcanus";
+  const point: Position = { x: 300.5, y: -700.25 };
+  const seeds = [
+    123456, 0, 1, 2, 0xffffffff, 42, 654321, 424242, 100000, 0x7fffffff, 3000000000, 999999999,
+  ];
+
+  const sampleOne = async (seed: number, expression: string): Promise<number> => {
+    const workDir = await mkdtemp(join(tmpdir(), "oracle-capture-"));
+    try {
+      const values = await sampleExpression(expression, [point], {
+        workDir,
+        seed,
+        spaceAge: true,
+        planet,
+      });
+      return values[0];
+    } finally {
+      await rm(workDir, { recursive: true, force: true });
+    }
+  };
+
+  const results: {
+    seed0: number;
+    mapSeedNormalized: number;
+    mapSeedSmall: number;
+    xFromStart: number;
+    yFromStart: number;
+  }[] = [];
+  for (const seed of seeds) {
+    const mapSeedNormalized = await sampleOne(seed, "map_seed_normalized");
+    const mapSeedSmall = await sampleOne(seed, "map_seed_small");
+    const xFromStart = await sampleOne(seed, "x_from_start");
+    const yFromStart = await sampleOne(seed, "y_from_start");
+    results.push({ seed0: seed, mapSeedNormalized, mapSeedSmall, xFromStart, yFromStart });
+    console.log(
+      `  captured seed=${seed}: normalized=${mapSeedNormalized} small=${mapSeedSmall} xFromStart=${xFromStart} yFromStart=${yFromStart}`,
+    );
+  }
+
+  const fixture = {
+    _comment:
+      "Ground truth from Factorio 2.1.12 (Space Age enabled) via the test/oracle harness. map_seed_normalized, map_seed_small, x_from_start, y_from_start, each routed onto elevation on a real Vulcanus surface (game.planets['vulcanus'].create_surface()), sampled at ONE fixed point per seed across 12 seeds spanning the 32-bit range. Regenerate: node --experimental-strip-types test/oracle/capture.ts seed-vars",
+    planet,
+    point,
+    seeds: results,
+  };
+  const out = join(FIXTURES, "oracle-seed-vars.multi.json");
+  await writeFile(out, JSON.stringify(fixture, null, 2) + "\n");
+  console.log(`wrote ${out} (${seeds.length} seeds)`);
+}
+
 if (!oracleAvailable()) {
   console.error("No Factorio binary found (set FACTORIO_BIN). Cannot capture fixtures.");
   process.exit(1);
@@ -1574,3 +1646,4 @@ if (want("cliff-offset-raw")) await captureCliffOffsetRaw();
 if (want("cliff-entities")) await captureCliffEntities();
 if (want("rocks")) await captureRocks();
 if (want("vulcanus-smoke")) await captureVulcanusSmoke();
+if (want("seed-vars")) await captureSeedVars();
