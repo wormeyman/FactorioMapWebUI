@@ -5,6 +5,15 @@ allowBuilds:
   esbuild: true
   sharp: true
   workerd: true
+overrides:
+  # concurrently@10.0.3 (latest) pins shell-quote at exactly 1.8.4, which has a
+  # quadratic-complexity DoS in parse() (GHSA-395f-4hp3-45gv, CWE-407). The only
+  # reachable caller here is concurrently parsing this repo's own command
+  # strings, so real risk is nil - but the audit line is clean to close by
+  # forcing the patched release. The advisory says ">=1.8.5", but no 1.8.5 was
+  # ever published - 1.9.0 is the first release carrying the fix (minimal jump).
+  # Dev tooling only; not in any deployed artifact.
+  shell-quote: "1.9.0"
 # Freshness-guard waiver, added deliberately (2026-07-23) to adopt vite-plus
 # 0.2.6 the day it shipped, before it clears the repo's minimum-release-age
 # policy. 0.2.6 is wanted for its tsgolint-7 type-check engine; see CLAUDE.md
