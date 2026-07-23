@@ -264,10 +264,19 @@ when reporting errors`) - a TypeScript 6.0.3 compiler bug, not a type error,
   wrong. This is why dependency bumps use targeted `pnpm add` rather than
   `pnpm up`: `pnpm up` re-resolves ~22 surrounding packages and triggered
   exactly this, while installing the same target versions directly did not. If
-  it reappears, suspect the transitive graph, not the named package. Annotating
-  the config with an explicit type does **not** help - the augmented
-  `UserConfig` lives in `@voidzero-dev/vite-plus-core`, which is not resolvable,
-  and vitest's exported `ViteUserConfig` lacks the `staged`/`lint`/`fmt` fields.
+  it reappears, suspect the transitive graph, not the named package. Two fixes,
+  one that works and one that doesn't:
+  - **Annotating the config with an explicit type does _not_ help** - the
+    augmented `UserConfig` lives in `@voidzero-dev/vite-plus-core`, which is not
+    resolvable, and vitest's exported `ViteUserConfig` lacks the
+    `staged`/`lint`/`fmt` fields.
+  - **Casting the plugin _does_ help** (found 2026-07-23 adopting vp 0.2.6,
+    whose tsgolint-7 engine bump - not a transitive shift - re-triggered the
+    TS2321). `@vitejs/plugin-vue`'s `vue()` return type references its own
+    bundled Vite's `Plugin`; casting it to vite-plus's own `Plugin`
+    (`plugins: [vue() as Plugin]`, `type Plugin` imported from `vite-plus`)
+    collapses the comparison without suppressing type-checking of the rest of
+    the config. See voidzero-dev/vite-plus#2010's comment thread.
 - The project stays on `typescript` 6.0.3 as the _editor/LSP_ compiler; the TS7
   upgrade is deferred because `vue-tsc`/Volar can't yet type-check `.vue`
   against it. Note the type-_check_ already effectively runs on TS7 via

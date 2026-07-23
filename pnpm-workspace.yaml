@@ -5,3 +5,20 @@ allowBuilds:
   esbuild: true
   sharp: true
   workerd: true
+# Freshness-guard waiver, added deliberately (2026-07-23) to adopt vite-plus
+# 0.2.6 the day it shipped, before it clears the repo's minimum-release-age
+# policy. 0.2.6 is wanted for its tsgolint-7 type-check engine; see CLAUDE.md
+# "vite.config.ts sits near TypeScript's comparison-depth limit" for the
+# `vue() as Plugin` cast that engine required. Prune these entries once 0.2.6
+# ages past the policy threshold (they become no-ops then).
+minimumReleaseAgeExclude:
+  - "@voidzero-dev/vite-plus-core@0.2.6"
+  - "@voidzero-dev/vite-plus-darwin-arm64@0.2.6"
+  - "@voidzero-dev/vite-plus-darwin-x64@0.2.6"
+  - "@voidzero-dev/vite-plus-linux-arm64-gnu@0.2.6"
+  - "@voidzero-dev/vite-plus-linux-arm64-musl@0.2.6"
+  - "@voidzero-dev/vite-plus-linux-x64-gnu@0.2.6"
+  - "@voidzero-dev/vite-plus-linux-x64-musl@0.2.6"
+  - "@voidzero-dev/vite-plus-win32-arm64-msvc@0.2.6"
+  - "@voidzero-dev/vite-plus-win32-x64-msvc@0.2.6"
+  - vite-plus@0.2.6

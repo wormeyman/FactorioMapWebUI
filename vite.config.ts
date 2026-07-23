@@ -1,11 +1,19 @@
 import vue from "@vitejs/plugin-vue";
-import { defineConfig } from "vite-plus";
+import { defineConfig, type Plugin } from "vite-plus";
 
 export default defineConfig({
   staged: {
     "*": "vp check --fix",
   },
-  plugins: [vue()],
+  // `vue()` is cast to vite-plus's own `Plugin` type deliberately. Under vp
+  // 0.2.6's tsgolint-7 type-check engine, `@vitejs/plugin-vue`'s return type
+  // (which references its own bundled Vite's `Plugin`) makes the whole config
+  // object exceed TypeScript's comparison-depth limit against `UserConfig`,
+  // producing a spurious `TS2321: Excessive stack depth`. Casting the plugin
+  // to the `Plugin` type vite-plus already expects collapses that comparison
+  // without suppressing type-checking of the rest of the config. See
+  // https://github.com/voidzero-dev/vite-plus/issues/2010 (comment thread).
+  plugins: [vue() as Plugin],
   build: {
     rollupOptions: {
       // `zlib-asm` uses direct `eval`, which is load-bearing: it is the only
