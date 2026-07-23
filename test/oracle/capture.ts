@@ -1994,6 +1994,64 @@ async function captureVulcanusBiomes(): Promise<void> {
   console.log(`wrote ${out} (${positions.length} points)`);
 }
 
+/**
+ * Task 7's climate fields, `vulcanus_aux` and `vulcanus_moisture` (`vulcanus_temperature`
+ * is deferred to a later task - it depends on `vulcanus_elev`, which does not exist
+ * yet). Each routed onto elevation over the same near+far scattered grid used for
+ * Task 8's cracks (they consume `vulcanus_flood_paths`/`vulcanus_flood_cracks_a`),
+ * against a real Vulcanus surface. Regenerate:
+ * node --experimental-strip-types test/oracle/capture.ts vulcanus-climate
+ */
+async function captureVulcanusClimate(): Promise<void> {
+  const seed = 123456;
+  const planet = "vulcanus";
+  const positions: Position[] = [];
+  for (let gy = 0; gy < 6; gy++) {
+    for (let gx = 0; gx < 6; gx++) {
+      positions.push({ x: gx * 13 - 30 + 0.5, y: gy * 17 - 40 + 0.25 });
+    }
+  }
+  for (const r of [500, 1500, 3300]) {
+    for (let k = 0; k < 8; k++) {
+      const a = (k * Math.PI) / 4;
+      positions.push({ x: r * Math.cos(a) + 0.5, y: r * Math.sin(a) + 0.25 });
+    }
+  }
+  positions.push({ x: 12345.75, y: 6789.125 });
+
+  const sample = async (expression: string): Promise<number[]> => {
+    const workDir = await mkdtemp(join(tmpdir(), "oracle-capture-"));
+    try {
+      return await sampleExpression(expression, positions, {
+        workDir,
+        seed,
+        spaceAge: true,
+        planet,
+      });
+    } finally {
+      await rm(workDir, { recursive: true, force: true });
+    }
+  };
+
+  const aux = await sample("vulcanus_aux");
+  console.log("  captured vulcanus_aux");
+  const moisture = await sample("vulcanus_moisture");
+  console.log("  captured vulcanus_moisture");
+
+  const fixture = {
+    _comment:
+      "Ground truth from Factorio 2.1.12 (Space Age enabled) via the test/oracle harness. Task 7's climate fields (vulcanus_aux, vulcanus_moisture - vulcanus_temperature deferred, depends on vulcanus_elev which doesn't exist yet), each routed onto elevation over a scattered near+far grid, against a real Vulcanus surface (game.planets['vulcanus'].create_surface()). Regenerate: node --experimental-strip-types test/oracle/capture.ts vulcanus-climate",
+    seed0: seed,
+    planet,
+    positions,
+    aux,
+    moisture,
+  };
+  const out = join(FIXTURES, "oracle-vulcanus-climate.seed123456.json");
+  await writeFile(out, JSON.stringify(fixture, null, 2) + "\n");
+  console.log(`wrote ${out} (${positions.length} points)`);
+}
+
 if (!oracleAvailable()) {
   console.error("No Factorio binary found (set FACTORIO_BIN). Cannot capture fixtures.");
   process.exit(1);
@@ -2037,3 +2095,4 @@ if (want("vulcanus-helpers")) await captureVulcanusHelpers();
 if (want("vulcanus-spawn")) await captureVulcanusSpawn();
 if (want("vulcanus-cracks")) await captureVulcanusCracks();
 if (want("vulcanus-biomes")) await captureVulcanusBiomes();
+if (want("vulcanus-climate")) await captureVulcanusClimate();
