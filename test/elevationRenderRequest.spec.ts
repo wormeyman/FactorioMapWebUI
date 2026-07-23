@@ -377,9 +377,9 @@ describe("runRenderRequest", () => {
     }
   });
 
-  it("view 'all' composites all four overlays onto terrain (exactly the union of the single-overlay diffs)", () => {
+  it("view 'all' composites all five overlays onto terrain (exactly the union of the single-overlay diffs)", () => {
     // 32x32 px at 16 tiles/px over world [512, 1024) - a region with resources,
-    // enemy bases, cliffs, and trees all present.
+    // enemy bases, cliffs, trees, and rocks all present.
     const req: ElevationRenderRequest = {
       id: 21,
       seed0: 123456,
@@ -414,21 +414,24 @@ describe("runRenderRequest", () => {
     const enemies = diffPixels(bufFor("enemies"));
     const cliffs = diffPixels(bufFor("cliffs"));
     const trees = diffPixels(bufFor("trees"));
+    const rocks = diffPixels(bufFor("rocks"));
     const all = diffPixels(allBuf);
 
-    // The chosen region actually exercises all four overlays.
+    // The chosen region actually exercises all five overlays.
     expect(resources.size).toBeGreaterThan(0);
     expect(enemies.size).toBeGreaterThan(0);
     expect(cliffs.size).toBeGreaterThan(0);
     expect(trees.size).toBeGreaterThan(0);
+    expect(rocks.size).toBeGreaterThan(0);
 
-    // "all" is exactly the union of the four: every single-overlay diff is in
-    // "all", and "all" paints nothing the four don't (no phantom pixels).
+    // "all" is exactly the union of the five: every single-overlay diff is in
+    // "all", and "all" paints nothing the five don't (no phantom pixels).
     for (const i of resources) expect(all.has(i)).toBe(true);
     for (const i of enemies) expect(all.has(i)).toBe(true);
     for (const i of cliffs) expect(all.has(i)).toBe(true);
     for (const i of trees) expect(all.has(i)).toBe(true);
-    const union = new Set<number>([...resources, ...enemies, ...cliffs, ...trees]);
+    for (const i of rocks) expect(all.has(i)).toBe(true);
+    const union = new Set<number>([...resources, ...enemies, ...cliffs, ...trees, ...rocks]);
     expect(all.size).toBe(union.size);
 
     // The union assertion above is ORDER-INVARIANT - it holds just as well if
@@ -436,10 +439,10 @@ describe("runRenderRequest", () => {
     // overlapping pixels stay in the diff set either way, they are just the
     // wrong color. So pin the order too.
     //
-    // Compositing runs terrain -> trees -> resources -> enemies -> cliffs, and
-    // resources paint opaquely. On a pixel resources paint, where the two later
-    // overlays do not, "all" must therefore equal the resources render exactly -
-    // trees underneath must not show through.
+    // Compositing runs terrain -> trees -> rocks -> resources -> enemies ->
+    // cliffs, and resources paint opaquely. On a pixel resources paint, where
+    // the two later overlays do not, "all" must therefore equal the resources
+    // render exactly - trees underneath must not show through.
     let overlapping = 0;
     for (const i of resources) {
       if (enemies.has(i) || cliffs.has(i)) continue;

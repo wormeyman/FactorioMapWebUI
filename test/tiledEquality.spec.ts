@@ -84,7 +84,16 @@ describe("tiled render equals untiled render", () => {
   // Cliffs were the suspected seam case. These prove the other renderers really
   // are per-pixel pure functions of world coordinates, with no hidden dependence
   // on the extent of the box they are handed.
-  const VIEWS = ["elevation", "terrain", "resources", "enemies", "cliffs", "trees", "all"] as const;
+  const VIEWS = [
+    "elevation",
+    "terrain",
+    "resources",
+    "enemies",
+    "cliffs",
+    "trees",
+    "rocks",
+    "all",
+  ] as const;
 
   for (const view of VIEWS) {
     it(`matches byte for byte on the ${view} view`, () => {

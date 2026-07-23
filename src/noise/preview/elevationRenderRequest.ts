@@ -3,10 +3,12 @@ import { CLIFF_MARK_RADIUS_PX } from "../cliffs/cliffCatalog";
 import type { CliffControls, CliffSettingsInput } from "../cliffs/cliffCatalog";
 import type { EnemyControls } from "../enemies/enemyCatalog";
 import type { ResourceControlLevers } from "../resources/resolveResource";
+import type { RockControls } from "../rocks/rockCatalog";
 import { renderCliffs } from "./renderCliffs";
 import { renderElevation } from "./renderElevation";
 import { renderEnemies } from "./renderEnemies";
 import { renderResources } from "./renderResources";
+import { renderRocks } from "./renderRocks";
 import { renderTerrain } from "./renderTerrain";
 import { renderTrees } from "./renderTrees";
 
@@ -46,14 +48,15 @@ export interface ElevationRenderRequest {
    * overlay composited on top ("resources"), the terrain with the enemy-base
    * footprint overlay composited on top ("enemies"), the terrain with the
    * cliff footprint overlay composited on top ("cliffs"), the terrain with the
-   * tree-density blend composited on top ("trees"), or the terrain with all
-   * four overlays composited on top at once ("all"). Default "elevation".
-   * renderTerrain (and therefore "resources"/"enemies"/"cliffs"/"trees"/"all") always uses the
+   * tree-density blend composited on top ("trees"), the terrain with the rock
+   * footprint overlay composited on top ("rocks"), or the terrain with all
+   * five overlays composited on top at once ("all"). Default "elevation".
+   * renderTerrain (and therefore "resources"/"enemies"/"cliffs"/"trees"/"rocks"/"all") always uses the
    * Nauvis climate + tile catalog (see renderTerrain.ts), so it is only faithful
    * when `mapType` is "nauvis" - callers (the preview panel) disable those
    * toggles for lakes/island presets rather than send an unfaithful request here.
    */
-  view?: "elevation" | "terrain" | "resources" | "enemies" | "cliffs" | "trees" | "all";
+  view?: "elevation" | "terrain" | "resources" | "enemies" | "cliffs" | "trees" | "rocks" | "all";
   /**
    * Per-resource control levers (control:<res>:frequency|size|richness), keyed by
    * controlName - consumed only when `view: "resources"`. Missing entries default
@@ -84,6 +87,11 @@ export interface ElevationRenderRequest {
    * only when `view: "trees"` or `"all"`. Defaults to `{ frequency: 1, size: 1 }`.
    */
   treeControls?: { readonly frequency: number; readonly size: number };
+  /**
+   * The `rocks` autoplace control's frequency/size (control:rocks:*) - consumed
+   * only when `view: "rocks"` or `"all"`. Defaults to `{ frequency: 1, size: 1 }`.
+   */
+  rockControls?: RockControls;
   /**
    * The full image this request is one tile of, when the renderer is tiling.
    * Absent means the request *is* the whole image (the single-render path).
@@ -163,6 +171,7 @@ export function runRenderRequest(req: ElevationRenderRequest): ElevationRenderRe
     req.view === "enemies" ||
     req.view === "cliffs" ||
     req.view === "trees" ||
+    req.view === "rocks" ||
     req.view === "all"
   ) {
     image = renderTerrain({
@@ -198,6 +207,21 @@ export function runRenderRequest(req: ElevationRenderRequest): ElevationRenderRe
         temperatureBias: req.temperatureBias,
         startingAreaMoistureSize: req.startingAreaMoistureSize,
         startingAreaMoistureFrequency: req.startingAreaMoistureFrequency,
+        startingPositions: req.startingPositions,
+      });
+    }
+    if (req.view === "rocks" || req.view === "all") {
+      renderRocks(image, {
+        seed0: req.seed0,
+        originX: req.originX,
+        originY: req.originY,
+        tilesPerPixel: req.tilesPerPixel,
+        controls: req.rockControls ?? { frequency: 1, size: 1 },
+        segmentationMultiplier: req.segmentationMultiplier,
+        moistureFrequency: req.moistureFrequency,
+        moistureBias: req.moistureBias,
+        auxFrequency: req.auxFrequency,
+        auxBias: req.auxBias,
         startingPositions: req.startingPositions,
       });
     }
