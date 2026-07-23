@@ -47,7 +47,7 @@ const showImport = ref(false);
           <ResourcesTab v-if="activeTab === 'Resources'" />
           <TerrainTab v-else-if="activeTab === 'Terrain'" />
           <EnemyTab v-else-if="activeTab === 'Enemy'" />
-          <ElevationPreviewPanel v-else-if="activeTab === 'Preview'" />
+          <ElevationPreviewPanel v-else-if="activeTab === 'Preview'" :planet="selectedPlanet" />
           <AdvancedTab v-else />
         </div>
       </div>
