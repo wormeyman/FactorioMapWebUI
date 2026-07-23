@@ -1791,6 +1791,69 @@ async function captureVulcanusHelpers(): Promise<void> {
   console.log(`wrote ${out} (${positions.length} points)`);
 }
 
+/**
+ * Task 6's seed-derived radial spawn geometry: `vulcanus_starting_area`,
+ * `vulcanus_starting_circle`, and `vulcanus_ashlands_start` (the smallest/most
+ * distortion-sensitive of the three `*_start` blobs), each routed onto elevation
+ * against a real Vulcanus surface. The grid spans spawn densely (fine step near
+ * the origin, where the blobs and the falloff of `starting_circle` actually live)
+ * and out to +-800 tiles (coarser step) so the falloff to 0/1 on every side is
+ * captured too.
+ */
+async function captureVulcanusSpawn(): Promise<void> {
+  const seed = 123456;
+  const planet = "vulcanus";
+  const positions: Position[] = [];
+  // Fine grid near spawn (where the blobs and starting_circle falloff live).
+  for (let gy = -256; gy <= 256; gy += 32) {
+    for (let gx = -256; gx <= 256; gx += 32) {
+      positions.push({ x: gx + 0.5, y: gy + 0.25 });
+    }
+  }
+  // Coarser grid spanning out to +-800, so the falloff to 0 (starting_area) /
+  // the linear tail (starting_circle) is exercised well beyond the blobs.
+  for (let gy = -800; gy <= 800; gy += 160) {
+    for (let gx = -800; gx <= 800; gx += 160) {
+      positions.push({ x: gx + 0.125, y: gy + 0.375 });
+    }
+  }
+
+  const sample = async (expression: string): Promise<number[]> => {
+    const workDir = await mkdtemp(join(tmpdir(), "oracle-capture-"));
+    try {
+      return await sampleExpression(expression, positions, {
+        workDir,
+        seed,
+        spaceAge: true,
+        planet,
+      });
+    } finally {
+      await rm(workDir, { recursive: true, force: true });
+    }
+  };
+
+  const startingArea = await sample("vulcanus_starting_area");
+  console.log("  captured vulcanus_starting_area");
+  const startingCircle = await sample("vulcanus_starting_circle");
+  console.log("  captured vulcanus_starting_circle");
+  const ashlandsStart = await sample("vulcanus_ashlands_start");
+  console.log("  captured vulcanus_ashlands_start");
+
+  const fixture = {
+    _comment:
+      "Ground truth from Factorio 2.1.11 (Space Age enabled) via the test/oracle harness. Task 6's seed-derived radial spawn geometry: vulcanus_starting_area, vulcanus_starting_circle, and vulcanus_ashlands_start, each routed onto elevation over a grid spanning spawn (fine step -256..256/32 plus a coarser -800..800/160 span), against a real Vulcanus surface (game.planets['vulcanus'].create_surface()). Regenerate: node --experimental-strip-types test/oracle/capture.ts vulcanus-spawn",
+    seed0: seed,
+    planet,
+    positions,
+    startingArea,
+    startingCircle,
+    ashlandsStart,
+  };
+  const out = join(FIXTURES, "oracle-vulcanus-spawn.seed123456.json");
+  await writeFile(out, JSON.stringify(fixture, null, 2) + "\n");
+  console.log(`wrote ${out} (${positions.length} points)`);
+}
+
 if (!oracleAvailable()) {
   console.error("No Factorio binary found (set FACTORIO_BIN). Cannot capture fixtures.");
   process.exit(1);
@@ -1831,3 +1894,4 @@ if (want("vulcanus-smoke")) await captureVulcanusSmoke();
 if (want("seed-vars")) await captureSeedVars();
 if (want("starting-spot")) await captureStartingSpotAtAngle();
 if (want("vulcanus-helpers")) await captureVulcanusHelpers();
+if (want("vulcanus-spawn")) await captureVulcanusSpawn();
