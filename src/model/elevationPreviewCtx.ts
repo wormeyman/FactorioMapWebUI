@@ -54,6 +54,12 @@ export interface ElevationPreviewCtx {
    */
   treeControls: { readonly frequency: number; readonly size: number };
   /**
+   * The `rocks` autoplace control's frequency/size (control:rocks:*) - consumed
+   * only by the `view: "rocks"` overlay (renderRocks). Absent defaults to
+   * `{ frequency: 1, size: 1 }`. Nauvis-only, same as the other overlays.
+   */
+  rockControls: { readonly frequency: number; readonly size: number };
+  /**
    * Non-seed free variables for renderElevation/renderTerrain
    * (Omit<..., "seed0">-compatible). The climate fields (aux/moisture
    * frequency+bias, starting-area moisture) are consumed only by
@@ -105,6 +111,7 @@ export function elevationCtxFromPreset(preset: Preset): ElevationPreviewCtx {
   const eb = preset.autoplaceControls[ENEMY_CONTROL_NAME];
   const cc = preset.autoplaceControls[CLIFF_CONTROL_NAME];
   const tc = preset.autoplaceControls.trees;
+  const rk = preset.autoplaceControls.rocks;
   return {
     supported,
     mapType,
@@ -120,6 +127,7 @@ export function elevationCtxFromPreset(preset: Preset): ElevationPreviewCtx {
       richness: preset.cliffSettings.richness,
     },
     treeControls: tc ? { frequency: tc.frequency, size: tc.size } : { frequency: 1, size: 1 },
+    rockControls: rk ? { frequency: rk.frequency, size: rk.size } : { frequency: 1, size: 1 },
     ctx: {
       waterLevel: 10 * Math.log2(size),
       segmentationMultiplier: water?.frequency ?? 1,

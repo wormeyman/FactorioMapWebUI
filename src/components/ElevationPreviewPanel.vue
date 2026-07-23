@@ -43,9 +43,9 @@ const supported = computed(() => preview.value?.supported ?? false);
 // The user's desired view. Defaults to the full composite, which is the closest
 // thing to the game's own map preview - and with dev mode off (the default) it
 // is the only view a user ever gets, since the toggles are hidden.
-const view = ref<"elevation" | "terrain" | "resources" | "enemies" | "cliffs" | "trees" | "all">(
-  "all",
-);
+const view = ref<
+  "elevation" | "terrain" | "resources" | "enemies" | "cliffs" | "trees" | "rocks" | "all"
+>("all");
 const terrainAvailable = computed(() => preview.value?.mapType === "nauvis");
 // What actually renders, in priority order:
 //   1. Off-Nauvis (Lakes/Island), always "elevation" - renderTerrain always
@@ -113,6 +113,7 @@ async function generate() {
         cliffControls: info.cliffControls,
         cliffSettings: info.cliffSettings,
         treeControls: info.treeControls,
+        rockControls: info.rockControls,
       },
       (tile) => {
         g.putImageData(
@@ -213,6 +214,17 @@ async function generate() {
           @click="view = 'trees'"
         >
           Trees
+        </FButton>
+        <FButton
+          data-test="view-rocks"
+          :variant="effectiveView === 'rocks' ? 'tool' : 'default'"
+          :disabled="!terrainAvailable"
+          :title="
+            terrainAvailable ? undefined : 'Rocks view is only available for the Nauvis map type'
+          "
+          @click="view = 'rocks'"
+        >
+          Rocks
         </FButton>
         <FButton
           data-test="view-all"
