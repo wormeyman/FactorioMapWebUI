@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vite-plus/test";
+import rockDensityFixture from "./fixtures/oracle-rock-density.seed123456.json";
 import { makeRockDensity } from "../src/noise/rocks/rockField";
 import { makeMultioctaveNoise } from "../src/noise/multioctaveNoise";
 import { makeMoisture } from "../src/noise/expressions/moisture";
 import { makeAux } from "../src/noise/expressions/aux";
 import { distanceFromNearestPoint } from "../src/noise/distanceFromNearestPoint";
 import { rangeSelectBase, sliderRescale, ROCK_SEED1 } from "../src/noise/rocks/rockCatalog";
-import rockDensityFixture from "./fixtures/oracle-rock-density.seed123456.json";
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi);
 
@@ -62,8 +62,10 @@ describe("makeRockDensity", () => {
 
 // Reconstruct rock_density = rock_noise - max(0, 1.1 - distance/32) from the ported
 // primitives and compare to the game. abs<0.001 OR rel<1e-2 accommodates the known
-// far-field basisNoise f32 floor without masking near-field errors (same combined
-// tolerance the enemy/resource oracle specs use).
+// far-field basisNoise f32 floor without masking near-field errors - the same
+// combined-tolerance PATTERN as the enemy/resource oracle specs, but with ABS_TOL
+// scaled to this field's [-1,1] range (theirs is 1.0 for fields that run in the
+// thousands, which would be a no-op gate here).
 describe("rock_density vs oracle", () => {
   it("matches the game's rock_density named expression at seed 123456", () => {
     const seed0 = rockDensityFixture.seed0;
