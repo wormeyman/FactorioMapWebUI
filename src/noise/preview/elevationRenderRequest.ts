@@ -222,6 +222,8 @@ export function runRenderRequest(req: ElevationRenderRequest): ElevationRenderRe
         moistureBias: req.moistureBias,
         auxFrequency: req.auxFrequency,
         auxBias: req.auxBias,
+        startingAreaMoistureSize: req.startingAreaMoistureSize,
+        startingAreaMoistureFrequency: req.startingAreaMoistureFrequency,
         startingPositions: req.startingPositions,
       });
     }

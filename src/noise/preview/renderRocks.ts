@@ -34,6 +34,8 @@ export interface RenderRocksOptions {
   readonly moistureBias?: number;
   readonly auxFrequency?: number;
   readonly auxBias?: number;
+  readonly startingAreaMoistureSize?: number;
+  readonly startingAreaMoistureFrequency?: number;
   /** Spawn points for `distance`. Default single origin spawn. */
   readonly startingPositions?: readonly Point[];
 }
@@ -53,6 +55,8 @@ export function renderRocks(base: ImageData, opts: RenderRocksOptions): void {
     moistureBias: opts.moistureBias,
     auxFrequency: opts.auxFrequency,
     auxBias: opts.auxBias,
+    startingAreaMoistureSize: opts.startingAreaMoistureSize,
+    startingAreaMoistureFrequency: opts.startingAreaMoistureFrequency,
     startingPositions: opts.startingPositions,
   });
 

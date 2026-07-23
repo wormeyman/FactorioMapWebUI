@@ -28,6 +28,8 @@ export interface RockFieldParams {
   readonly moistureBias?: number;
   readonly auxFrequency?: number;
   readonly auxBias?: number;
+  readonly startingAreaMoistureSize?: number;
+  readonly startingAreaMoistureFrequency?: number;
   /** Spawn points for `distance`. Default single origin spawn. */
   readonly startingPositions?: readonly Point[];
 }
@@ -51,6 +53,8 @@ export function makeRockDensity(params: RockFieldParams): (x: number, y: number)
     segmentationMultiplier: params.segmentationMultiplier,
     moistureFrequency: params.moistureFrequency,
     moistureBias: params.moistureBias,
+    startingAreaMoistureSize: params.startingAreaMoistureSize,
+    startingAreaMoistureFrequency: params.startingAreaMoistureFrequency,
     startingPositions: [...spawn],
   });
   const aux = makeAux({
