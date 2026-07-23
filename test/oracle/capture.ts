@@ -1484,6 +1484,85 @@ async function captureRocks(): Promise<void> {
 }
 
 /**
+ * The native `multisample(expression, offset_x, offset_y)` builtin - the one
+ * genuine unknown feeding Vulcanus's `vulcanus_basalt_lakes_multisample` (Task 9's
+ * `vulcanus_elev`). Per the game's own auxiliary docs ("Evaluates the expression
+ * in a separate noise program with a larger grid. Sub-grids are copied to the
+ * main program.") this is a supersampling primitive; `offset_x`/`offset_y` are
+ * documented as "constant 8-bit signed integer" but the real usage only ever
+ * passes 0 or 1 (a 2x2 supersample). The inner-expression trick: route the bare
+ * `x` and `y` variables (not some derived expression) as the multisample
+ * argument, so the returned number IS the exact sampled coordinate - no
+ * inversion needed. Sampled independently for x and y, at several base points
+ * (fractional, negative, far-from-origin) crossed with a WIDE offset sweep
+ * (-2..3, beyond the {0,1} the game actually uses) so a linear offset-per-unit
+ * rule is over-determined rather than merely fit to two points, plus a few
+ * non-axis-aligned (dx,dy) combos to rule out any cross term between the two
+ * axes. `calculate_tile_properties` needs the multisample fix landed in
+ * 2.0.67 ("Fixed multisample noise operation not working properly for
+ * LuaSurface.calculate_tile_properties()") - confirmed present (game reports
+ * 2.1.12, changelog fix is 2.0.67).
+ */
+async function captureMultisample(): Promise<void> {
+  const seed = 123456;
+  const positions: Position[] = [
+    { x: 0.5, y: 0.25 },
+    { x: 10.5, y: -20.25 },
+    { x: -5.25, y: 7.75 },
+    { x: 100.125, y: -300.875 },
+    { x: 1234.5, y: -4321.5 },
+  ];
+  // (dx, dy) pairs: the real {0,1}x{0,1} usage, an extended axis-aligned sweep
+  // (negative + beyond 1, both axes independently) to pin the linear rule, and a
+  // few off-axis combos to check for cross terms.
+  const offsets: { dx: number; dy: number }[] = [
+    { dx: 0, dy: 0 },
+    { dx: 1, dy: 0 },
+    { dx: 0, dy: 1 },
+    { dx: 1, dy: 1 },
+    { dx: -1, dy: 0 },
+    { dx: -2, dy: 0 },
+    { dx: 2, dy: 0 },
+    { dx: 3, dy: 0 },
+    { dx: 0, dy: -1 },
+    { dx: 0, dy: -2 },
+    { dx: 0, dy: 2 },
+    { dx: 0, dy: 3 },
+    { dx: 2, dy: 3 },
+    { dx: -1, dy: 2 },
+    { dx: 3, dy: -2 },
+  ];
+
+  const sample = async (expression: string): Promise<number[]> => {
+    const workDir = await mkdtemp(join(tmpdir(), "oracle-capture-"));
+    try {
+      return await sampleExpression(expression, positions, { workDir, seed });
+    } finally {
+      await rm(workDir, { recursive: true, force: true });
+    }
+  };
+
+  const cases: { dx: number; dy: number; sampledX: number[]; sampledY: number[] }[] = [];
+  for (const { dx, dy } of offsets) {
+    const sampledX = await sample(`multisample(x, ${dx}, ${dy})`);
+    const sampledY = await sample(`multisample(y, ${dx}, ${dy})`);
+    cases.push({ dx, dy, sampledX, sampledY });
+    console.log(`  captured multisample dx=${dx} dy=${dy}`);
+  }
+
+  const fixture = {
+    _comment:
+      "Ground truth from Factorio 2.1.12 via the test/oracle harness. Native multisample(expression, offset_x, offset_y) routed onto elevation, with the inner expression being the bare x (sampledX) or bare y (sampledY) variable, so the returned number IS the exact world coordinate multisample sampled - no inversion needed. Regenerate: node --experimental-strip-types test/oracle/capture.ts multisample",
+    seed0: seed,
+    positions,
+    cases,
+  };
+  const out = join(FIXTURES, "oracle-multisample.seed123456.json");
+  await writeFile(out, JSON.stringify(fixture, null, 2) + "\n");
+  console.log(`wrote ${out} (${offsets.length} offsets x ${positions.length} points)`);
+}
+
+/**
  * Space-Age (Vulcanus) smoke fixture: proves the Space-Age oracle path routes
  * correctly end to end. Samples two exact constants -
  * `vulcanus_starting_area_radius` (`0.7 * 0.75` = 0.525) and `vulcanus_ore_spacing`
@@ -1693,6 +1772,7 @@ if (want("cliffiness")) await captureCliffiness();
 if (want("cliff-offset-raw")) await captureCliffOffsetRaw();
 if (want("cliff-entities")) await captureCliffEntities();
 if (want("rocks")) await captureRocks();
+if (want("multisample")) await captureMultisample();
 if (want("vulcanus-smoke")) await captureVulcanusSmoke();
 if (want("seed-vars")) await captureSeedVars();
 if (want("starting-spot")) await captureStartingSpotAtAngle();
