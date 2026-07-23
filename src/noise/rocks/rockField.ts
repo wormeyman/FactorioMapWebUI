@@ -67,7 +67,7 @@ export function makeRockDensity(params: RockFieldParams): (x: number, y: number)
 
   return (x: number, y: number): number => {
     const rockNoise = noise(x, y) + sizeTerm;
-    const distance = distanceFromNearestPoint(x, y, spawn as Point[]);
+    const distance = distanceFromNearestPoint(x, y, spawn);
     const rockDensity = rockNoise - Math.max(0, 1.1 - distance / 32);
 
     const m = moisture(x, y);

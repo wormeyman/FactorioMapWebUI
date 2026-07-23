@@ -14,7 +14,12 @@ const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), h
 function expected(seed0: number, x: number, y: number): number {
   const spawn = [{ x: 0, y: 0 }];
   const noise = makeMultioctaveNoise({
-    seed0, seed1: ROCK_SEED1, octaves: 4, persistence: 0.9, inputScale: 0.15, outputScale: 1,
+    seed0,
+    seed1: ROCK_SEED1,
+    octaves: 4,
+    persistence: 0.9,
+    inputScale: 0.15,
+    outputScale: 1,
   });
   const moisture = makeMoisture({ seed0, startingPositions: [...spawn] });
   const aux = makeAux({ seed0 });
@@ -38,7 +43,10 @@ describe("makeRockDensity", () => {
   const seed0 = 123456;
   const field = makeRockDensity({ seed0 });
   for (const [x, y] of [
-    [300, -180], [512, 512], [-800, 640], [40, 40],
+    [300, -180],
+    [512, 512],
+    [-800, 640],
+    [40, 40],
   ] as const) {
     it(`composes max_i probability_i at (${x},${y})`, () => {
       expect(field(x, y)).toBeCloseTo(expected(seed0, x, y), 10);
