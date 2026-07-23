@@ -1737,6 +1737,60 @@ async function captureStartingSpotAtAngle(): Promise<void> {
   console.log(`wrote ${out} (${configs.length} configs x ${positions.length} points)`);
 }
 
+/**
+ * Task 5's three leaf helper closures - `vulcanus_wobble_x`, `mountain_plasma`
+ * (= `vulcanus_plasma(102, 2.5, 10, 125, 625)`), and
+ * `vulcanus_detail_noise(837, 1/40, 4, 1.25)` - plus `vulcanus_scale_multiplier`
+ * (= `slider_rescale(control:vulcanus_volcanism:frequency, 3)`) sampled at the
+ * DEFAULT preset (no autoplace_controls override), so the fixture also pins the
+ * neutral control default the ctx extension assumes. All routed onto elevation
+ * against a real Vulcanus surface ({ spaceAge: true, planet: "vulcanus" }), over
+ * the standard scattered grid.
+ */
+async function captureVulcanusHelpers(): Promise<void> {
+  const seed = 123456;
+  const planet = "vulcanus";
+  const positions = gridPositions();
+
+  const sample = async (expression: string): Promise<number[]> => {
+    const workDir = await mkdtemp(join(tmpdir(), "oracle-capture-"));
+    try {
+      return await sampleExpression(expression, positions, {
+        workDir,
+        seed,
+        spaceAge: true,
+        planet,
+      });
+    } finally {
+      await rm(workDir, { recursive: true, force: true });
+    }
+  };
+
+  const wobbleX = await sample("vulcanus_wobble_x");
+  console.log("  captured vulcanus_wobble_x");
+  const mountainPlasma = await sample("vulcanus_plasma(102, 2.5, 10, 125, 625)");
+  console.log("  captured mountain_plasma");
+  const detailNoise = await sample("vulcanus_detail_noise(837, 1/40, 4, 1.25)");
+  console.log("  captured vulcanus_detail_noise(837, 1/40, 4, 1.25)");
+  const scaleMultiplier = await sample("vulcanus_scale_multiplier");
+  console.log("  captured vulcanus_scale_multiplier (default control)");
+
+  const fixture = {
+    _comment:
+      "Ground truth from Factorio 2.1.12 (Space Age enabled) via the test/oracle harness. Task 5's three leaf helper closures (vulcanus_wobble_x, mountain_plasma = vulcanus_plasma(102,2.5,10,125,625), vulcanus_detail_noise(837,1/40,4,1.25)) plus vulcanus_scale_multiplier (= slider_rescale(control:vulcanus_volcanism:frequency, 3), sampled at the DEFAULT preset - no autoplace_controls override - to pin the neutral control value), each routed onto elevation over the standard scattered grid, against a real Vulcanus surface (game.planets['vulcanus'].create_surface()). Regenerate: node --experimental-strip-types test/oracle/capture.ts vulcanus-helpers",
+    seed0: seed,
+    planet,
+    positions,
+    wobbleX,
+    mountainPlasma,
+    detailNoise,
+    scaleMultiplier,
+  };
+  const out = join(FIXTURES, "oracle-vulcanus-helpers.seed123456.json");
+  await writeFile(out, JSON.stringify(fixture, null, 2) + "\n");
+  console.log(`wrote ${out} (${positions.length} points)`);
+}
+
 if (!oracleAvailable()) {
   console.error("No Factorio binary found (set FACTORIO_BIN). Cannot capture fixtures.");
   process.exit(1);
@@ -1776,3 +1830,4 @@ if (want("multisample")) await captureMultisample();
 if (want("vulcanus-smoke")) await captureVulcanusSmoke();
 if (want("seed-vars")) await captureSeedVars();
 if (want("starting-spot")) await captureStartingSpotAtAngle();
+if (want("vulcanus-helpers")) await captureVulcanusHelpers();
