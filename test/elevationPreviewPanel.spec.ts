@@ -257,6 +257,31 @@ describe("ElevationPreviewPanel", () => {
     expect(w.find('[data-test="view-trees"]').attributes("disabled")).toBeDefined();
   });
 
+  it("passes view:'rocks' + rockControls after selecting the Rocks toggle (Nauvis)", async () => {
+    stubCanvas();
+    const renderer = okRenderer();
+    const w = setup("nauvis", renderer);
+    expect(w.find('[data-test="view-rocks"]').attributes("disabled")).toBeUndefined();
+
+    await w.find('[data-test="view-rocks"]').trigger("click");
+    await w.find('[data-test="generate"]').trigger("click");
+    await flushPromises();
+
+    expect(renderer.render).toHaveBeenCalledOnce();
+    const arg = (renderer.render as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg).toMatchObject({ view: "rocks", mapType: "nauvis" });
+    expect(arg.rockControls).toEqual({ frequency: 1, size: 1 });
+  });
+
+  it("disables the Rocks toggle off-Nauvis (Lakes/Island)", async () => {
+    expect(
+      setup("lakes", okRenderer()).find('[data-test="view-rocks"]').attributes("disabled"),
+    ).toBeDefined();
+    expect(
+      setup("island", okRenderer()).find('[data-test="view-rocks"]').attributes("disabled"),
+    ).toBeDefined();
+  });
+
   it("passes view:'all' + all overlay controls after selecting the All toggle (Nauvis)", async () => {
     const putImageData = stubCanvas();
     const renderer = okRenderer();
@@ -379,7 +404,16 @@ describe("ElevationPreviewPanel", () => {
 
   it("hides the view toggles when dev mode is off", () => {
     const w = setup("nauvis", okRenderer(), { dev: false });
-    for (const t of ["elevation", "terrain", "resources", "enemies", "cliffs", "all"]) {
+    for (const t of [
+      "elevation",
+      "terrain",
+      "resources",
+      "enemies",
+      "cliffs",
+      "trees",
+      "rocks",
+      "all",
+    ]) {
       expect(w.find(`[data-test="view-${t}"]`).exists()).toBe(false);
     }
     expect(w.find('[data-test="generate"]').exists()).toBe(true);
