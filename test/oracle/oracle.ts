@@ -15,6 +15,12 @@
  * sampleExpression} wires them to disk and an (injectable) spawn, so the real run
  * is gated on a local install via {@link oracleAvailable}. Not shipped in the app.
  *
+ * A third mode, `{ spaceAge: true, planet: "vulcanus" }` on {@link sampleExpression},
+ * routes the probe onto a Space-Age planet's own surface (created at runtime via
+ * `LuaPlanet::create_surface`) instead of the default Nauvis surface - required for
+ * planet-specific named noise expressions (`vulcanus_*`, ...) to resolve. See
+ * {@link buildSpaceAgeControlLua} for why Nauvis alone cannot sample them.
+ *
  * A sibling path, {@link sampleTileNames}, answers a different question:
  * `calculate_tile_properties` only ever returns noise VALUES, never the tile the
  * game actually placed. That path generates real chunks (`request_to_generate_chunks`
@@ -88,6 +94,24 @@ export function buildModList(probeName = PROBE_NAME): object {
 }
 
 /**
+ * `mod-list.json` for the Space-Age variant: `base` plus the three DLC mods
+ * `calculate_tile_properties` needs loaded for a `vulcanus_*` (or any other
+ * planet) named noise expression to even exist (`space-age` depends on both
+ * `elevated-rails` and `quality`), plus the probe.
+ */
+export function buildSpaceAgeModList(probeName = PROBE_NAME): object {
+  return {
+    mods: [
+      { name: "base", enabled: true },
+      { name: "space-age", enabled: true },
+      { name: "elevated-rails", enabled: true },
+      { name: "quality", enabled: true },
+      { name: probeName, enabled: true },
+    ],
+  };
+}
+
+/**
  * The runtime `control.lua`: on map creation, sample `property` at every position
  * and write `{ values, positions }` JSON, then `error(DUMPED-OK)` to exit. The dump
  * always keys the sampled array as `values`, whatever property was routed.
@@ -104,6 +128,48 @@ export function buildControlLua(
 ${posLua}
   }
   local surface = game.surfaces[1]
+  -- property_names come FIRST; the HTML docs list positions first and are wrong.
+  local props = surface.calculate_tile_properties({"${property}"}, positions)
+  helpers.write_file("${dumpFile}",
+    helpers.table_to_json({ values = props["${property}"], positions = positions }), false)
+  error("DUMPED-OK")
+end)
+`;
+}
+
+/**
+ * The Space-Age runtime `control.lua`: unlike {@link buildControlLua} (which
+ * samples the property already routed via `--map-gen-settings` onto the
+ * default Nauvis surface at `game.surfaces[1]`), a planet's own named noise
+ * expressions (e.g. `vulcanus_temperature`) only resolve correctly against
+ * THAT planet's surface - Nauvis has no `vulcanus_*` control context. So this
+ * variant creates the planet's surface on demand
+ * (`game.planets[planet].create_surface()`, which does not accept a settings
+ * argument - see `LuaPlanet::create_surface`), then rewrites that surface's
+ * OWN `map_gen_settings` (seed + the property route onto the probe) via the
+ * read-modify-write pattern the game's own docs show for
+ * `LuaSurface::map_gen_settings`, before sampling. The `--map-gen-settings`
+ * CLI file still configures Nauvis (required for `--create` to succeed) but
+ * is otherwise irrelevant here, since nothing is ever sampled from it.
+ */
+export function buildSpaceAgeControlLua(
+  positions: readonly Position[],
+  opts: { property?: string; dumpFile?: string; planet?: string; seed?: number } = {},
+): string {
+  const property = opts.property ?? "elevation";
+  const dumpFile = opts.dumpFile ?? DUMP_FILE;
+  const planet = opts.planet ?? "vulcanus";
+  const seed = opts.seed ?? 123456;
+  const posLua = positions.map((p) => `    {x = ${p.x}, y = ${p.y}}`).join(",\n");
+  return `script.on_init(function()
+  local positions = {
+${posLua}
+  }
+  local surface = game.planets["${planet}"].create_surface()
+  local mgs = surface.map_gen_settings
+  mgs.seed = ${seed}
+  mgs.property_expression_names["${property}"] = "${PROBE_NAME}"
+  surface.map_gen_settings = mgs
   -- property_names come FIRST; the HTML docs list positions first and are wrong.
   local props = surface.calculate_tile_properties({"${property}"}, positions)
   helpers.write_file("${dumpFile}",
@@ -412,6 +478,17 @@ export interface OracleOptions {
   mapGenOverrides?: Record<string, unknown>;
   /** Injectable spawn (default: real `node:child_process`). */
   spawnFn?: SpawnFn;
+  /**
+   * Route the probe through a Space-Age planet surface instead of the default
+   * Nauvis surface at `game.surfaces[1]`. Enables `space-age`/`elevated-rails`/
+   * `quality` in `mod-list.json` and creates/configures the planet's own
+   * surface at runtime (see {@link buildSpaceAgeControlLua}) - required for
+   * planet-specific named noise expressions (e.g. `vulcanus_temperature`) to
+   * resolve. Default false; the non-Space-Age path is unaffected either way.
+   */
+  spaceAge?: boolean;
+  /** Which planet's surface to route onto when {@link spaceAge} is set. Default "vulcanus". */
+  planet?: string;
 }
 
 /**
@@ -443,8 +520,16 @@ export async function sampleExpression(
   await mkdir(writeDataDir, { recursive: true });
   await writeFile(join(modFilesDir, "info.json"), JSON.stringify(buildInfoJson(), null, 2));
   await writeFile(join(modFilesDir, "data.lua"), buildDataLua(expression));
-  await writeFile(join(modFilesDir, "control.lua"), buildControlLua(positions, { property }));
-  await writeFile(join(modDir, "mod-list.json"), JSON.stringify(buildModList(), null, 2));
+  await writeFile(
+    join(modFilesDir, "control.lua"),
+    opts.spaceAge
+      ? buildSpaceAgeControlLua(positions, { property, planet: opts.planet, seed })
+      : buildControlLua(positions, { property }),
+  );
+  await writeFile(
+    join(modDir, "mod-list.json"),
+    JSON.stringify(opts.spaceAge ? buildSpaceAgeModList() : buildModList(), null, 2),
+  );
   await writeFile(
     mapGenPath,
     JSON.stringify(buildMapGenSettings({ seed, property, overrides: opts.mapGenOverrides })),

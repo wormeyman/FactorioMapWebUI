@@ -1483,6 +1483,61 @@ async function captureRocks(): Promise<void> {
   }
 }
 
+/**
+ * Space-Age (Vulcanus) smoke fixture: proves the Space-Age oracle path routes
+ * correctly end to end. Samples two exact constants -
+ * `vulcanus_starting_area_radius` (`0.7 * 0.75` = 0.525) and `vulcanus_ore_spacing`
+ * (128) - plus `vulcanus_temperature` at 4 scattered points, all against a real
+ * Vulcanus surface (`game.planets["vulcanus"].create_surface()`, via
+ * `{ spaceAge: true, planet: "vulcanus" }`). Needs `space-age` +
+ * `elevated-rails` + `quality` alongside `base` in the generated mod-list.
+ */
+async function captureVulcanusSmoke(): Promise<void> {
+  const seed = 123456;
+  const planet = "vulcanus";
+  const positions: Position[] = [
+    { x: 0.5, y: 0.25 },
+    { x: 100.5, y: -50.25 },
+    { x: -300.5, y: 200.25 },
+    { x: 1000.5, y: 1000.25 },
+  ];
+
+  const sample = async (expression: string): Promise<number[]> => {
+    const workDir = await mkdtemp(join(tmpdir(), "oracle-capture-"));
+    try {
+      return await sampleExpression(expression, positions, {
+        workDir,
+        seed,
+        spaceAge: true,
+        planet,
+      });
+    } finally {
+      await rm(workDir, { recursive: true, force: true });
+    }
+  };
+
+  const startingAreaRadius = await sample("vulcanus_starting_area_radius");
+  console.log("  captured vulcanus_starting_area_radius");
+  const oreSpacing = await sample("vulcanus_ore_spacing");
+  console.log("  captured vulcanus_ore_spacing");
+  const temperature = await sample("vulcanus_temperature");
+  console.log("  captured vulcanus_temperature");
+
+  const fixture = {
+    _comment:
+      "Ground truth from Factorio 2.1.12 (Space Age enabled) via the test/oracle harness. vulcanus_starting_area_radius (constant 0.7 * 0.75 = 0.525) and vulcanus_ore_spacing (constant 128), plus vulcanus_temperature at 4 points, all sampled against a real Vulcanus surface (game.planets['vulcanus'].create_surface()). Proves the Space-Age oracle routing (spaceAge/planet options) end to end. Regenerate: node --experimental-strip-types test/oracle/capture.ts vulcanus-smoke",
+    seed0: seed,
+    planet,
+    positions,
+    startingAreaRadius,
+    oreSpacing,
+    temperature,
+  };
+  const out = join(FIXTURES, "oracle-vulcanus-smoke.seed123456.json");
+  await writeFile(out, JSON.stringify(fixture, null, 2) + "\n");
+  console.log(`wrote ${out}`);
+}
+
 if (!oracleAvailable()) {
   console.error("No Factorio binary found (set FACTORIO_BIN). Cannot capture fixtures.");
   process.exit(1);
@@ -1518,3 +1573,4 @@ if (want("cliffiness")) await captureCliffiness();
 if (want("cliff-offset-raw")) await captureCliffOffsetRaw();
 if (want("cliff-entities")) await captureCliffEntities();
 if (want("rocks")) await captureRocks();
+if (want("vulcanus-smoke")) await captureVulcanusSmoke();
