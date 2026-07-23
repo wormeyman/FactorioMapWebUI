@@ -330,6 +330,50 @@ end)
 `;
 }
 
+/**
+ * Space-Age variant of {@link buildTileControlLua}: reads `get_tile(x, y).name` on a
+ * PLANET'S OWN surface (default vulcanus) instead of the default Nauvis surface at
+ * `game.surfaces[1]`. Creates the planet surface on demand
+ * (`game.planets[planet].create_surface()`), rewrites its own `map_gen_settings.seed`
+ * (the read-modify-write the game's docs show for `LuaSurface::map_gen_settings`, and
+ * the same pattern {@link buildSpaceAgeControlLua} uses), then requests chunk
+ * generation around each point and reads the placed tile. `get_tile` takes int32
+ * coords and rounds non-integers down, so positions are floored before embedding.
+ */
+export function buildSpaceAgeTileControlLua(
+  positions: readonly Position[],
+  opts: { radius?: number; dumpFile?: string; planet?: string; seed?: number } = {},
+): string {
+  const dumpFile = opts.dumpFile ?? TILE_DUMP_FILE;
+  const radius = opts.radius ?? 1;
+  const planet = opts.planet ?? "vulcanus";
+  const seed = opts.seed ?? 123456;
+  const posLua = positions
+    .map((p) => `    {x = ${Math.floor(p.x)}, y = ${Math.floor(p.y)}}`)
+    .join(",\n");
+  return `script.on_init(function()
+  local positions = {
+${posLua}
+  }
+  local surface = game.planets["${planet}"].create_surface()
+  local mgs = surface.map_gen_settings
+  mgs.seed = ${seed}
+  surface.map_gen_settings = mgs
+  for i, p in ipairs(positions) do
+    surface.request_to_generate_chunks({x = p.x, y = p.y}, ${radius})
+  end
+  surface.force_generate_chunk_requests()
+  local results = {}
+  for i, p in ipairs(positions) do
+    local tile = surface.get_tile(p.x, p.y)
+    results[i] = {x = p.x, y = p.y, name = tile.name}
+  end
+  helpers.write_file("${dumpFile}", helpers.table_to_json({ results = results }), false)
+  error("DUMPED-OK")
+end)
+`;
+}
+
 /** Parse the tile-name mod's dump into `{x, y, name}` entries. */
 export function parseTileDump(
   jsonText: string,
@@ -595,9 +639,18 @@ export async function sampleTileNames(
   await writeFile(join(modFilesDir, "info.json"), JSON.stringify(buildTileInfoJson(), null, 2));
   await writeFile(
     join(modFilesDir, "control.lua"),
-    buildTileControlLua(positions, { radius: opts.radius }),
+    opts.spaceAge
+      ? buildSpaceAgeTileControlLua(positions, { radius: opts.radius, planet: opts.planet, seed })
+      : buildTileControlLua(positions, { radius: opts.radius }),
   );
-  await writeFile(join(modDir, "mod-list.json"), JSON.stringify(buildTileModList(), null, 2));
+  await writeFile(
+    join(modDir, "mod-list.json"),
+    JSON.stringify(
+      opts.spaceAge ? buildSpaceAgeModList(TILE_PROBE_NAME) : buildTileModList(),
+      null,
+      2,
+    ),
+  );
   await writeFile(mapGenPath, JSON.stringify(buildTileMapGenSettings(seed)));
   await writeFile(configPath, buildConfigIni(writeDataDir, dataDir));
 

@@ -2167,6 +2167,65 @@ async function captureVulcanusTemperature(): Promise<void> {
   }
 }
 
+/**
+ * The `get_tile` tile-name oracle for VULCANUS (Task 10): the Space-Age sibling of
+ * `captureTileNames`. Reuses the same real-chunk-generate path
+ * (`sampleTileNames`), but with `{ spaceAge: true, planet: "vulcanus" }` so tiles
+ * are read from a real Vulcanus surface (`game.planets["vulcanus"].create_surface()`)
+ * instead of Nauvis. A golden-angle spiral from spawn out to ~2600 tiles spans the
+ * radial Vulcanus biomes (mountains disc near center, then basalts/ashlands rings),
+ * plus a dense near-spawn square grid. Seed 123456. Validates the tile argmax +
+ * map_color port. Regenerate: node --experimental-strip-types test/oracle/capture.ts
+ * vulcanus-tile-names
+ */
+async function captureVulcanusTileNames(): Promise<void> {
+  const seed = 123456;
+  const planet = "vulcanus";
+  const positions: Position[] = [];
+  // Dense near-spawn grid (the mountains/volcano biome disc).
+  for (let gy = -320; gy <= 320; gy += 64) {
+    for (let gx = -320; gx <= 320; gx += 64) {
+      positions.push({ x: gx + 0.5, y: gy + 0.25 });
+    }
+  }
+  // Golden-angle spiral out to ~2600 tiles to cross basalts + ashlands rings.
+  const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
+  const count = 260;
+  for (let i = 0; i < count; i++) {
+    const t = (i + 0.5) / count;
+    const r = 120 + t * (2600 - 120);
+    const a = i * GOLDEN_ANGLE;
+    positions.push({ x: r * Math.cos(a) + 0.5, y: r * Math.sin(a) + 0.25 });
+  }
+
+  const workDir = await mkdtemp(join(tmpdir(), "oracle-capture-"));
+  try {
+    const samples: TileSample[] = await sampleTileNames(positions, {
+      workDir,
+      seed,
+      radius: 1,
+      spaceAge: true,
+      planet,
+    });
+    const fixture = {
+      _comment:
+        "Ground truth from Factorio 2.1.12 (Space Age enabled) via the test/oracle harness. surface.get_tile(x, y).name on a real Vulcanus surface (game.planets['vulcanus'].create_surface(), seed 123456) after real chunk generation, over a near-spawn grid + a golden-angle spiral to ~2600 tiles spanning the radial biomes. positions are the mod's ECHOED floored get_tile input. Regenerate: node --experimental-strip-types test/oracle/capture.ts vulcanus-tile-names",
+      seed0: seed,
+      planet,
+      positions: samples.map((s) => ({ x: s.x, y: s.y })),
+      tileNames: samples.map((s) => s.name),
+    };
+    const out = join(FIXTURES, "oracle-vulcanus-tile-names.seed123456.json");
+    await writeFile(out, JSON.stringify(fixture, null, 2) + "\n");
+    const distinct = [...new Set(fixture.tileNames)].sort();
+    console.log(
+      `wrote ${out} (${positions.length} points, ${distinct.length} distinct tiles: ${distinct.join(", ")})`,
+    );
+  } finally {
+    await rm(workDir, { recursive: true, force: true });
+  }
+}
+
 if (!oracleAvailable()) {
   console.error("No Factorio binary found (set FACTORIO_BIN). Cannot capture fixtures.");
   process.exit(1);
@@ -2213,3 +2272,4 @@ if (want("vulcanus-biomes")) await captureVulcanusBiomes();
 if (want("vulcanus-climate")) await captureVulcanusClimate();
 if (want("vulcanus-elevation")) await captureVulcanusElevation();
 if (want("vulcanus-temperature")) await captureVulcanusTemperature();
+if (want("vulcanus-tile-names")) await captureVulcanusTileNames();
