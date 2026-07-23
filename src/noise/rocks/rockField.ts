@@ -9,11 +9,12 @@
  * See rockCatalog.ts / the plan header for the per-prototype constants.
  */
 import { clamp } from "../eval/math";
+import { sliderRescale } from "../eval/sliderRescale";
 import { distanceFromNearestPoint, type Point } from "../distanceFromNearestPoint";
 import { makeAux } from "../expressions/aux";
 import { makeMoisture } from "../expressions/moisture";
 import { makeMultioctaveNoise } from "../multioctaveNoise";
-import { rangeSelectBase, sliderRescale, ROCK_SEED1 } from "./rockCatalog";
+import { rangeSelectBase, ROCK_SEED1 } from "./rockCatalog";
 
 export interface RockFieldParams {
   /** Map seed (= map_seed / seed0). */

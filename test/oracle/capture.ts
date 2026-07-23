@@ -1610,6 +1610,54 @@ async function captureSeedVars(): Promise<void> {
   console.log(`wrote ${out} (${seeds.length} seeds)`);
 }
 
+/**
+ * `starting_spot_at_angle` ground truth: the radial-placement backbone Vulcanus
+ * leans on (Task 3). Samples 4 configs spanning distinct angles (0/45/90/180 -
+ * exercising exact and irrational sin/cos), distances, radii, and non-zero
+ * x/y distortion, each over the standard scattered grid, against a real
+ * Vulcanus surface ({ spaceAge: true, planet: "vulcanus" }) so
+ * `x_from_start`/`y_from_start` resolve per Task 2's `== x, y` finding.
+ */
+async function captureStartingSpotAtAngle(): Promise<void> {
+  const seed = 123456;
+  const planet = "vulcanus";
+  const positions = gridPositions();
+  const configs = [
+    { angle: 90, distance: 170, radius: 350, xDistortion: 0, yDistortion: 0 },
+    { angle: 0, distance: 100, radius: 200, xDistortion: 0, yDistortion: 0 },
+    { angle: 180, distance: 50, radius: 500, xDistortion: 20, yDistortion: -15 },
+    { angle: 45, distance: 300, radius: 400, xDistortion: -10, yDistortion: 30 },
+  ];
+  const cases = [];
+  for (const c of configs) {
+    const expression = `starting_spot_at_angle{angle = ${c.angle}, distance = ${c.distance}, radius = ${c.radius}, x_distortion = ${c.xDistortion}, y_distortion = ${c.yDistortion}}`;
+    const workDir = await mkdtemp(join(tmpdir(), "oracle-capture-"));
+    try {
+      const values = await sampleExpression(expression, positions, {
+        workDir,
+        seed,
+        spaceAge: true,
+        planet,
+      });
+      cases.push({ ...c, values });
+      console.log(`  captured starting_spot_at_angle angle=${c.angle} distance=${c.distance}`);
+    } finally {
+      await rm(workDir, { recursive: true, force: true });
+    }
+  }
+  const fixture = {
+    _comment:
+      "Ground truth from Factorio 2.1.12 (Space Age enabled) via the test/oracle harness. starting_spot_at_angle routed onto elevation, sampled over the standard scattered grid across 4 angle/distance/radius/distortion configs, against a real Vulcanus surface (game.planets['vulcanus'].create_surface()). x_from_start/y_from_start resolve to the raw world (x, y) at this default origin spawn (Task 2 finding). Regenerate: node --experimental-strip-types test/oracle/capture.ts starting-spot",
+    seed0: seed,
+    planet,
+    positions,
+    cases,
+  };
+  const out = join(FIXTURES, "oracle-starting-spot.seed123456.json");
+  await writeFile(out, JSON.stringify(fixture, null, 2) + "\n");
+  console.log(`wrote ${out} (${configs.length} configs x ${positions.length} points)`);
+}
+
 if (!oracleAvailable()) {
   console.error("No Factorio binary found (set FACTORIO_BIN). Cannot capture fixtures.");
   process.exit(1);
@@ -1647,3 +1695,4 @@ if (want("cliff-entities")) await captureCliffEntities();
 if (want("rocks")) await captureRocks();
 if (want("vulcanus-smoke")) await captureVulcanusSmoke();
 if (want("seed-vars")) await captureSeedVars();
+if (want("starting-spot")) await captureStartingSpotAtAngle();
