@@ -38,6 +38,7 @@
  */
 import type { EvalCtx } from "../eval/ctx";
 import { clamp, lerp, max, min } from "../eval/math";
+import { memoXY } from "../eval/memoXY";
 import type { VulcanusHelpers } from "./vulcanusHelpers";
 
 /** `vulcanus_cracks_scale` - a bare number literal in the source (was segmentation_multiplier). */
@@ -75,20 +76,25 @@ export function makeVulcanusCracks(_ctx: EvalCtx, helpers: VulcanusHelpers): Vul
   const pathPlasma = plasma(1543, 1.5 * cs, 3 * cs, 0.5, 1);
   const pathDetail = detailNoise(121, cs * 4, 2, 0.5);
 
-  const hairlineCracks = (x: number, y: number): number => hairline(x, y);
+  const hairlineCracks = memoXY((x: number, y: number): number => hairline(x, y));
 
-  const floodCracksA = (x: number, y: number): number =>
-    lerp(min(crackA1(x, y), crackA2(x, y)), 1, clamp(crackAMix(x, y), 0, 1));
+  const floodCracksA = memoXY((x: number, y: number): number =>
+    lerp(min(crackA1(x, y), crackA2(x, y)), 1, clamp(crackAMix(x, y), 0, 1)),
+  );
 
-  const floodCracksB = (x: number, y: number): number =>
-    lerp(1, min(crackB1(x, y), crackB2(x, y)) - 0.5, clamp(0.2 + crackBMix(x, y), 0, 1));
+  const floodCracksB = memoXY((x: number, y: number): number =>
+    lerp(1, min(crackB1(x, y), crackB2(x, y)) - 0.5, clamp(0.2 + crackBMix(x, y), 0, 1)),
+  );
 
-  const floodPaths = (x: number, y: number): number =>
-    0.4 - pathPlasma(x, y) + min(0, pathDetail(x, y));
+  const floodPaths = memoXY(
+    (x: number, y: number): number => 0.4 - pathPlasma(x, y) + min(0, pathDetail(x, y)),
+  );
 
-  const floodBasaltsFunc = (x: number, y: number): number =>
-    min(max(floodCracksA(x, y) - 0.125, floodPaths(x, y)), floodCracksB(x, y)) +
-    0.3 * min(0.5, hairlineCracks(x, y));
+  const floodBasaltsFunc = memoXY(
+    (x: number, y: number): number =>
+      min(max(floodCracksA(x, y) - 0.125, floodPaths(x, y)), floodCracksB(x, y)) +
+      0.3 * min(0.5, hairlineCracks(x, y)),
+  );
 
   return { hairlineCracks, floodCracksA, floodCracksB, floodPaths, floodBasaltsFunc };
 }

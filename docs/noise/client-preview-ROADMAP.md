@@ -335,13 +335,25 @@ Done = ore patches overlaid on land, responding to the frequency/size/richness s
       `docs/superpowers/specs/2026-07-23-vulcanus-client-preview-design.md`,
       `docs/superpowers/plans/2026-07-23-vulcanus-client-preview-v1.md`; per-expression
       notes in `docs/noise/vulcanus-*-NOTES.md`.
-      **Two known gaps, both deliberate:**
-      - **Perf.** Vulcanus is ~60x heavier per pixel than Nauvis terrain (~545 us/px
-        vs ~9 us/px; 1024^2 is ~9.5 min single-thread, tens of seconds even tiled).
-        It renders correctly but is NOT yet interactive. Prime suspect is the
-        per-pixel volcano `spot_noise`/region work re-running without memoization -
-        likely optimizable the way the Nauvis tiling analysis went, not a hard limit.
-        **Do this before adding more Vulcanus overlays.**
+      **One deliberate gap remaining:**
+      - **Perf - FIXED 2026-07-24 (~50x, byte-identical).** Was ~60x heavier per
+        pixel than Nauvis (~545 us/px); now **~12 us/px** (~1.4x Nauvis), i.e.
+        interactive when tiled across the worker pool (~2s at 1024^2). The prime
+        suspect in the earlier note - per-pixel `spot_noise`/region work - was
+        **wrong**: a CPU profile put ~81% of the time in raw `basisNoise` eval, and
+        a call count showed `basisNoise` running ~12,600x/pixel against a ~200-eval
+        floor. Root cause was the **un-memoized field DAG**: unlike the Nauvis
+        resolver (which evaluates each field once per pixel into an `env` scalar
+        bag), the Vulcanus resolver passed lazy field *closures* into its 19 tile
+        `*_range` expressions and re-invoked them per access, so a shared node like
+        `mountains_raw_volcano` (feeds all 3 biomes, each read ~5x by the ranges) and
+        every noise octave beneath it recomputed ~60-100x/pixel. Fix: `memoXY`
+        (`src/noise/eval/memoXY.ts`), a single-slot `(x,y)` cache wrapping each field
+        node across the Vulcanus expression files - a render sweeps one pixel at a
+        time, so repeat reads collapse to one eval per node per pixel while returning
+        the identical float (byte-exact; verified by a stash-diff of a 4-window
+        render hash and the full oracle suite still green at 984 passed). Confined to
+        the Vulcanus path; the shared noise primitives and Nauvis are untouched.
       - **Resource coupling.** A few tile `*_range` expressions reference V2 resource
         expressions (`vulcanus_calcite_region`, `vulcanus_sulfuric_acid_region_patchy`,
         `vulcanus_metal_tile`); these are approximated at their no-resource default, so

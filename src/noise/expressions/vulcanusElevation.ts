@@ -68,6 +68,7 @@
 import { basisNoiseTablesFromSeed } from "../basisNoise";
 import type { EvalCtx } from "../eval/ctx";
 import { clamp, lerp, max, min } from "../eval/math";
+import { memoXY } from "../eval/memoXY";
 import { multisample } from "../eval/multisample";
 import { basisNoiseExpr } from "../eval/primitives";
 import type { VulcanusBiomes } from "./vulcanusBiomes";
@@ -163,7 +164,9 @@ export function makeVulcanusElevation(
     );
 
   // --- vulcanus_elev / vulcanus_elevation ------------------------------------
-  const elev = (x: number, y: number): number => {
+  // `elev` is read ~12x per pixel by the tile `*_range` expressions (and again by
+  // temperature), so memoize it; `elevation` piggybacks on the memoized `elev`.
+  const elev = memoXY((x: number, y: number): number => {
     const mountainsBlend = lerp(
       120 * basaltLakesMultisample(x, y),
       20 + mountainsFunc(x, y) * VULCANUS_MOUNTAINS_ELEVATION_MULTIPLIER,
@@ -173,7 +176,7 @@ export function makeVulcanusElevation(
       VULCANUS_ELEVATION_OFFSET +
       lerp(mountainsBlend, ashlandsFunc(x, y), biomes.ashlandsBiome(x, y))
     );
-  };
+  });
 
   const elevation = (x: number, y: number): number => max(-500, elev(x, y));
 

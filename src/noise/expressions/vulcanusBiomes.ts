@@ -73,6 +73,7 @@
 import type { EvalCtx } from "../eval/ctx";
 import { distanceFromNearestPoint } from "../distanceFromNearestPoint";
 import { clamp, lerp, max } from "../eval/math";
+import { memoXY } from "../eval/memoXY";
 import { sliderRescale } from "../eval/sliderRescale";
 import { selectSpots, type SelectedSpot } from "../spotSelection";
 import type { SpotRegionKey } from "../spotCandidates";
@@ -120,8 +121,9 @@ export function makeVulcanusBiomes(
 ): VulcanusBiomes {
   const r = VULCANUS_STARTING_AREA_RADIUS;
 
-  const distanceAt = (x: number, y: number): number =>
-    distanceFromNearestPoint(x, y, ctx.startingPositions);
+  const distanceAt = memoXY((x: number, y: number): number =>
+    distanceFromNearestPoint(x, y, ctx.startingPositions),
+  );
 
   // --- biome noise (distance-lerped 2-scale multioctave) ---------------------
   // biome_multiscale(seed1, scale, bias): the near scale is seed1 @ scale*0.5, the
@@ -138,34 +140,41 @@ export function makeVulcanusBiomes(
     (x: number, y: number): number =>
       bias + lerp(near(x, y), far(x, y), clamp(distanceAt(x, y) / 10000, 0, 1));
 
-  const mountainsBiomeNoise = multiscale(mountainsNear, mountainsFar, 0);
-  const ashlandsBiomeNoise = multiscale(ashlandsNear, ashlandsFar, 0);
-  const basaltsBiomeNoise = multiscale(basaltsNear, basaltsFar, 0);
+  const mountainsBiomeNoise = memoXY(multiscale(mountainsNear, mountainsFar, 0));
+  const ashlandsBiomeNoise = memoXY(multiscale(ashlandsNear, ashlandsFar, 0));
+  const basaltsBiomeNoise = memoXY(multiscale(basaltsNear, basaltsFar, 0));
 
   // --- raw biomes (blend biome noise toward the starting weights near spawn) --
-  const startingBlend = (x: number, y: number): number => clamp(2 * spawn.startingArea(x, y), 0, 1);
+  const startingBlend = memoXY((x: number, y: number): number =>
+    clamp(2 * spawn.startingArea(x, y), 0, 1),
+  );
 
-  const ashlandsRaw = (x: number, y: number): number =>
+  const ashlandsRaw = memoXY((x: number, y: number): number =>
     lerp(
       ashlandsBiomeNoise(x, y),
       -spawn.mountainsStart(x, y) + spawn.ashlandsStart(x, y) - spawn.basaltsStart(x, y),
       startingBlend(x, y),
-    );
-  const basaltsRaw = (x: number, y: number): number =>
+    ),
+  );
+  const basaltsRaw = memoXY((x: number, y: number): number =>
     lerp(
       basaltsBiomeNoise(x, y),
       -spawn.mountainsStart(x, y) - spawn.ashlandsStart(x, y) + spawn.basaltsStart(x, y),
       startingBlend(x, y),
-    );
-  const mountainsRawPreVolcano = (x: number, y: number): number =>
+    ),
+  );
+  const mountainsRawPreVolcano = memoXY((x: number, y: number): number =>
     lerp(
       mountainsBiomeNoise(x, y),
       spawn.mountainsStart(x, y) - spawn.ashlandsStart(x, y) - spawn.basaltsStart(x, y),
       startingBlend(x, y),
-    );
+    ),
+  );
 
-  const mountainsBiomeFullPreVolcano = (x: number, y: number): number =>
-    mountainsRawPreVolcano(x, y) - max(ashlandsRaw(x, y), basaltsRaw(x, y));
+  const mountainsBiomeFullPreVolcano = memoXY(
+    (x: number, y: number): number =>
+      mountainsRawPreVolcano(x, y) - max(ashlandsRaw(x, y), basaltsRaw(x, y)),
+  );
 
   // --- volcano spots ---------------------------------------------------------
   // volcanism nests two slider_rescales (scale_multiplier is itself a slider_rescale).
@@ -176,15 +185,20 @@ export function makeVulcanusBiomes(
   const volcanoSpotSpacing = 1500 * volcanism;
   const volcanismSq = volcanism * volcanism;
 
-  const volcanoArea = (x: number, y: number): number =>
-    lerp(mountainsBiomeFullPreVolcano(x, y), 0, spawn.startingArea(x, y));
+  const volcanoArea = memoXY((x: number, y: number): number =>
+    lerp(mountainsBiomeFullPreVolcano(x, y), 0, spawn.startingArea(x, y)),
+  );
 
   // The spot-noise query is pre-offset by the wobble sum (this same offset is the
   // starting_spot_at_angle x_distortion below).
-  const offX = (x: number, y: number): number =>
-    helpers.wobbleX(x, y) / 2 + helpers.wobbleLargeX(x, y) / 12 + helpers.wobbleHugeX(x, y) / 80;
-  const offY = (x: number, y: number): number =>
-    helpers.wobbleY(x, y) / 2 + helpers.wobbleLargeY(x, y) / 12 + helpers.wobbleHugeY(x, y) / 80;
+  const offX = memoXY(
+    (x: number, y: number): number =>
+      helpers.wobbleX(x, y) / 2 + helpers.wobbleLargeX(x, y) / 12 + helpers.wobbleHugeX(x, y) / 80,
+  );
+  const offY = memoXY(
+    (x: number, y: number): number =>
+      helpers.wobbleY(x, y) / 2 + helpers.wobbleLargeY(x, y) / 12 + helpers.wobbleHugeY(x, y) / 80,
+  );
 
   // Effective radius = min(maximum_spot_basement_radius, radius_expression); both are
   // volcano_spot_radius, so they coincide. quantity = radius^2 (f32, as the game does).
@@ -214,7 +228,7 @@ export function makeVulcanusBiomes(
   };
 
   // raw_spots = spot_noise field: max-of-cones over basement_value 0, cull radius RADIUS.
-  const rawSpots = (x: number, y: number): number => {
+  const rawSpots = memoXY((x: number, y: number): number => {
     const qx = x + offX(x, y);
     const qy = y + offY(x, y);
     let best = 0; // basement_value = 0
@@ -236,9 +250,9 @@ export function makeVulcanusBiomes(
       }
     }
     return best;
-  };
+  });
 
-  const startingProtector = (x: number, y: number): number =>
+  const startingProtector = memoXY((x: number, y: number): number =>
     clamp(
       startingSpotAtAngle({
         angle: spawn.mountainsAngle + 180 * spawn.startingDirection,
@@ -251,9 +265,10 @@ export function makeVulcanusBiomes(
       }),
       0,
       1,
-    );
+    ),
+  );
 
-  const startingVolcanoSpot = (x: number, y: number): number =>
+  const startingVolcanoSpot = memoXY((x: number, y: number): number =>
     clamp(
       startingSpotAtAngle({
         angle: spawn.mountainsAngle,
@@ -266,32 +281,43 @@ export function makeVulcanusBiomes(
       }),
       0,
       1,
-    );
+    ),
+  );
 
-  const mountainVolcanoSpots = (x: number, y: number): number =>
-    max(startingVolcanoSpot(x, y), rawSpots(x, y) - startingProtector(x, y));
+  const mountainVolcanoSpots = memoXY((x: number, y: number): number =>
+    max(startingVolcanoSpot(x, y), rawSpots(x, y) - startingProtector(x, y)),
+  );
 
-  const mountainsRawVolcano = (x: number, y: number): number => {
+  const mountainsRawVolcano = memoXY((x: number, y: number): number => {
     const spots = mountainVolcanoSpots(x, y);
     return (
       0.5 * mountainsRawPreVolcano(x, y) + max(2 * spots, 10 * clamp((spots - 0.33) * 3, 0, 1))
     );
-  };
+  });
 
   // --- full + clamped biomes -------------------------------------------------
-  const mountainsBiomeFull = (x: number, y: number): number =>
-    mountainsRawVolcano(x, y) - max(ashlandsRaw(x, y), basaltsRaw(x, y));
-  const ashlandsBiomeFull = (x: number, y: number): number =>
-    ashlandsRaw(x, y) - max(mountainsRawVolcano(x, y), basaltsRaw(x, y));
-  const basaltsBiomeFull = (x: number, y: number): number =>
-    basaltsRaw(x, y) - max(mountainsRawVolcano(x, y), ashlandsRaw(x, y));
+  const mountainsBiomeFull = memoXY(
+    (x: number, y: number): number =>
+      mountainsRawVolcano(x, y) - max(ashlandsRaw(x, y), basaltsRaw(x, y)),
+  );
+  const ashlandsBiomeFull = memoXY(
+    (x: number, y: number): number =>
+      ashlandsRaw(x, y) - max(mountainsRawVolcano(x, y), basaltsRaw(x, y)),
+  );
+  const basaltsBiomeFull = memoXY(
+    (x: number, y: number): number =>
+      basaltsRaw(x, y) - max(mountainsRawVolcano(x, y), ashlandsRaw(x, y)),
+  );
 
-  const mountainsBiome = (x: number, y: number): number =>
-    clamp(mountainsBiomeFull(x, y) * VULCANUS_BIOME_CONTRAST, 0, 1);
-  const ashlandsBiome = (x: number, y: number): number =>
-    clamp(ashlandsBiomeFull(x, y) * VULCANUS_BIOME_CONTRAST, 0, 1);
-  const basaltsBiome = (x: number, y: number): number =>
-    clamp(basaltsBiomeFull(x, y) * VULCANUS_BIOME_CONTRAST, 0, 1);
+  const mountainsBiome = memoXY((x: number, y: number): number =>
+    clamp(mountainsBiomeFull(x, y) * VULCANUS_BIOME_CONTRAST, 0, 1),
+  );
+  const ashlandsBiome = memoXY((x: number, y: number): number =>
+    clamp(ashlandsBiomeFull(x, y) * VULCANUS_BIOME_CONTRAST, 0, 1),
+  );
+  const basaltsBiome = memoXY((x: number, y: number): number =>
+    clamp(basaltsBiomeFull(x, y) * VULCANUS_BIOME_CONTRAST, 0, 1),
+  );
 
   return {
     mountainsBiome,

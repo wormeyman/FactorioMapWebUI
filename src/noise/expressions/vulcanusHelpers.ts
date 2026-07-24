@@ -52,6 +52,7 @@
 import { basisNoiseTablesFromSeed } from "../basisNoise";
 import type { EvalCtx } from "../eval/ctx";
 import { clamp } from "../eval/math";
+import { memoXY } from "../eval/memoXY";
 import { basisNoiseExpr } from "../eval/primitives";
 import { sliderRescale } from "../eval/sliderRescale";
 import { makeMultioctaveNoise } from "../multioctaveNoise";
@@ -146,12 +147,14 @@ export function makeVulcanusHelpers(ctx: EvalCtx): VulcanusHelpers {
       outputScale: 1,
     });
 
-  const wobbleX = detailNoise(10, 1 / 8, 2, 4);
-  const wobbleY = detailNoise(1010, 1 / 8, 2, 4);
-  const wobbleLargeX = detailNoise(20, 1 / 2, 2, 50);
-  const wobbleLargeY = detailNoise(1020, 1 / 2, 2, 50);
-  const wobbleHugeX = detailNoise(30, 2, 2, 800);
-  const wobbleHugeY = detailNoise(1030, 2, 2, 800);
+  // Each wobble is read by both the biome offset (offX/offY) and the spawn
+  // distortion sums (wobbleXSum/wobbleYSum), so memoize per pixel.
+  const wobbleX = memoXY(detailNoise(10, 1 / 8, 2, 4));
+  const wobbleY = memoXY(detailNoise(1010, 1 / 8, 2, 4));
+  const wobbleLargeX = memoXY(detailNoise(20, 1 / 2, 2, 50));
+  const wobbleLargeY = memoXY(detailNoise(1020, 1 / 2, 2, 50));
+  const wobbleHugeX = memoXY(detailNoise(30, 2, 2, 800));
+  const wobbleHugeY = memoXY(detailNoise(1030, 2, 2, 800));
 
   return {
     detailNoise,

@@ -46,6 +46,7 @@
 import { distanceFromNearestPoint } from "../distanceFromNearestPoint";
 import type { EvalCtx } from "../eval/ctx";
 import { clamp, max } from "../eval/math";
+import { memoXY } from "../eval/memoXY";
 import type { VulcanusHelpers } from "./vulcanusHelpers";
 import { startingSpotAtAngle } from "./vulcanusShared";
 
@@ -83,55 +84,66 @@ export function makeVulcanusSpawn(ctx: EvalCtx, helpers: VulcanusHelpers): Vulca
   const basaltsAngle = ashlandsAngle + 240 * startingDirection;
 
   // Shared distortion inputs (same three wobble closures feed every *_start).
-  const wobbleXSum = (x: number, y: number): number =>
-    helpers.wobbleX(x, y) + helpers.wobbleLargeX(x, y) + helpers.wobbleHugeX(x, y);
-  const wobbleYSum = (x: number, y: number): number =>
-    helpers.wobbleY(x, y) + helpers.wobbleLargeY(x, y) + helpers.wobbleHugeY(x, y);
+  const wobbleXSum = memoXY(
+    (x: number, y: number): number =>
+      helpers.wobbleX(x, y) + helpers.wobbleLargeX(x, y) + helpers.wobbleHugeX(x, y),
+  );
+  const wobbleYSum = memoXY(
+    (x: number, y: number): number =>
+      helpers.wobbleY(x, y) + helpers.wobbleLargeY(x, y) + helpers.wobbleHugeY(x, y),
+  );
 
-  const ashlandsStart = (x: number, y: number): number =>
-    4 *
-    startingSpotAtAngle({
-      angle: ashlandsAngle,
-      distance: 170 * r,
-      radius: 350 * r,
-      xDistortion: 0.1 * r * wobbleXSum(x, y),
-      yDistortion: 0.1 * r * wobbleYSum(x, y),
-      xFromStart: x,
-      yFromStart: y,
-    });
+  const ashlandsStart = memoXY(
+    (x: number, y: number): number =>
+      4 *
+      startingSpotAtAngle({
+        angle: ashlandsAngle,
+        distance: 170 * r,
+        radius: 350 * r,
+        xDistortion: 0.1 * r * wobbleXSum(x, y),
+        yDistortion: 0.1 * r * wobbleYSum(x, y),
+        xFromStart: x,
+        yFromStart: y,
+      }),
+  );
 
-  const basaltsStart = (x: number, y: number): number =>
-    2 *
-    startingSpotAtAngle({
-      angle: basaltsAngle,
-      // Bare 250, NOT 250*r - transcribed verbatim (see file-level doc comment).
-      distance: 250,
-      radius: 550 * r,
-      xDistortion: 0.1 * r * wobbleXSum(x, y),
-      yDistortion: 0.1 * r * wobbleYSum(x, y),
-      xFromStart: x,
-      yFromStart: y,
-    });
+  const basaltsStart = memoXY(
+    (x: number, y: number): number =>
+      2 *
+      startingSpotAtAngle({
+        angle: basaltsAngle,
+        // Bare 250, NOT 250*r - transcribed verbatim (see file-level doc comment).
+        distance: 250,
+        radius: 550 * r,
+        xDistortion: 0.1 * r * wobbleXSum(x, y),
+        yDistortion: 0.1 * r * wobbleYSum(x, y),
+        xFromStart: x,
+        yFromStart: y,
+      }),
+  );
 
-  const mountainsStart = (x: number, y: number): number =>
-    2 *
-    startingSpotAtAngle({
-      angle: mountainsAngle,
-      distance: 250 * r,
-      radius: 500 * r,
-      xDistortion: 0.05 * r * wobbleXSum(x, y),
-      yDistortion: 0.05 * r * wobbleYSum(x, y),
-      xFromStart: x,
-      yFromStart: y,
-    });
+  const mountainsStart = memoXY(
+    (x: number, y: number): number =>
+      2 *
+      startingSpotAtAngle({
+        angle: mountainsAngle,
+        distance: 250 * r,
+        radius: 500 * r,
+        xDistortion: 0.05 * r * wobbleXSum(x, y),
+        yDistortion: 0.05 * r * wobbleYSum(x, y),
+        xFromStart: x,
+        yFromStart: y,
+      }),
+  );
 
-  const startingArea = (x: number, y: number): number =>
-    clamp(max(basaltsStart(x, y), mountainsStart(x, y), ashlandsStart(x, y)), 0, 1);
+  const startingArea = memoXY((x: number, y: number): number =>
+    clamp(max(basaltsStart(x, y), mountainsStart(x, y), ashlandsStart(x, y)), 0, 1),
+  );
 
-  const startingCircle = (x: number, y: number): number => {
+  const startingCircle = memoXY((x: number, y: number): number => {
     const distance = distanceFromNearestPoint(x, y, ctx.startingPositions);
     return 1 + (r * (300 - distance)) / 50;
-  };
+  });
 
   return {
     startingDirection,

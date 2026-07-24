@@ -40,6 +40,7 @@
  */
 import type { EvalCtx } from "../eval/ctx";
 import { clamp, min } from "../eval/math";
+import { memoXY } from "../eval/memoXY";
 import { makeMultioctaveNoise } from "../multioctaveNoise";
 import type { VulcanusCracks } from "./vulcanusCracks";
 import type { VulcanusHelpers } from "./vulcanusHelpers";
@@ -86,10 +87,11 @@ export function makeVulcanusClimate(
     outputScale: 0.25,
   });
 
-  const aux = (x: number, y: number): number =>
-    clamp(min(Math.abs(auxNoise(x, y)), 0.3 - 0.6 * cracks.floodPaths(x, y)), 0, 1);
+  const aux = memoXY((x: number, y: number): number =>
+    clamp(min(Math.abs(auxNoise(x, y)), 0.3 - 0.6 * cracks.floodPaths(x, y)), 0, 1),
+  );
 
-  const moisture = (x: number, y: number): number =>
+  const moisture = memoXY((x: number, y: number): number =>
     clamp(
       1 -
         Math.abs(moistureNoiseA(x, y)) -
@@ -97,7 +99,8 @@ export function makeVulcanusClimate(
         0.2 * cracks.floodCracksA(x, y),
       0,
       1,
-    );
+    ),
+  );
 
   return { moisture, aux };
 }
