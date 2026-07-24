@@ -32,6 +32,26 @@ export function log2(x: number): number {
   return Math.log2(x);
 }
 
+/** Ratio of a circle's circumference to its diameter (the DSL's `pi`). */
+export const PI = Math.PI;
+
+/**
+ * Sine, radians in (the DSL's `sin`, used by `starting_spot_at_angle` /
+ * `spot_at_angle` / `rotate_x`/`rotate_y`). Plain `Math.sin`; validated against
+ * the oracle in `test/startingSpotAtAngle.spec.ts` to the f32 floor, so revisit
+ * only if that diff demands it.
+ */
+export function sin(x: number): number {
+  return Math.sin(x);
+}
+
+/**
+ * Cosine, radians in (the DSL's `cos`, see {@link sin}).
+ */
+export function cos(x: number): number {
+  return Math.cos(x);
+}
+
 /**
  * Maps a geometric "slider" value `s` (the same 1..6-ish scale the game's
  * frequency/size/richness sliders use) onto a linear `[lo, hi]` range:

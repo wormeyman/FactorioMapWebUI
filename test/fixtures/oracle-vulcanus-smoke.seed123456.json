@@ -1,0 +1,41 @@
+{
+  "_comment": "Ground truth from Factorio 2.1.12 (Space Age enabled) via the test/oracle harness. vulcanus_starting_area_radius (constant 0.7 * 0.75 = 0.525) and vulcanus_ore_spacing (constant 128), plus vulcanus_temperature at 4 points, all sampled against a real Vulcanus surface (game.planets['vulcanus'].create_surface()). Proves the Space-Age oracle routing (spaceAge/planet options) end to end. Regenerate: node --experimental-strip-types test/oracle/capture.ts vulcanus-smoke",
+  "seed0": 123456,
+  "planet": "vulcanus",
+  "positions": [
+    {
+      "x": 0.5,
+      "y": 0.25
+    },
+    {
+      "x": 100.5,
+      "y": -50.25
+    },
+    {
+      "x": -300.5,
+      "y": 200.25
+    },
+    {
+      "x": 1000.5,
+      "y": 1000.25
+    }
+  ],
+  "startingAreaRadius": [
+    0.5249999761581421,
+    0.5249999761581421,
+    0.5249999761581421,
+    0.5249999761581421
+  ],
+  "oreSpacing": [
+    128,
+    128,
+    128,
+    128
+  ],
+  "temperature": [
+    75.40953826904297,
+    75.58964538574219,
+    95.63046264648438,
+    86.9739990234375
+  ]
+}

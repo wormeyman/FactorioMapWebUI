@@ -2,6 +2,7 @@ import type { Point } from "../distanceFromNearestPoint";
 import { CLIFF_MARK_RADIUS_PX } from "../cliffs/cliffCatalog";
 import type { CliffControls, CliffSettingsInput } from "../cliffs/cliffCatalog";
 import type { EnemyControls } from "../enemies/enemyCatalog";
+import type { Planet } from "../../model/planets";
 import type { ResourceControlLevers } from "../resources/resolveResource";
 import type { RockControls } from "../rocks/rockCatalog";
 import { renderCliffs } from "./renderCliffs";
@@ -11,6 +12,7 @@ import { renderResources } from "./renderResources";
 import { renderRocks } from "./renderRocks";
 import { renderTerrain } from "./renderTerrain";
 import { renderTrees } from "./renderTrees";
+import { renderVulcanusTerrain } from "./renderVulcanusTerrain";
 
 /** A render job posted to the worker. `id` tags the response for staleness. */
 export interface ElevationRenderRequest {
@@ -24,6 +26,22 @@ export interface ElevationRenderRequest {
   waterLevel: number;
   segmentationMultiplier: number;
   startingPositions: Point[];
+  /**
+   * Which planet's terrain to render (Task 11). Default `"nauvis"` when
+   * omitted - existing (Nauvis) requests are byte-unchanged. Only the
+   * terrain-family views (`"terrain"`/`"resources"`/`"enemies"`/`"cliffs"`/
+   * `"trees"`/`"rocks"`/`"all"`) consult this; `"elevation"` is unaffected
+   * (it dispatches purely on `mapType`, which only spans the Nauvis-family
+   * elevation trees).
+   *
+   * `"vulcanus"` renders through `renderVulcanusTerrain` (Task 10's tile
+   * resolver) instead of `renderTerrain`, and - because none of the five
+   * overlays (resources/enemies/cliffs/trees/rocks) has a Vulcanus port yet
+   * (out of scope for V1) - skips overlay compositing entirely regardless of
+   * which terrain-family `view` was requested, always yielding plain
+   * Vulcanus terrain colors.
+   */
+  planet?: Planet;
   /** Omitted => the game's real lake positions are computed inside the render. */
   startingLakePositions?: Point[];
   /**
@@ -164,6 +182,7 @@ export function cliffCellQueryBox(req: ElevationRenderRequest): {
  * Worker or DOM canvas involved.
  */
 export function runRenderRequest(req: ElevationRenderRequest): ElevationRenderResult {
+  const planet = req.planet ?? "nauvis";
   let image: ImageData;
   if (
     req.view === "terrain" ||
@@ -174,6 +193,23 @@ export function runRenderRequest(req: ElevationRenderRequest): ElevationRenderRe
     req.view === "rocks" ||
     req.view === "all"
   ) {
+    if (planet === "vulcanus") {
+      // No Vulcanus port of any of the five overlays yet (out of scope for
+      // V1) - render plain Vulcanus terrain regardless of which
+      // terrain-family `view` was asked for, rather than compositing Nauvis
+      // overlays (ore/enemy-base/cliff/tree/rock fields) that have no
+      // Vulcanus meaning onto it.
+      image = renderVulcanusTerrain({
+        seed0: req.seed0,
+        width: req.width,
+        height: req.height,
+        originX: req.originX,
+        originY: req.originY,
+        tilesPerPixel: req.tilesPerPixel,
+        ctx: { startingPositions: req.startingPositions },
+      });
+      return { id: req.id, buffer: image.data.buffer, width: req.width, height: req.height };
+    }
     image = renderTerrain({
       seed0: req.seed0,
       width: req.width,

@@ -2,6 +2,14 @@
 // factorio-data @ 2.1.11 (base/prototypes/decorative/decoratives.lua and
 // base/prototypes/noise-expressions.lua). All three charted rock prototypes
 // (huge-rock, big-rock, big-sand-rock) share this map_color.
+import { sliderRescale } from "../eval/sliderRescale";
+
+// Re-exported for existing callers/tests (`sliderRescale` used to be defined
+// here); the implementation now lives in `../eval/sliderRescale` so
+// non-rocks callers (e.g. Vulcanus's `starting_spot_at_angle` siblings) can
+// use it without a `rocks/`-flavored import.
+export { sliderRescale };
+
 export const ROCK_SEED1 = 137;
 export const ROCK_MAP_COLOR: readonly [number, number, number] = [129, 105, 78];
 
@@ -37,15 +45,4 @@ export function rangeSelectBase(
   max: number,
 ): number {
   return clamp(Math.min(input - from, to - input) / slope, min, max);
-}
-
-/**
- * `slider_rescale` (core/prototypes/noise-functions.lua): maps the 1/6..6 slider
- * output to a 1/n..n range: `2^(log2(v)/log2(6)*log2(n))`. At the default v=1 this
- * is exactly 1, which is the only value the oracle validates point-by-point (non-
- * default size is a faithful port but not point-validated, same as moisture/aux).
- */
-export function sliderRescale(v: number, n: number): number {
-  if (v === 1) return 1;
-  return 2 ** ((Math.log2(v) / Math.log2(6)) * Math.log2(n));
 }

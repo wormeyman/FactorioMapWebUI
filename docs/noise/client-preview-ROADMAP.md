@@ -323,7 +323,32 @@ Done = ore patches overlaid on land, responding to the frequency/size/richness s
       deferred** (do not treat as done): the per-tile placement roll (Phase 2,
       `docs/noise/placement-roll-NOTES.md`), worms/fish autoplacers, and
       cliff exclusion (consistent with the existing ore-on-cliffs gap).
-- [ ] Non-Nauvis planets (Space Age) if in scope - each is another expression set.
+- [~] Non-Nauvis planets (Space Age) - each is another expression set.
+      **Vulcanus TERRAIN done 2026-07-23** (V1: spawn geometry, cracks, the radial
+      ashlands/mountains/basalts biome system, volcano spots, climate aux/moisture/
+      temperature, elevation, the ~24 `*_range` tile-probability expressions + the
+      19-tile argmax, and planet-dispatched rendering). Every expression is
+      oracle-validated against real Factorio 2.1.12 (Space Age) to the f32 floor;
+      tile selection hits **96.85% `get_tile` agreement** (369/381) - the residual is
+      the deliberate resource-term approximation plus f32 boundary flips, not a
+      transcription error. Spec/plan:
+      `docs/superpowers/specs/2026-07-23-vulcanus-client-preview-design.md`,
+      `docs/superpowers/plans/2026-07-23-vulcanus-client-preview-v1.md`; per-expression
+      notes in `docs/noise/vulcanus-*-NOTES.md`.
+      **Two known gaps, both deliberate:**
+      - **Perf.** Vulcanus is ~60x heavier per pixel than Nauvis terrain (~545 us/px
+        vs ~9 us/px; 1024^2 is ~9.5 min single-thread, tens of seconds even tiled).
+        It renders correctly but is NOT yet interactive. Prime suspect is the
+        per-pixel volcano `spot_noise`/region work re-running without memoization -
+        likely optimizable the way the Nauvis tiling analysis went, not a hard limit.
+        **Do this before adding more Vulcanus overlays.**
+      - **Resource coupling.** A few tile `*_range` expressions reference V2 resource
+        expressions (`vulcanus_calcite_region`, `vulcanus_sulfuric_acid_region_patchy`,
+        `vulcanus_metal_tile`); these are approximated at their no-resource default, so
+        tiles are faithful everywhere EXCEPT inside resource-patch cells.
+      Deferred: V2 Vulcanus resources, V3 cliffs, demolishers (the only `voronoi_cell_id`
+      user - skipping it is why Vulcanus needed no `VoronoiNoise` port). Fulgora/Aquilo
+      DO build terrain on Voronoi, so they will force that primitive.
 
 ## Milestone 5 - integration
 

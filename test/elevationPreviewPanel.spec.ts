@@ -6,6 +6,7 @@ import { usePresetsStore } from "../src/store/presets";
 import { useUiStore } from "../src/store/ui";
 import { writeMapType } from "../src/model/mapType";
 import type { ElevationRenderer } from "../src/components/useElevationPreview";
+import type { Planet } from "../src/model/planets";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -18,7 +19,11 @@ function stubCanvas() {
   return putImageData;
 }
 
-function setup(mapTypeId: string, renderer: ElevationRenderer, opts: { dev?: boolean } = {}) {
+function setup(
+  mapTypeId: string,
+  renderer: ElevationRenderer,
+  opts: { dev?: boolean; planet?: Planet } = {},
+) {
   localStorage.clear();
   history.replaceState(null, "", "/");
   setActivePinia(createPinia());
@@ -29,7 +34,7 @@ function setup(mapTypeId: string, renderer: ElevationRenderer, opts: { dev?: boo
   store.createFromBuiltin("Default", "t");
   store.activePreset!.seed = 123456;
   writeMapType(store.activePreset!.propertyExpressionNames, mapTypeId);
-  return mount(ElevationPreviewPanel, { props: { renderer } });
+  return mount(ElevationPreviewPanel, { props: { renderer, planet: opts.planet } });
 }
 
 /** Emits four 512x512 tiles covering the 1024x1024 preview, then completes. */
@@ -515,5 +520,74 @@ describe("ElevationPreviewPanel", () => {
     } finally {
       history.replaceState(null, "", "/");
     }
+  });
+
+  describe("planet: vulcanus (Task 11)", () => {
+    it("passes planet:'vulcanus' and forces view:'terrain' on Generate", async () => {
+      const putImageData = stubCanvas();
+      const renderer = okRenderer();
+      const w = setup("nauvis", renderer, { planet: "vulcanus" });
+
+      await w.find('[data-test="generate"]').trigger("click");
+      await flushPromises();
+
+      expect(renderer.render).toHaveBeenCalledOnce();
+      const arg = (renderer.render as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(arg).toMatchObject({ planet: "vulcanus", view: "terrain" });
+      expect(putImageData).toHaveBeenCalledTimes(4);
+    });
+
+    it("enables the Terrain toggle for Vulcanus even on a non-Nauvis map type", async () => {
+      const w = setup("lakes", okRenderer(), { planet: "vulcanus" });
+      expect(w.find('[data-test="view-terrain"]').attributes("disabled")).toBeUndefined();
+    });
+
+    it("keeps the Nauvis-only overlay toggles (Resources/Enemies/Cliffs/Trees/Rocks/All) disabled for Vulcanus", async () => {
+      const w = setup("nauvis", okRenderer(), { planet: "vulcanus" });
+      for (const t of ["resources", "enemies", "cliffs", "trees", "rocks", "all"]) {
+        expect(
+          w.find(`[data-test="view-${t}"]`).attributes("disabled"),
+          `view-${t} should be disabled for Vulcanus`,
+        ).toBeDefined();
+      }
+    });
+
+    it("disables the Elevation toggle for Vulcanus", async () => {
+      const w = setup("nauvis", okRenderer(), { planet: "vulcanus" });
+      expect(w.find('[data-test="view-elevation"]').attributes("disabled")).toBeDefined();
+    });
+
+    it("still forces view:'terrain' for Vulcanus even after the Elevation toggle was previously clicked", async () => {
+      // Elevation is disabled for Vulcanus (so a real user cannot click it), but
+      // `view` is shared component state - prove effectiveView overrides a
+      // stale non-terrain pick regardless, rather than relying only on the
+      // disabled attribute to keep users out.
+      stubCanvas();
+      const renderer = okRenderer();
+      const w = setup("nauvis", renderer, { planet: "nauvis" });
+      await w.find('[data-test="view-elevation"]').trigger("click");
+      // vue-test-utils' setProps loses the SFC's inferred prop types here (a
+      // pre-existing toolchain quirk, unrelated to this task - `w`'s wrapper
+      // type falls back to the generic VNodeProps shape), so this one call is
+      // cast through `any` rather than fighting the inference.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (w as any).setProps({ planet: "vulcanus" });
+
+      await w.find('[data-test="generate"]').trigger("click");
+      await flushPromises();
+
+      const arg = (renderer.render as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(arg).toMatchObject({ planet: "vulcanus", view: "terrain" });
+    });
+
+    it("defaults planet to 'nauvis' when the prop is omitted (existing behavior unchanged)", async () => {
+      stubCanvas();
+      const renderer = okRenderer();
+      const w = setup("nauvis", renderer); // no planet prop
+      await w.find('[data-test="generate"]').trigger("click");
+      await flushPromises();
+      const arg = (renderer.render as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(arg).toMatchObject({ planet: "nauvis", view: "all" });
+    });
   });
 });

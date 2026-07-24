@@ -1483,6 +1483,749 @@ async function captureRocks(): Promise<void> {
   }
 }
 
+/**
+ * The native `multisample(expression, offset_x, offset_y)` builtin - the one
+ * genuine unknown feeding Vulcanus's `vulcanus_basalt_lakes_multisample` (Task 9's
+ * `vulcanus_elev`). Per the game's own auxiliary docs ("Evaluates the expression
+ * in a separate noise program with a larger grid. Sub-grids are copied to the
+ * main program.") this is a supersampling primitive; `offset_x`/`offset_y` are
+ * documented as "constant 8-bit signed integer" but the real usage only ever
+ * passes 0 or 1 (a 2x2 supersample). The inner-expression trick: route the bare
+ * `x` and `y` variables (not some derived expression) as the multisample
+ * argument, so the returned number IS the exact sampled coordinate - no
+ * inversion needed. Sampled independently for x and y, at several base points
+ * (fractional, negative, far-from-origin) crossed with a WIDE offset sweep
+ * (-2..3, beyond the {0,1} the game actually uses) so a linear offset-per-unit
+ * rule is over-determined rather than merely fit to two points, plus a few
+ * non-axis-aligned (dx,dy) combos to rule out any cross term between the two
+ * axes. `calculate_tile_properties` needs the multisample fix landed in
+ * 2.0.67 ("Fixed multisample noise operation not working properly for
+ * LuaSurface.calculate_tile_properties()") - confirmed present (game reports
+ * 2.1.12, changelog fix is 2.0.67).
+ */
+async function captureMultisample(): Promise<void> {
+  const seed = 123456;
+  const positions: Position[] = [
+    { x: 0.5, y: 0.25 },
+    { x: 10.5, y: -20.25 },
+    { x: -5.25, y: 7.75 },
+    { x: 100.125, y: -300.875 },
+    { x: 1234.5, y: -4321.5 },
+  ];
+  // (dx, dy) pairs: the real {0,1}x{0,1} usage, an extended axis-aligned sweep
+  // (negative + beyond 1, both axes independently) to pin the linear rule, and a
+  // few off-axis combos to check for cross terms.
+  const offsets: { dx: number; dy: number }[] = [
+    { dx: 0, dy: 0 },
+    { dx: 1, dy: 0 },
+    { dx: 0, dy: 1 },
+    { dx: 1, dy: 1 },
+    { dx: -1, dy: 0 },
+    { dx: -2, dy: 0 },
+    { dx: 2, dy: 0 },
+    { dx: 3, dy: 0 },
+    { dx: 0, dy: -1 },
+    { dx: 0, dy: -2 },
+    { dx: 0, dy: 2 },
+    { dx: 0, dy: 3 },
+    { dx: 2, dy: 3 },
+    { dx: -1, dy: 2 },
+    { dx: 3, dy: -2 },
+  ];
+
+  const sample = async (expression: string): Promise<number[]> => {
+    const workDir = await mkdtemp(join(tmpdir(), "oracle-capture-"));
+    try {
+      return await sampleExpression(expression, positions, { workDir, seed });
+    } finally {
+      await rm(workDir, { recursive: true, force: true });
+    }
+  };
+
+  const cases: { dx: number; dy: number; sampledX: number[]; sampledY: number[] }[] = [];
+  for (const { dx, dy } of offsets) {
+    const sampledX = await sample(`multisample(x, ${dx}, ${dy})`);
+    const sampledY = await sample(`multisample(y, ${dx}, ${dy})`);
+    cases.push({ dx, dy, sampledX, sampledY });
+    console.log(`  captured multisample dx=${dx} dy=${dy}`);
+  }
+
+  const fixture = {
+    _comment:
+      "Ground truth from Factorio 2.1.12 via the test/oracle harness. Native multisample(expression, offset_x, offset_y) routed onto elevation, with the inner expression being the bare x (sampledX) or bare y (sampledY) variable, so the returned number IS the exact world coordinate multisample sampled - no inversion needed. Regenerate: node --experimental-strip-types test/oracle/capture.ts multisample",
+    seed0: seed,
+    positions,
+    cases,
+  };
+  const out = join(FIXTURES, "oracle-multisample.seed123456.json");
+  await writeFile(out, JSON.stringify(fixture, null, 2) + "\n");
+  console.log(`wrote ${out} (${offsets.length} offsets x ${positions.length} points)`);
+}
+
+/**
+ * Space-Age (Vulcanus) smoke fixture: proves the Space-Age oracle path routes
+ * correctly end to end. Samples two exact constants -
+ * `vulcanus_starting_area_radius` (`0.7 * 0.75` = 0.525) and `vulcanus_ore_spacing`
+ * (128) - plus `vulcanus_temperature` at 4 scattered points, all against a real
+ * Vulcanus surface (`game.planets["vulcanus"].create_surface()`, via
+ * `{ spaceAge: true, planet: "vulcanus" }`). Needs `space-age` +
+ * `elevated-rails` + `quality` alongside `base` in the generated mod-list.
+ */
+async function captureVulcanusSmoke(): Promise<void> {
+  const seed = 123456;
+  const planet = "vulcanus";
+  const positions: Position[] = [
+    { x: 0.5, y: 0.25 },
+    { x: 100.5, y: -50.25 },
+    { x: -300.5, y: 200.25 },
+    { x: 1000.5, y: 1000.25 },
+  ];
+
+  const sample = async (expression: string): Promise<number[]> => {
+    const workDir = await mkdtemp(join(tmpdir(), "oracle-capture-"));
+    try {
+      return await sampleExpression(expression, positions, {
+        workDir,
+        seed,
+        spaceAge: true,
+        planet,
+      });
+    } finally {
+      await rm(workDir, { recursive: true, force: true });
+    }
+  };
+
+  const startingAreaRadius = await sample("vulcanus_starting_area_radius");
+  console.log("  captured vulcanus_starting_area_radius");
+  const oreSpacing = await sample("vulcanus_ore_spacing");
+  console.log("  captured vulcanus_ore_spacing");
+  const temperature = await sample("vulcanus_temperature");
+  console.log("  captured vulcanus_temperature");
+
+  const fixture = {
+    _comment:
+      "Ground truth from Factorio 2.1.12 (Space Age enabled) via the test/oracle harness. vulcanus_starting_area_radius (constant 0.7 * 0.75 = 0.525) and vulcanus_ore_spacing (constant 128), plus vulcanus_temperature at 4 points, all sampled against a real Vulcanus surface (game.planets['vulcanus'].create_surface()). Proves the Space-Age oracle routing (spaceAge/planet options) end to end. Regenerate: node --experimental-strip-types test/oracle/capture.ts vulcanus-smoke",
+    seed0: seed,
+    planet,
+    positions,
+    startingAreaRadius,
+    oreSpacing,
+    temperature,
+  };
+  const out = join(FIXTURES, "oracle-vulcanus-smoke.seed123456.json");
+  await writeFile(out, JSON.stringify(fixture, null, 2) + "\n");
+  console.log(`wrote ${out}`);
+}
+
+/**
+ * The four engine-builtin "seed vars" that drive Vulcanus's biome rotation:
+ * `map_seed_normalized`, `map_seed_small` (both pure functions of `seed0`, the
+ * `--map-gen-seed`/`mgs.seed` value - documented in the game's own
+ * noise-expressions reference as "0-1 normalized value of map_seed" and "16
+ * least significant bits from map_seed" respectively, but sampled here across
+ * seeds anyway so the exact formula is confirmed against real output, not just
+ * taken on faith), and `x_from_start`/`y_from_start` (per-point, `=
+ * distance_from_nearest_point_x/_y(x, y, starting_positions)` per
+ * `core/prototypes/noise-programs.lua` - a native primitive with no further
+ * Lua source, unlike the other two which merely lack a *documented* formula).
+ * All four are sampled at ONE fixed point per seed (map_seed_normalized/small
+ * do not depend on x/y at all; x_from_start/y_from_start do, but a single
+ * point is enough to confirm the `== x, y` finding or its offset), through the
+ * Space-Age Vulcanus surface (`{ spaceAge: true, planet: "vulcanus" }`) so the
+ * per-call `seed` option drives `mgs.seed` on that freshly-created surface -
+ * see {@link buildSpaceAgeControlLua}. 12 seeds, including the brief's
+ * required 123456/0/1/2/0xFFFFFFFF, spread across the full 32-bit range so the
+ * derived formula is over-determined.
+ */
+async function captureSeedVars(): Promise<void> {
+  const planet = "vulcanus";
+  const point: Position = { x: 300.5, y: -700.25 };
+  const seeds = [
+    123456, 0, 1, 2, 0xffffffff, 42, 654321, 424242, 100000, 0x7fffffff, 3000000000, 999999999,
+  ];
+
+  const sampleOne = async (seed: number, expression: string): Promise<number> => {
+    const workDir = await mkdtemp(join(tmpdir(), "oracle-capture-"));
+    try {
+      const values = await sampleExpression(expression, [point], {
+        workDir,
+        seed,
+        spaceAge: true,
+        planet,
+      });
+      return values[0];
+    } finally {
+      await rm(workDir, { recursive: true, force: true });
+    }
+  };
+
+  const results: {
+    seed0: number;
+    mapSeedNormalized: number;
+    mapSeedSmall: number;
+    xFromStart: number;
+    yFromStart: number;
+  }[] = [];
+  for (const seed of seeds) {
+    const mapSeedNormalized = await sampleOne(seed, "map_seed_normalized");
+    const mapSeedSmall = await sampleOne(seed, "map_seed_small");
+    const xFromStart = await sampleOne(seed, "x_from_start");
+    const yFromStart = await sampleOne(seed, "y_from_start");
+    results.push({ seed0: seed, mapSeedNormalized, mapSeedSmall, xFromStart, yFromStart });
+    console.log(
+      `  captured seed=${seed}: normalized=${mapSeedNormalized} small=${mapSeedSmall} xFromStart=${xFromStart} yFromStart=${yFromStart}`,
+    );
+  }
+
+  const fixture = {
+    _comment:
+      "Ground truth from Factorio 2.1.12 (Space Age enabled) via the test/oracle harness. map_seed_normalized, map_seed_small, x_from_start, y_from_start, each routed onto elevation on a real Vulcanus surface (game.planets['vulcanus'].create_surface()), sampled at ONE fixed point per seed across 12 seeds spanning the 32-bit range. Regenerate: node --experimental-strip-types test/oracle/capture.ts seed-vars",
+    planet,
+    point,
+    seeds: results,
+  };
+  const out = join(FIXTURES, "oracle-seed-vars.multi.json");
+  await writeFile(out, JSON.stringify(fixture, null, 2) + "\n");
+  console.log(`wrote ${out} (${seeds.length} seeds)`);
+}
+
+/**
+ * `starting_spot_at_angle` ground truth: the radial-placement backbone Vulcanus
+ * leans on (Task 3). Samples 4 configs spanning distinct angles (0/45/90/180 -
+ * exercising exact and irrational sin/cos), distances, radii, and non-zero
+ * x/y distortion, each over the standard scattered grid, against a real
+ * Vulcanus surface ({ spaceAge: true, planet: "vulcanus" }) so
+ * `x_from_start`/`y_from_start` resolve per Task 2's `== x, y` finding.
+ */
+async function captureStartingSpotAtAngle(): Promise<void> {
+  const seed = 123456;
+  const planet = "vulcanus";
+  const positions = gridPositions();
+  const configs = [
+    { angle: 90, distance: 170, radius: 350, xDistortion: 0, yDistortion: 0 },
+    { angle: 0, distance: 100, radius: 200, xDistortion: 0, yDistortion: 0 },
+    { angle: 180, distance: 50, radius: 500, xDistortion: 20, yDistortion: -15 },
+    { angle: 45, distance: 300, radius: 400, xDistortion: -10, yDistortion: 30 },
+  ];
+  const cases = [];
+  for (const c of configs) {
+    const expression = `starting_spot_at_angle{angle = ${c.angle}, distance = ${c.distance}, radius = ${c.radius}, x_distortion = ${c.xDistortion}, y_distortion = ${c.yDistortion}}`;
+    const workDir = await mkdtemp(join(tmpdir(), "oracle-capture-"));
+    try {
+      const values = await sampleExpression(expression, positions, {
+        workDir,
+        seed,
+        spaceAge: true,
+        planet,
+      });
+      cases.push({ ...c, values });
+      console.log(`  captured starting_spot_at_angle angle=${c.angle} distance=${c.distance}`);
+    } finally {
+      await rm(workDir, { recursive: true, force: true });
+    }
+  }
+  const fixture = {
+    _comment:
+      "Ground truth from Factorio 2.1.12 (Space Age enabled) via the test/oracle harness. starting_spot_at_angle routed onto elevation, sampled over the standard scattered grid across 4 angle/distance/radius/distortion configs, against a real Vulcanus surface (game.planets['vulcanus'].create_surface()). x_from_start/y_from_start resolve to the raw world (x, y) at this default origin spawn (Task 2 finding). Regenerate: node --experimental-strip-types test/oracle/capture.ts starting-spot",
+    seed0: seed,
+    planet,
+    positions,
+    cases,
+  };
+  const out = join(FIXTURES, "oracle-starting-spot.seed123456.json");
+  await writeFile(out, JSON.stringify(fixture, null, 2) + "\n");
+  console.log(`wrote ${out} (${configs.length} configs x ${positions.length} points)`);
+}
+
+/**
+ * Task 5's three leaf helper closures - `vulcanus_wobble_x`, `mountain_plasma`
+ * (= `vulcanus_plasma(102, 2.5, 10, 125, 625)`), and
+ * `vulcanus_detail_noise(837, 1/40, 4, 1.25)` - plus `vulcanus_scale_multiplier`
+ * (= `slider_rescale(control:vulcanus_volcanism:frequency, 3)`) sampled at the
+ * DEFAULT preset (no autoplace_controls override), so the fixture also pins the
+ * neutral control default the ctx extension assumes. All routed onto elevation
+ * against a real Vulcanus surface ({ spaceAge: true, planet: "vulcanus" }), over
+ * the standard scattered grid.
+ */
+async function captureVulcanusHelpers(): Promise<void> {
+  const seed = 123456;
+  const planet = "vulcanus";
+  const positions = gridPositions();
+
+  const sample = async (expression: string): Promise<number[]> => {
+    const workDir = await mkdtemp(join(tmpdir(), "oracle-capture-"));
+    try {
+      return await sampleExpression(expression, positions, {
+        workDir,
+        seed,
+        spaceAge: true,
+        planet,
+      });
+    } finally {
+      await rm(workDir, { recursive: true, force: true });
+    }
+  };
+
+  const wobbleX = await sample("vulcanus_wobble_x");
+  console.log("  captured vulcanus_wobble_x");
+  const mountainPlasma = await sample("vulcanus_plasma(102, 2.5, 10, 125, 625)");
+  console.log("  captured mountain_plasma");
+  const detailNoise = await sample("vulcanus_detail_noise(837, 1/40, 4, 1.25)");
+  console.log("  captured vulcanus_detail_noise(837, 1/40, 4, 1.25)");
+  const scaleMultiplier = await sample("vulcanus_scale_multiplier");
+  console.log("  captured vulcanus_scale_multiplier (default control)");
+
+  const fixture = {
+    _comment:
+      "Ground truth from Factorio 2.1.12 (Space Age enabled) via the test/oracle harness. Task 5's three leaf helper closures (vulcanus_wobble_x, mountain_plasma = vulcanus_plasma(102,2.5,10,125,625), vulcanus_detail_noise(837,1/40,4,1.25)) plus vulcanus_scale_multiplier (= slider_rescale(control:vulcanus_volcanism:frequency, 3), sampled at the DEFAULT preset - no autoplace_controls override - to pin the neutral control value), each routed onto elevation over the standard scattered grid, against a real Vulcanus surface (game.planets['vulcanus'].create_surface()). Regenerate: node --experimental-strip-types test/oracle/capture.ts vulcanus-helpers",
+    seed0: seed,
+    planet,
+    positions,
+    wobbleX,
+    mountainPlasma,
+    detailNoise,
+    scaleMultiplier,
+  };
+  const out = join(FIXTURES, "oracle-vulcanus-helpers.seed123456.json");
+  await writeFile(out, JSON.stringify(fixture, null, 2) + "\n");
+  console.log(`wrote ${out} (${positions.length} points)`);
+}
+
+/**
+ * Task 6's seed-derived radial spawn geometry: `vulcanus_starting_area`,
+ * `vulcanus_starting_circle`, and `vulcanus_ashlands_start` (the smallest/most
+ * distortion-sensitive of the three `*_start` blobs), each routed onto elevation
+ * against a real Vulcanus surface. The grid spans spawn densely (fine step near
+ * the origin, where the blobs and the falloff of `starting_circle` actually live)
+ * and out to +-800 tiles (coarser step) so the falloff to 0/1 on every side is
+ * captured too.
+ */
+async function captureVulcanusSpawn(): Promise<void> {
+  const seed = 123456;
+  const planet = "vulcanus";
+  const positions: Position[] = [];
+  // Fine grid near spawn (where the blobs and starting_circle falloff live).
+  for (let gy = -256; gy <= 256; gy += 32) {
+    for (let gx = -256; gx <= 256; gx += 32) {
+      positions.push({ x: gx + 0.5, y: gy + 0.25 });
+    }
+  }
+  // Coarser grid spanning out to +-800, so the falloff to 0 (starting_area) /
+  // the linear tail (starting_circle) is exercised well beyond the blobs.
+  for (let gy = -800; gy <= 800; gy += 160) {
+    for (let gx = -800; gx <= 800; gx += 160) {
+      positions.push({ x: gx + 0.125, y: gy + 0.375 });
+    }
+  }
+
+  const sample = async (expression: string): Promise<number[]> => {
+    const workDir = await mkdtemp(join(tmpdir(), "oracle-capture-"));
+    try {
+      return await sampleExpression(expression, positions, {
+        workDir,
+        seed,
+        spaceAge: true,
+        planet,
+      });
+    } finally {
+      await rm(workDir, { recursive: true, force: true });
+    }
+  };
+
+  const startingArea = await sample("vulcanus_starting_area");
+  console.log("  captured vulcanus_starting_area");
+  const startingCircle = await sample("vulcanus_starting_circle");
+  console.log("  captured vulcanus_starting_circle");
+  const ashlandsStart = await sample("vulcanus_ashlands_start");
+  console.log("  captured vulcanus_ashlands_start");
+
+  const fixture = {
+    _comment:
+      "Ground truth from Factorio 2.1.11 (Space Age enabled) via the test/oracle harness. Task 6's seed-derived radial spawn geometry: vulcanus_starting_area, vulcanus_starting_circle, and vulcanus_ashlands_start, each routed onto elevation over a grid spanning spawn (fine step -256..256/32 plus a coarser -800..800/160 span), against a real Vulcanus surface (game.planets['vulcanus'].create_surface()). Regenerate: node --experimental-strip-types test/oracle/capture.ts vulcanus-spawn",
+    seed0: seed,
+    planet,
+    positions,
+    startingArea,
+    startingCircle,
+    ashlandsStart,
+  };
+  const out = join(FIXTURES, "oracle-vulcanus-spawn.seed123456.json");
+  await writeFile(out, JSON.stringify(fixture, null, 2) + "\n");
+  console.log(`wrote ${out} (${positions.length} points)`);
+}
+
+/**
+ * Task 8's crack/flood helpers - `vulcanus_hairline_cracks`, `vulcanus_flood_cracks_a`,
+ * `vulcanus_flood_cracks_b`, `vulcanus_flood_paths`, `vulcanus_flood_basalts_func` -
+ * each routed onto elevation over a scattered near+far grid, against a real Vulcanus
+ * surface ({ spaceAge: true, planet: "vulcanus" }). These are pure noise (no spawn
+ * dependency), so a scattered grid spanning near-origin and deep-field suffices.
+ * Regenerate: node --experimental-strip-types test/oracle/capture.ts vulcanus-cracks
+ */
+async function captureVulcanusCracks(): Promise<void> {
+  const seed = 123456;
+  const planet = "vulcanus";
+  const positions: Position[] = [];
+  for (let gy = 0; gy < 6; gy++) {
+    for (let gx = 0; gx < 6; gx++) {
+      positions.push({ x: gx * 13 - 30 + 0.5, y: gy * 17 - 40 + 0.25 });
+    }
+  }
+  for (const r of [500, 1500, 3300]) {
+    for (let k = 0; k < 8; k++) {
+      const a = (k * Math.PI) / 4;
+      positions.push({ x: r * Math.cos(a) + 0.5, y: r * Math.sin(a) + 0.25 });
+    }
+  }
+  positions.push({ x: 12345.75, y: 6789.125 });
+
+  const sample = async (expression: string): Promise<number[]> => {
+    const workDir = await mkdtemp(join(tmpdir(), "oracle-capture-"));
+    try {
+      return await sampleExpression(expression, positions, {
+        workDir,
+        seed,
+        spaceAge: true,
+        planet,
+      });
+    } finally {
+      await rm(workDir, { recursive: true, force: true });
+    }
+  };
+
+  const hairlineCracks = await sample("vulcanus_hairline_cracks");
+  console.log("  captured vulcanus_hairline_cracks");
+  const floodCracksA = await sample("vulcanus_flood_cracks_a");
+  console.log("  captured vulcanus_flood_cracks_a");
+  const floodCracksB = await sample("vulcanus_flood_cracks_b");
+  console.log("  captured vulcanus_flood_cracks_b");
+  const floodPaths = await sample("vulcanus_flood_paths");
+  console.log("  captured vulcanus_flood_paths");
+  const floodBasaltsFunc = await sample("vulcanus_flood_basalts_func");
+  console.log("  captured vulcanus_flood_basalts_func");
+
+  const fixture = {
+    _comment:
+      "Ground truth from Factorio 2.1.12 (Space Age enabled) via the test/oracle harness. Task 8's crack/flood helpers (vulcanus_hairline_cracks, vulcanus_flood_cracks_a, vulcanus_flood_cracks_b, vulcanus_flood_paths, vulcanus_flood_basalts_func), each routed onto elevation over a scattered near+far grid, against a real Vulcanus surface (game.planets['vulcanus'].create_surface()). Regenerate: node --experimental-strip-types test/oracle/capture.ts vulcanus-cracks",
+    seed0: seed,
+    planet,
+    positions,
+    hairlineCracks,
+    floodCracksA,
+    floodCracksB,
+    floodPaths,
+    floodBasaltsFunc,
+  };
+  const out = join(FIXTURES, "oracle-vulcanus-cracks.seed123456.json");
+  await writeFile(out, JSON.stringify(fixture, null, 2) + "\n");
+  console.log(`wrote ${out} (${positions.length} points)`);
+}
+
+/**
+ * Task 8's biome system + volcano spots: the three clamped biomes
+ * (vulcanus_mountains_biome, vulcanus_ashlands_biome, vulcanus_basalts_biome), their
+ * unclamped _full variants, mountain_volcano_spots, and vulcanus_mountains_raw_volcano,
+ * each routed onto elevation, against a real Vulcanus surface. The grid spans spawn
+ * (fine -256..256/32 plus a coarser -800..800/160 span, where starting_area /
+ * starting_protector / the starting volcano spot are live) AND far rings at
+ * r=1500/3000 (where the biome-noise multiscale and the whole-map volcano spot field
+ * dominate). Regenerate: node --experimental-strip-types test/oracle/capture.ts vulcanus-biomes
+ */
+async function captureVulcanusBiomes(): Promise<void> {
+  const seed = 123456;
+  const planet = "vulcanus";
+  const positions: Position[] = [];
+  for (let gy = -256; gy <= 256; gy += 32) {
+    for (let gx = -256; gx <= 256; gx += 32) {
+      positions.push({ x: gx + 0.5, y: gy + 0.25 });
+    }
+  }
+  for (let gy = -800; gy <= 800; gy += 160) {
+    for (let gx = -800; gx <= 800; gx += 160) {
+      positions.push({ x: gx + 0.125, y: gy + 0.375 });
+    }
+  }
+  for (const r of [1500, 3000]) {
+    for (let k = 0; k < 12; k++) {
+      const a = (k * Math.PI) / 6;
+      positions.push({ x: r * Math.cos(a) + 0.5, y: r * Math.sin(a) + 0.25 });
+    }
+  }
+
+  const sample = async (expression: string): Promise<number[]> => {
+    const workDir = await mkdtemp(join(tmpdir(), "oracle-capture-"));
+    try {
+      return await sampleExpression(expression, positions, {
+        workDir,
+        seed,
+        spaceAge: true,
+        planet,
+      });
+    } finally {
+      await rm(workDir, { recursive: true, force: true });
+    }
+  };
+
+  const values: Record<string, number[]> = {};
+  for (const name of [
+    "mountain_volcano_spots",
+    "vulcanus_mountains_raw_volcano",
+    "vulcanus_mountains_biome_full",
+    "vulcanus_ashlands_biome_full",
+    "vulcanus_basalts_biome_full",
+    "vulcanus_mountains_biome",
+    "vulcanus_ashlands_biome",
+    "vulcanus_basalts_biome",
+  ]) {
+    values[name] = await sample(name);
+    console.log(`  captured ${name}`);
+  }
+
+  const fixture = {
+    _comment:
+      "Ground truth from Factorio 2.1.12 (Space Age enabled) via the test/oracle harness. Task 8's biome system + volcano spots (mountain_volcano_spots, vulcanus_mountains_raw_volcano, the three _full variants, the three clamped biomes), each routed onto elevation over a grid spanning spawn (fine -256..256/32 plus a coarser -800..800/160 span) and far rings at r=1500/3000, against a real Vulcanus surface (game.planets['vulcanus'].create_surface()). Regenerate: node --experimental-strip-types test/oracle/capture.ts vulcanus-biomes",
+    seed0: seed,
+    planet,
+    positions,
+    values,
+  };
+  const out = join(FIXTURES, "oracle-vulcanus-biomes.seed123456.json");
+  await writeFile(out, JSON.stringify(fixture, null, 2) + "\n");
+  console.log(`wrote ${out} (${positions.length} points)`);
+}
+
+/**
+ * Task 7's climate fields, `vulcanus_aux` and `vulcanus_moisture` (`vulcanus_temperature`
+ * is deferred to a later task - it depends on `vulcanus_elev`, which does not exist
+ * yet). Each routed onto elevation over the same near+far scattered grid used for
+ * Task 8's cracks (they consume `vulcanus_flood_paths`/`vulcanus_flood_cracks_a`),
+ * against a real Vulcanus surface. Regenerate:
+ * node --experimental-strip-types test/oracle/capture.ts vulcanus-climate
+ */
+async function captureVulcanusClimate(): Promise<void> {
+  const seed = 123456;
+  const planet = "vulcanus";
+  const positions: Position[] = [];
+  for (let gy = 0; gy < 6; gy++) {
+    for (let gx = 0; gx < 6; gx++) {
+      positions.push({ x: gx * 13 - 30 + 0.5, y: gy * 17 - 40 + 0.25 });
+    }
+  }
+  for (const r of [500, 1500, 3300]) {
+    for (let k = 0; k < 8; k++) {
+      const a = (k * Math.PI) / 4;
+      positions.push({ x: r * Math.cos(a) + 0.5, y: r * Math.sin(a) + 0.25 });
+    }
+  }
+  positions.push({ x: 12345.75, y: 6789.125 });
+
+  const sample = async (expression: string): Promise<number[]> => {
+    const workDir = await mkdtemp(join(tmpdir(), "oracle-capture-"));
+    try {
+      return await sampleExpression(expression, positions, {
+        workDir,
+        seed,
+        spaceAge: true,
+        planet,
+      });
+    } finally {
+      await rm(workDir, { recursive: true, force: true });
+    }
+  };
+
+  const aux = await sample("vulcanus_aux");
+  console.log("  captured vulcanus_aux");
+  const moisture = await sample("vulcanus_moisture");
+  console.log("  captured vulcanus_moisture");
+
+  const fixture = {
+    _comment:
+      "Ground truth from Factorio 2.1.12 (Space Age enabled) via the test/oracle harness. Task 7's climate fields (vulcanus_aux, vulcanus_moisture - vulcanus_temperature deferred, depends on vulcanus_elev which doesn't exist yet), each routed onto elevation over a scattered near+far grid, against a real Vulcanus surface (game.planets['vulcanus'].create_surface()). Regenerate: node --experimental-strip-types test/oracle/capture.ts vulcanus-climate",
+    seed0: seed,
+    planet,
+    positions,
+    aux,
+    moisture,
+  };
+  const out = join(FIXTURES, "oracle-vulcanus-climate.seed123456.json");
+  await writeFile(out, JSON.stringify(fixture, null, 2) + "\n");
+  console.log(`wrote ${out} (${positions.length} points)`);
+}
+
+/**
+ * Task 9's elevation surface: `vulcanus_elevation` (= `max(-500, vulcanus_elev)`) and
+ * the raw `vulcanus_elev` it clamps (temperature reads the RAW value, so both are
+ * pinned). Each routed onto elevation, against a real Vulcanus surface. Grid spans
+ * spawn (fine -256..256/32 plus a coarser -800..800/160 span, where the biome
+ * blend / starting geometry are live) AND far rings at r=1500/3000, matching the
+ * biome capture so the two fixtures are directly comparable. Regenerate:
+ * node --experimental-strip-types test/oracle/capture.ts vulcanus-elevation
+ */
+async function captureVulcanusElevation(): Promise<void> {
+  const seed = 123456;
+  const planet = "vulcanus";
+  const positions: Position[] = [];
+  for (let gy = -256; gy <= 256; gy += 32) {
+    for (let gx = -256; gx <= 256; gx += 32) {
+      positions.push({ x: gx + 0.5, y: gy + 0.25 });
+    }
+  }
+  for (let gy = -800; gy <= 800; gy += 160) {
+    for (let gx = -800; gx <= 800; gx += 160) {
+      positions.push({ x: gx + 0.125, y: gy + 0.375 });
+    }
+  }
+  for (const r of [1500, 3000]) {
+    for (let k = 0; k < 12; k++) {
+      const a = (k * Math.PI) / 6;
+      positions.push({ x: r * Math.cos(a) + 0.5, y: r * Math.sin(a) + 0.25 });
+    }
+  }
+
+  const sample = async (expression: string): Promise<number[]> => {
+    const workDir = await mkdtemp(join(tmpdir(), "oracle-capture-"));
+    try {
+      return await sampleExpression(expression, positions, {
+        workDir,
+        seed,
+        spaceAge: true,
+        planet,
+      });
+    } finally {
+      await rm(workDir, { recursive: true, force: true });
+    }
+  };
+
+  const elev = await sample("vulcanus_elev");
+  console.log("  captured vulcanus_elev");
+  const elevation = await sample("vulcanus_elevation");
+  console.log("  captured vulcanus_elevation");
+
+  const fixture = {
+    _comment:
+      "Ground truth from Factorio 2.1.12 (Space Age enabled) via the test/oracle harness. Task 9's elevation surface: vulcanus_elev (raw, read by temperature) and vulcanus_elevation (= max(-500, vulcanus_elev)), each routed onto elevation over a grid spanning spawn (fine -256..256/32 plus a coarser -800..800/160 span) and far rings at r=1500/3000, against a real Vulcanus surface (game.planets['vulcanus'].create_surface()). Regenerate: node --experimental-strip-types test/oracle/capture.ts vulcanus-elevation",
+    seed0: seed,
+    planet,
+    positions,
+    elev,
+    elevation,
+  };
+  const out = join(FIXTURES, "oracle-vulcanus-elevation.seed123456.json");
+  await writeFile(out, JSON.stringify(fixture, null, 2) + "\n");
+  console.log(`wrote ${out} (${positions.length} points)`);
+}
+
+/**
+ * Task 9's `vulcanus_temperature` (deferred out of Task 7 until `vulcanus_elev`
+ * existed). Depends on the raw elev, moisture, aux, ashlands_biome and
+ * mountain_volcano_spots. Same grid as captureVulcanusElevation, against a real
+ * Vulcanus surface at the DEFAULT preset (control:temperature:bias = 0). Regenerate:
+ * node --experimental-strip-types test/oracle/capture.ts vulcanus-temperature
+ */
+async function captureVulcanusTemperature(): Promise<void> {
+  const seed = 123456;
+  const planet = "vulcanus";
+  const positions: Position[] = [];
+  for (let gy = -256; gy <= 256; gy += 32) {
+    for (let gx = -256; gx <= 256; gx += 32) {
+      positions.push({ x: gx + 0.5, y: gy + 0.25 });
+    }
+  }
+  for (let gy = -800; gy <= 800; gy += 160) {
+    for (let gx = -800; gx <= 800; gx += 160) {
+      positions.push({ x: gx + 0.125, y: gy + 0.375 });
+    }
+  }
+  for (const r of [1500, 3000]) {
+    for (let k = 0; k < 12; k++) {
+      const a = (k * Math.PI) / 6;
+      positions.push({ x: r * Math.cos(a) + 0.5, y: r * Math.sin(a) + 0.25 });
+    }
+  }
+
+  const workDir = await mkdtemp(join(tmpdir(), "oracle-capture-"));
+  try {
+    const temperature = await sampleExpression("vulcanus_temperature", positions, {
+      workDir,
+      seed,
+      spaceAge: true,
+      planet,
+    });
+    const fixture = {
+      _comment:
+        "Ground truth from Factorio 2.1.12 (Space Age enabled) via the test/oracle harness. Task 9's vulcanus_temperature (deferred out of Task 7 until vulcanus_elev existed) routed onto elevation over a grid spanning spawn (fine -256..256/32 plus a coarser -800..800/160 span) and far rings at r=1500/3000, at the DEFAULT preset (control:temperature:bias = 0), against a real Vulcanus surface (game.planets['vulcanus'].create_surface()). Regenerate: node --experimental-strip-types test/oracle/capture.ts vulcanus-temperature",
+      seed0: seed,
+      planet,
+      positions,
+      temperature,
+    };
+    const out = join(FIXTURES, "oracle-vulcanus-temperature.seed123456.json");
+    await writeFile(out, JSON.stringify(fixture, null, 2) + "\n");
+    console.log(`wrote ${out} (${positions.length} points)`);
+  } finally {
+    await rm(workDir, { recursive: true, force: true });
+  }
+}
+
+/**
+ * The `get_tile` tile-name oracle for VULCANUS (Task 10): the Space-Age sibling of
+ * `captureTileNames`. Reuses the same real-chunk-generate path
+ * (`sampleTileNames`), but with `{ spaceAge: true, planet: "vulcanus" }` so tiles
+ * are read from a real Vulcanus surface (`game.planets["vulcanus"].create_surface()`)
+ * instead of Nauvis. A golden-angle spiral from spawn out to ~2600 tiles spans the
+ * radial Vulcanus biomes (mountains disc near center, then basalts/ashlands rings),
+ * plus a dense near-spawn square grid. Seed 123456. Validates the tile argmax +
+ * map_color port. Regenerate: node --experimental-strip-types test/oracle/capture.ts
+ * vulcanus-tile-names
+ */
+async function captureVulcanusTileNames(): Promise<void> {
+  const seed = 123456;
+  const planet = "vulcanus";
+  const positions: Position[] = [];
+  // Dense near-spawn grid (the mountains/volcano biome disc).
+  for (let gy = -320; gy <= 320; gy += 64) {
+    for (let gx = -320; gx <= 320; gx += 64) {
+      positions.push({ x: gx + 0.5, y: gy + 0.25 });
+    }
+  }
+  // Golden-angle spiral out to ~2600 tiles to cross basalts + ashlands rings.
+  const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
+  const count = 260;
+  for (let i = 0; i < count; i++) {
+    const t = (i + 0.5) / count;
+    const r = 120 + t * (2600 - 120);
+    const a = i * GOLDEN_ANGLE;
+    positions.push({ x: r * Math.cos(a) + 0.5, y: r * Math.sin(a) + 0.25 });
+  }
+
+  const workDir = await mkdtemp(join(tmpdir(), "oracle-capture-"));
+  try {
+    const samples: TileSample[] = await sampleTileNames(positions, {
+      workDir,
+      seed,
+      radius: 1,
+      spaceAge: true,
+      planet,
+    });
+    const fixture = {
+      _comment:
+        "Ground truth from Factorio 2.1.12 (Space Age enabled) via the test/oracle harness. surface.get_tile(x, y).name on a real Vulcanus surface (game.planets['vulcanus'].create_surface(), seed 123456) after real chunk generation, over a near-spawn grid + a golden-angle spiral to ~2600 tiles spanning the radial biomes. positions are the mod's ECHOED floored get_tile input. Regenerate: node --experimental-strip-types test/oracle/capture.ts vulcanus-tile-names",
+      seed0: seed,
+      planet,
+      positions: samples.map((s) => ({ x: s.x, y: s.y })),
+      tileNames: samples.map((s) => s.name),
+    };
+    const out = join(FIXTURES, "oracle-vulcanus-tile-names.seed123456.json");
+    await writeFile(out, JSON.stringify(fixture, null, 2) + "\n");
+    const distinct = [...new Set(fixture.tileNames)].sort();
+    console.log(
+      `wrote ${out} (${positions.length} points, ${distinct.length} distinct tiles: ${distinct.join(", ")})`,
+    );
+  } finally {
+    await rm(workDir, { recursive: true, force: true });
+  }
+}
+
 if (!oracleAvailable()) {
   console.error("No Factorio binary found (set FACTORIO_BIN). Cannot capture fixtures.");
   process.exit(1);
@@ -1518,3 +2261,15 @@ if (want("cliffiness")) await captureCliffiness();
 if (want("cliff-offset-raw")) await captureCliffOffsetRaw();
 if (want("cliff-entities")) await captureCliffEntities();
 if (want("rocks")) await captureRocks();
+if (want("multisample")) await captureMultisample();
+if (want("vulcanus-smoke")) await captureVulcanusSmoke();
+if (want("seed-vars")) await captureSeedVars();
+if (want("starting-spot")) await captureStartingSpotAtAngle();
+if (want("vulcanus-helpers")) await captureVulcanusHelpers();
+if (want("vulcanus-spawn")) await captureVulcanusSpawn();
+if (want("vulcanus-cracks")) await captureVulcanusCracks();
+if (want("vulcanus-biomes")) await captureVulcanusBiomes();
+if (want("vulcanus-climate")) await captureVulcanusClimate();
+if (want("vulcanus-elevation")) await captureVulcanusElevation();
+if (want("vulcanus-temperature")) await captureVulcanusTemperature();
+if (want("vulcanus-tile-names")) await captureVulcanusTileNames();
