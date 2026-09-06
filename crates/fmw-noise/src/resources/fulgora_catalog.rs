@@ -20,7 +20,7 @@
 //! pixels measures the salt rather than the model.
 //!
 //! **The gap is large enough to see.** Measured 2026-08-31 by
-//! [`places_a_strict_nonempty_subset_of_the_footprint`], over a 128x128 window
+//! `places_a_strict_nonempty_subset_of_the_footprint`, over a 128x128 window
 //! at the origin, seed 123456, neutral sliders: 708 of 16,384 tiles are in the
 //! footprint and 177 of those are placed, so the roll accepts 25.0% of it.
 //! Substituting one view for the other would move 531 pixels in that window.
@@ -54,7 +54,7 @@ pub const SCRAP_MAP_COLOR: [u8; 3] = [229, 229, 229];
 /// 0.1953125; centres sit on integer tiles and no tile is visited twice, so the
 /// smallest separation any pair can have is 1. It is passed anyway, to match
 /// the TypeScript operation for operation, and
-/// [`the_collision_box_cannot_reject_anything`] pins that it is inert.
+/// `the_collision_box_cannot_reject_anything` pins that it is inert.
 pub const SCRAP_COLLISION_BOX: PlacementCollisionBox = PlacementCollisionBox {
     w: 0.097_656_25 * 2.0,
     h: 0.097_656_25 * 2.0,

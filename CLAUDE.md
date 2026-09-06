@@ -293,11 +293,11 @@ pnpm vp dev --port 5199 --strictPort   # expect a Local: URL, not a picker or ex
   passthrough arg: `pnpm run verify:shard -- --shard=1/4`. The `--` is
   required.
 - `pnpm run verify:rust` - `scripts/verify-rust.sh`: `cargo fmt --check`,
-  `clippy -D warnings`, `cargo test`, the zero-shipped-dependencies assertion,
-  a byte comparison against the committed `src/noise/wasm/engine.wasm`, and
-  `cargo deny check`. This is the `rust` CI job, and it is the
-  **largest phase of `verify`**: 112.0s warm on a dev machine, 54% of the gate
-  (measured 2026-09-05).
+  `clippy -D warnings`, `cargo doc` for broken intra-doc links, `cargo test`,
+  the zero-shipped-dependencies assertion, a byte comparison against the
+  committed `src/noise/wasm/engine.wasm`, and `cargo deny check`. This is the
+  `rust` CI job, and it is the **largest phase of `verify`**: 112.0s warm on a
+  dev machine, 54% of the gate (measured 2026-09-05).
 
   **This line said "Cheap ... 1.62s cold, 0.84s warm" and was wrong by more
   than a hundredfold.** Those figures cannot have described this script, which
@@ -311,6 +311,7 @@ pnpm vp dev --port 5199 --strictPort   # expect a Local: URL, not a picker or ex
   | `cargo build --release --target wasm32-unknown-unknown` |      2.8s |
   | `cargo deny check`                                      |      0.6s |
   | `cargo fmt --check` + `cargo clippy`                    |      0.3s |
+  | `cargo doc` (broken intra-doc links, #388)              |     0.03s |
 
   **The poison phase's cost is the POISON, not the test count**, and narrowing
   it was measured and REJECTED: filtering to `fixtures::` runs 108 tests
@@ -322,7 +323,7 @@ pnpm vp dev --port 5199 --strictPort   # expect a Local: URL, not a picker or ex
   graph or a pathology worth fixing has NOT been measured; do not assume
   either.
 
-  Two things about it that are easy to get wrong:
+  Three things about it that are easy to get wrong:
   - **It probes cargo-deny with `cargo deny --version`, never
     `command -v cargo-deny`.** `cargo install` puts the binary in
     `$CARGO_HOME/bin` and cargo finds its own subcommands there whether or not
@@ -336,6 +337,24 @@ pnpm vp dev --port 5199 --strictPort   # expect a Local: URL, not a picker or ex
     manifest without it fails as `unlicensed`, and `allow-wildcard-paths` is on
     because a `path` dependency has no version requirement and reads as a
     wildcard. Neither is decoration; deleting either turns the gate red.
+  - **`cargo doc` is in the gate because `clippy -D warnings` is BLIND to
+    broken rustdoc links.** `rustdoc::broken_intra_doc_links` is a **rustdoc**
+    lint, not a rustc or clippy one, so nothing else here can see the class.
+    That is how #387 shipped two of them - a deleted item left the module doc
+    above it linking to a function that no longer existed - past a green local
+    `verify` and eleven green CI checks (#388).
+
+    **`--document-private-items` is load-bearing, not thorough.** The default
+    view only checks links on PUBLIC items, and 2 of the 11 broken links on
+    `main` were invisible to it. Proven by planting rather than by reading the
+    flag's docs: re-break the link on `cliffs/catalog.rs:379`, a doc on a
+    private item, and the public view exits **0** having missed it while the
+    gate exits **101**.
+
+    Scoped to that one lint rather than `-D warnings`. Four
+    `private_intra_doc_links` and four `redundant_explicit_links` warnings
+    stand deliberately, and a blanket deny would also let a future rustdoc
+    release redden untouched code by adding a lint.
 
 - `pnpm run require:docker` - preflight that fails loudly when no container
   runtime is reachable, naming the start command for whichever one you have

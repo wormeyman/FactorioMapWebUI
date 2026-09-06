@@ -17,7 +17,7 @@
 //! reproducing it is no evidence at all about jitter > 0. Two findings came out
 //! of actually testing the jittered rung, and both are recorded at their sites:
 //! the sample-to-point delta has to be rebased on the sample's own cell (see
-//! [`delta_to`]), and the pyramid's jitter-0 formula was simply wrong once the
+//! [`Voronoi::delta_to`]), and the pyramid's jitter-0 formula was simply wrong once the
 //! cells are not squares (0 of 175 at every jitter x distance_type).
 //!
 //! Three properties of this file are measurements rather than readings, and

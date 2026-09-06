@@ -36,7 +36,7 @@
 //! `Cliff::updateConnections` reads the orientation it ITERATES once, before
 //! the loop, and re-reads the one it COMPARES from `this+0x80` inside it. So a
 //! `destroyEnd` earlier in the loop is visible to the sides after it. This port
-//! does the same, and [`tests::a_cell_can_lose_both_ends_in_one_pass`] is what
+//! does the same, and `tests::a_cell_can_lose_both_ends_in_one_pass` is what
 //! keeps that from silently collapsing into a snapshot.
 //!
 //! ## The `this+0x83` gate is `proto->place_as_crater == nullptr`
@@ -83,7 +83,7 @@ pub const SIDE_NONE: u8 = 4;
 ///
 /// The bytes turned out to be exactly what the orientation NAMES say -
 /// `west-to-east` is `(west, east)`, all 20, with `none` for the halves - so
-/// [`tests::the_end_table_is_what_the_orientation_names_say`] re-derives this
+/// `tests::the_end_table_is_what_the_orientation_names_say` re-derives this
 /// from the names and asserts it matches. A transcription slip fails rather than
 /// shifting the model.
 pub const CLIFF_ORIENTATION_ENDS: [(u8, u8); 20] = [

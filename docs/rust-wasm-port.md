@@ -1051,6 +1051,48 @@ reads as the thing that is in the way. Reordering the three passes changes only
 208 of 16,384 pixels in the window that grades it, which is invisible to a
 whole-image bound, and it is frozen exactly.
 
+### Broken rustdoc links are gated, and the PRIVATE view is the one that sees them
+
+`verify:rust` runs `cargo doc` with
+`RUSTDOCFLAGS="-D rustdoc::broken_intra_doc_links"` and
+`--document-private-items`. It was added in #388, after #387 shipped two broken
+links past a fully green gate.
+
+**The reason nothing caught them is that no other tool can.**
+`rustdoc::broken_intra_doc_links` is a **rustdoc** lint - not rustc, not clippy
+- so `cargo clippy -D warnings` never fires on it, and before #388 the script
+ran no rustdoc at all. In #387 a deleted item left the module doc above it
+saying the function "now lives here too" and linking to it twice. `verify` was
+green locally and all eleven CI checks passed. CodeRabbit surfaced it, and only
+indirectly: it asked for a deprecated forwarding wrapper, which is wrong for an
+unpublished internal crate whose old behaviour is refuted at 5/39. A wrong
+conclusion can still point at the right line.
+
+**`--document-private-items` is load-bearing rather than thorough, and that is
+a planted result.** The default view only checks links on PUBLIC items. Of the
+11 broken links standing on `main`, 2 were invisible to it - both in
+`cliffs/catalog.rs`, on private items. Re-break the link at
+`cliffs/catalog.rs:379` and the public view exits **0**, having missed it, while
+the gate exits **101**. The crate is `publish = false` with mostly private
+internals, so the private view is also the one that matches how it is read.
+
+**It is scoped to that one lint, not `-D warnings`.** Four
+`private_intra_doc_links` and four `redundant_explicit_links` warnings stand
+deliberately. The first four are public docs in `voronoi_noise.rs` pointing at
+private items, which resolve under the flag above; a blanket deny would also let
+a future rustdoc release redden untouched code by adding a lint.
+
+**Cost is not a reason to skip it:** 0.67/0.67/0.70s over three cold runs in a
+fresh target dir, 0.03s warm. `fmw-noise` has zero dependencies, so `--no-deps`
+rustdoc compiles nothing.
+
+Two shapes to know when a link will not resolve. A link to a `#[cfg(test)]` test
+function can never resolve in a normal build - 9 of the 11 were this, and the
+fix is to drop the brackets and keep the backticks, which leaves the prose
+identical. And `Self` means the type of the impl block the doc sits in, not the
+type you meant: `trees/field.rs` linked `[Self::eval_at]` from a doc on
+`SpeciesField::cheap_from`, while `eval_at` belongs to `TreeFields`.
+
 ### `verify:rust`'s cost is a RANGE
 
 Treat it as roughly **1m45s to 2m50s**, not a number. Three CI runs on code
