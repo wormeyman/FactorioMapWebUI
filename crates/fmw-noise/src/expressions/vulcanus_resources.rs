@@ -620,7 +620,7 @@ impl<'a> VulcanusResources<'a> {
     ///
     /// **A projection, not a second model.** Each line here is the same
     /// expression `eval` uses, and
-    /// [`tests::the_ore_region_projection_agrees_with_the_full_eval_bit_for_bit`]
+    /// `tests::the_ore_region_projection_agrees_with_the_full_eval_bit_for_bit`
     /// asserts the two agree on raw bits rather than approximately. Two
     /// implementations that could drift apart would be worse than the work
     /// saved, which is the standing objection to a fast path.

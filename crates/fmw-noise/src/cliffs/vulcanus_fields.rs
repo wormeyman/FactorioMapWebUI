@@ -102,7 +102,7 @@ impl CliffinessBasic {
     /// the libm `wasm32-unknown-unknown` links is not V8's, and only a tier-2
     /// sweep can see the difference. `log2(1)` is exactly 0 on any conforming
     /// libm, so there is nothing to disagree about - and
-    /// [`tests::the_richness_term_is_exactly_zero_at_vulcanuss_pinned_richness`]
+    /// `tests::the_richness_term_is_exactly_zero_at_vulcanuss_pinned_richness`
     /// pins that rather than leaving it as an argument. A planet that ever moves
     /// this lever must send the term across the ABI the way the bearings' trig
     /// is sent, not compute it here.

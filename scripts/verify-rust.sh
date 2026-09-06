@@ -10,6 +10,9 @@
 # --features poison` 82.4s, `cargo test --locked --workspace` 26.0s, the
 # wasm32 release build 2.8s, `cargo deny check` 0.6s, fmt + clippy 0.3s.
 # That is 112.0s, which is 54% of `pnpm run verify` and its LARGEST phase.
+# The `cargo doc` phase added in #388 does not move that total: 0.03s warm and
+# 0.7s cold, because `--no-deps` rustdoc on a zero-dependency crate compiles
+# nothing at all.
 #
 # The poison phase's cost is the poison, not the test count: filtering to
 # `fixtures::` runs 108 tests instead of 452 and still costs 81.3s, and those
@@ -28,6 +31,36 @@ cargo fmt --all --check
 
 echo "==> cargo clippy"
 cargo clippy --locked --all-targets --all-features -- -D warnings
+
+echo "==> cargo doc (broken intra-doc links)"
+# `rustdoc::broken_intra_doc_links` is a RUSTDOC lint - not a rustc lint and not
+# a clippy one - so `cargo clippy -D warnings` above can never fire on it, and
+# nothing else here runs rustdoc at all. That blind spot shipped two broken
+# links through a fully green gate in #387: deleting a documented item left the
+# module doc above it linking to a function that no longer existed. See #388.
+#
+# `--document-private-items` is load-bearing rather than thorough. Without it
+# rustdoc only checks links on PUBLIC items, and 2 of the 11 broken links this
+# phase was added to clear were invisible to that view - both in
+# `cliffs/catalog.rs`, on private items. The public view is the weaker net, and
+# this crate is `publish = false` with mostly private internals anyway.
+#
+# That is a planted result, not a reading of the flag's docs: re-breaking the
+# link on `cliffs/catalog.rs:379` - a doc on a PRIVATE item - leaves the public
+# view exiting 0, having missed it, while this command exits 101.
+#
+# Scoped to the one lint rather than `-D warnings`. Four `private_intra_doc_links`
+# and four `redundant_explicit_links` warnings stand deliberately: the first are
+# public docs in `voronoi_noise.rs` pointing at private items, which resolve
+# under the flag above, and a blanket deny would also let a future rustdoc
+# release redden untouched code by adding a lint.
+#
+# Cheap enough not to need a caveat, and measured on THIS command rather than a
+# shorter one: 0.67/0.67/0.70s over three cold runs in a fresh target dir, and
+# 0.03s warm. `fmw-noise` has zero dependencies, so `--no-deps` rustdoc
+# compiles nothing - this is 0.6% of a 112s job.
+RUSTDOCFLAGS="-D rustdoc::broken_intra_doc_links" \
+  cargo doc --locked --no-deps --workspace --document-private-items
 
 echo "==> cargo test"
 cargo test --locked --workspace

@@ -39,7 +39,7 @@
 //!
 //! The TypeScript builds this table at module load by calling `rotbbBox`. This
 //! port ships the 20 rectangles as constants and keeps [`rotbb_box`] live
-//! beside them, with [`tests::the_rotbb_derivation_reproduces_every_shipped_box`]
+//! beside them, with `tests::the_rotbb_derivation_reproduces_every_shipped_box`
 //! asserting the two agree bit-for-bit.
 //!
 //! That is strictly stronger than either half alone, and it is not a style
@@ -376,7 +376,7 @@ pub const CLIFF_ORIENTATION_ROTBB: [Option<[f64; 4]>; 20] = [
 /// [`rotbb_box`] must evaluate the same arithmetic the TypeScript does, and the
 /// TypeScript writes the literal `1.4142135623730951`. Both are the correctly
 /// rounded binary64 value, and
-/// [`tests::the_square_root_constant_is_the_one_the_typescript_writes`] pins it.
+/// `tests::the_square_root_constant_is_the_one_the_typescript_writes` pins it.
 const SQRT2: f64 = std::f64::consts::SQRT_2;
 
 /// `Math.round`, which is NOT `f64::round`.
@@ -386,7 +386,7 @@ const SQRT2: f64 = std::f64::consts::SQRT_2;
 ///
 /// Every edge below is far from a half in practice - `rotbb`'s `sqrt(2)` sees
 /// to that - but "in practice" is not a reason to write the other function, and
-/// [`tests::the_rounding_is_javascripts_and_not_rusts`] plants the case that
+/// `tests::the_rounding_is_javascripts_and_not_rusts` plants the case that
 /// separates them.
 #[inline]
 fn js_round(v: f64) -> f64 {

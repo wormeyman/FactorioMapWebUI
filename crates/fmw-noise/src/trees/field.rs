@@ -155,7 +155,7 @@ impl SpeciesField {
     ///
     /// **The four addends are in a load-bearing ORDER.** Float addition is not
     /// associative and the density path below has to stay bit-identical to
-    /// [`Self::eval_at`], so keep `climate + distance + size + small`.
+    /// [`TreeFields::eval_at`], so keep `climate + distance + size + small`.
     #[must_use]
     pub fn cheap_from(
         &self,
